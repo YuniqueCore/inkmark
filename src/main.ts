@@ -14,8 +14,8 @@ import { initResizers } from './ui/resizer'
 import { SAMPLE_TEXT } from './ui/sample'
 import type { Annotation, AnnotationInput, DocItem, SlopLexicon, Workspace } from './core/types'
 import { loadWorkspace, saveWorkspace } from './ui/storage'
-import zhLexicon from './lexicons/zh.json'
-import enLexicon from './lexicons/en.json'
+import zhLexicon from '../skill/references/anti-slop-kit/scripts/data/zh.json'
+import enLexicon from '../skill/references/anti-slop-kit/scripts/data/en.json'
 
 const LEXICONS = [zhLexicon, enLexicon] as unknown as SlopLexicon[]
 const TEXT_SUFFIX = /\.(txt|md|markdown)$/i
