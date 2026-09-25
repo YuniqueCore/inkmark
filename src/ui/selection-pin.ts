@@ -1,7 +1,12 @@
-/** 选区标注小点：选区稳定后出现在最近选区角上的圆点，hover 自然展开为撰写卡片。
+/** 选区标注小点：选区稳定后出现在鼠标停点附近的圆点，hover 自然展开为撰写卡片。
  *
- * 位置跟随鼠标轨迹：鼠标停在选择矩形的哪个角附近，小点就贴哪个角——
- * 左→右划停右端 → 右下；右→左划停左端 → 左下；右下→左上划 → 左上。
+ * 位置语义（placement 由「鼠标停在选区哪一端」推导）：
+ * - 左→右划：鼠标停右端 → 小点出现在停点右下（right-start）
+ * - 右→左划：鼠标停左端 → 左下（left-start）
+ * - 下→上划：鼠标停上端 → 左上/右上（left-end / right-end）
+ * - 上→下划：鼠标停下端 → 右下/左下
+ * 小点锚定鼠标停点本身（虚拟点引用 + offset），永远不会因大段选区而飘远；
+ * 视口边缘由 shift 兜底。
  */
 
 import { computePosition, offset, shift, size, limitShift } from '@floating-ui/dom'
@@ -15,11 +20,11 @@ export interface SelectionInfo {
   /** 选区首行视口矩形 */
   rect: DOMRect
   quoted: string
-  /** mouseup 时鼠标视口坐标（轨迹预测用） */
+  /** mouseup 时鼠标视口坐标（方向判断与锚定点） */
   mouse: { x: number; y: number }
 }
 
-type Corner = 'tl' | 'tr' | 'bl' | 'br'
+type PinSide = 'left' | 'right'
 
 export interface PinCallbacks {
   onCreate: (info: SelectionInfo, kind: AnnotationKind, comment: string) => void
@@ -33,7 +38,9 @@ export class SelectionPin {
   private pin: HTMLElement
   private card: HTMLElement
   private info: SelectionInfo | null = null
-  private corner: Corner = 'br'
+  /** 小点在鼠标停点的哪一侧，以及纵向延伸方向 */
+  private pinSide: PinSide = 'right'
+  private pinVertical: 'up' | 'down' = 'down'
   private kind: AnnotationKind = 'issue'
   private closeTimer: ReturnType<typeof setTimeout> | undefined
   /** card 已展开（hover 进入过） */
@@ -53,7 +60,6 @@ export class SelectionPin {
 
     this.pin.addEventListener('mouseenter', () => this.expand())
     this.pin.addEventListener('click', () => this.expand(true))
-    // card 内 hover 保持展开；整片离开后延迟收回（未提交时）
     this.card.addEventListener('mouseenter', () => this.cancelCollapse())
     this.card.addEventListener('mouseleave', () => this.scheduleCollapse())
 
@@ -98,30 +104,31 @@ export class SelectionPin {
       return
     }
     this.info = info
-    this.corner = pickCorner(info.rect, info.mouse)
-    this.placePin()
-    this.pin.classList.remove('hidden')
-    this.pin.classList.add('grid')
-    // 收起已展开的卡片（换选区时）
+    ;({side: this.pinSide, vertical: this.pinVertical} = pickPinPlacement(info.rect, info.mouse))
     this.collapse()
-  }
-
-  private placePin(): void {
-    if (!this.info) return
-    // 贴角 → floating-ui placement：tl→top-start / tr→top-end / bl→bottom-start / br→bottom-end
-    const placement = CORNER_PLACEMENT[this.corner]
-    const reference = rectReference(this.info.rect)
-    void computePosition(reference, this.pin, {
-      placement,
-      strategy: 'fixed',
-      middleware: [offset({mainAxis: 12, crossAxis: 22}), shift({padding: 8, limiter: limitShift()})],
-    }).then(({x, y}) => {
-      this.pin.style.left = `${x}px`
-      this.pin.style.top = `${y}px`
+    // 先定位再显示，避免小点闪现在上一次的位置
+    this.pin.classList.add('hidden')
+    void this.placePin().then(() => {
+      if (this.info !== info) return
+      this.pin.classList.remove('hidden')
     })
   }
 
-  /** hover 小点 → 原位展开撰写卡片，展开方向由贴角决定 */
+  /** 小点锚定鼠标停点（虚拟点引用），placement 决定它在停点的哪个象限 */
+  private placePin(): Promise<void> {
+    if (!this.info) return Promise.resolve()
+    // 零尺寸虚拟点在 floating-ui 里属于边界场景（cross 对齐与主轴偏移行为
+    // 与文档语义不符），小点位置直接手算——行为完全确定：
+    // 中心 = 鼠标停点沿 side 方向外移 24px、沿 vertical 方向移 12px，再 clamp 视口。
+    const m = this.info.mouse
+    const cx = (this.pinSide === 'left' ? -24 : 24) + m.x
+    const cy = (this.pinVertical === 'up' ? -12 : 12) + m.y
+    this.pin.style.left = `${clamp(cx - 14, 8, window.innerWidth - 36)}px`
+    this.pin.style.top = `${clamp(cy - 14, 8, window.innerHeight - 36)}px`
+    return Promise.resolve()
+  }
+
+  /** hover 小点 → 从小点原位展开撰写卡片，展开方向朝屏幕中心 */
   private expand(force = false): void {
     if (!this.info) return
     if (this.expanded && !force) return
@@ -137,7 +144,7 @@ export class SelectionPin {
         <div class="mb-2.5 flex flex-wrap gap-1">${KINDS.map(
           (k) => `<button class="chip-toggle kind-chip" data-kind="${k}">${icon(k)} ${KIND_LABEL[k]}</button>`,
         ).join('')}</div>
-        <textarea id="pin-composer-input" class="input-base min-h-20 resize-y" placeholder="批注内容：指出问题、给出改法……"></textarea>
+        <textarea id="pin-composer-input" class="input-base min-h-20 resize-y" placeholder="批注内容：问题给改法；认可写原因……"></textarea>
         <div class="mt-2.5 flex items-center justify-between">
           <span class="flex items-center gap-1 text-xs text-muted-foreground">
             <span class="kbd">⌘</span><span class="kbd">↵</span> 提交
@@ -149,10 +156,12 @@ export class SelectionPin {
         </div>
       </div>`
     this.refreshChips()
-    this.placeCard()
-    this.card.classList.remove('hidden')
-    const input = this.card.querySelector('#pin-composer-input') as HTMLTextAreaElement
-    input.focus()
+    this.card.classList.add('hidden')
+    void this.placeCard().then(() => {
+      this.card.classList.remove('hidden')
+      const input = this.card.querySelector('#pin-composer-input') as HTMLTextAreaElement
+      input.focus()
+    })
   }
 
   private collapse(): void {
@@ -193,31 +202,35 @@ export class SelectionPin {
     this.info = null
     this.expanded = false
     this.pin.classList.add('hidden')
-    this.pin.classList.remove('grid')
     this.collapse()
     window.getSelection()?.removeAllRanges()
     this.callbacks.onDismiss()
   }
 
-  /** 侧栏编辑等场景复用：直接以指定选区信息展开卡片 */
+  /** 侧栏编辑等场景复用：以指定选区信息展开卡片 */
   openComposerFor(info: SelectionInfo, kind: AnnotationKind, comment: string): void {
     this.info = info
-    this.corner = pickCorner(info.rect, info.mouse)
-    this.placePin()
-    this.pin.classList.remove('hidden')
-    this.pin.classList.add('grid')
-    this.expand(true)
-    const input = this.card.querySelector('#pin-composer-input') as HTMLTextAreaElement | null
-    if (input) input.value = comment
-    this.kind = kind
-    this.refreshChips()
+    ;({side: this.pinSide, vertical: this.pinVertical} = pickPinPlacement(info.rect, info.mouse))
+    this.pin.classList.add('hidden')
+    void this.placePin().then(() => {
+      this.pin.classList.remove('hidden')
+      this.expand(true)
+      const input = this.card.querySelector('#pin-composer-input') as HTMLTextAreaElement | null
+      if (input) input.value = comment
+      this.kind = kind
+      this.refreshChips()
+    })
   }
 
-  private placeCard(): void {
-    if (!this.info) return
-    // 卡片以 pin 为锚，向屏幕中心方向展开；size 中间件限制最大高度防溢出
-    const placement = CORNER_CARD_PLACEMENT[this.corner]
-    void computePosition(this.pin, this.card, {
+  /** 卡片以小点为锚，朝屏幕中心展开 */
+  private placeCard(): Promise<void> {
+    const pr = this.pin.getBoundingClientRect()
+    const cx = pr.left + pr.width / 2
+    const cy = pr.top + pr.height / 2
+    const side = cx < window.innerWidth / 2 ? 'right' : 'left'
+    const align = cy < window.innerHeight / 2 ? 'start' : 'end'
+    const placement = `${side}-${align}` as 'right-start' | 'right-end' | 'left-start' | 'left-end'
+    return computePosition(this.pin, this.card, {
       placement,
       strategy: 'fixed',
       middleware: [
@@ -235,41 +248,31 @@ export class SelectionPin {
   }
 }
 
-/** 轨迹预测：鼠标点夹取到选择矩形上，看它落在哪个角附近 */
-function pickCorner(rect: DOMRect, mouse: { x: number; y: number }): Corner {
-  const cx = clamp(mouse.x, rect.left, rect.right)
-  const cy = clamp(mouse.y, rect.top, rect.bottom)
-  const nearLeft = cx - rect.left <= rect.right - cx
-  const nearTop = cy - rect.top <= rect.bottom - cy
-  return nearLeft ? (nearTop ? 'tl' : 'bl') : nearTop ? 'tr' : 'br'
-}
-
-const CORNER_PLACEMENT: Record<Corner, 'top-start' | 'top-end' | 'bottom-start' | 'bottom-end'> = {
-  tl: 'top-start',
-  tr: 'top-end',
-  bl: 'bottom-start',
-  br: 'bottom-end',
-}
-
-/** 卡片从 pin 向屏幕中心展开的 placement 与 transform-origin */
-const CORNER_CARD_PLACEMENT: Record<Corner, 'top-start' | 'top-end' | 'bottom-start' | 'bottom-end'> = {
-  tl: 'bottom-start',
-  tr: 'bottom-end',
-  bl: 'top-start',
-  br: 'top-end',
-}
-
 const CARD_ORIGIN: Record<string, string> = {
-  'top-start': 'bottom left',
-  'top-end': 'bottom right',
-  'bottom-start': 'top left',
-  'bottom-end': 'top right',
+  'right-start': 'top left',
+  'right-end': 'bottom left',
+  'left-start': 'top right',
+  'left-end': 'bottom right',
 }
 
-/** 选择矩形 → floating-ui 虚拟引用 */
-function rectReference(rect: DOMRect): {getBoundingClientRect: () => DOMRect} {
-  return {getBoundingClientRect: () => rect}
+/**
+ * 方向 → 小点侧别与纵向延伸。
+ * 横向：鼠标停在选区左端 → 小点在停点左侧；停右端 → 右侧。
+ * 纵向：多行选择按鼠标在选区上/下半决定向上/向下延伸；单行选择没有纵向拖拽
+ * 分量，固定向下延伸——小点落在文字行下方，不遮刚选中的内容。
+ * （此前用 mouse.y < 选区中线判定，单行时鼠标恰在行中部，纵向是掷硬币——
+ * 这就是「右→左划位置不对」的根因之一。）
+ */
+function pickPinPlacement(rect: DOMRect, mouse: {x: number; y: number}): {side: PinSide; vertical: 'up' | 'down'} {
+  const atLeft = mouse.x < rect.left + rect.width / 2
+  const multiLine = rect.height >= 48
+  const up = multiLine && mouse.y < rect.top + rect.height / 2
+  return {
+    side: atLeft ? 'left' : 'right',
+    vertical: up ? 'up' : 'down',
+  }
 }
+
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v))
