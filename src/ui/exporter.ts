@@ -38,6 +38,10 @@ export class ExporterView {
   ) {
     this.modal = modal
     this.overlay = overlay
+    // 弹层骨架类名只在这里设置一次；hidden 的显隐由 open()/close() 切换。
+    // 此前 render() 每次重绘都重写整串 className（含 hidden），点 tab 会把弹层藏掉。
+    this.modal.className =
+      'fixed left-1/2 top-1/2 z-100 hidden w-[min(880px,94vw)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border bg-card text-card-foreground shadow-2xl'
   }
 
   open(doc: DocItem): void {
@@ -71,8 +75,6 @@ export class ExporterView {
     const isW3C = this.format === 'w3c'
     const content = this.content()
     const tab = TABS.find((t) => t.id === this.format)!
-    this.modal.className =
-      'fixed left-1/2 top-1/2 z-100 hidden w-[min(880px,94vw)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border bg-card text-card-foreground shadow-2xl'
     this.modal.innerHTML = `
       <div class="flex items-center justify-between border-b px-5 py-3.5">
         <div class="flex items-center gap-1" role="tablist">
