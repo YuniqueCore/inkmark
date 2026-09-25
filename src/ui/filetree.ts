@@ -19,18 +19,24 @@ interface TreeNode {
 export class FileTreeView {
   private root: HTMLElement
   private collapsed = new Set<string>()
+  /** 最近一次渲染的入参，目录折叠切换时局部重渲染用 */
+  private lastDocs: DocItem[] = []
+  private lastActiveId = ''
 
   constructor(root: HTMLElement, private callbacks: FileTreeCallbacks) {
     this.root = root
   }
 
-  /** 折叠/展开目录 */
+  /** 折叠/展开目录：切换后立即重渲染（此前只改集合不动视图，是展开失效的根因） */
   toggleDir(key: string): void {
     if (this.collapsed.has(key)) this.collapsed.delete(key)
     else this.collapsed.add(key)
+    this.render(this.lastDocs, this.lastActiveId)
   }
 
   render(docs: DocItem[], activeDocId: string): void {
+    this.lastDocs = docs
+    this.lastActiveId = activeDocId
     if (docs.length === 0) {
       this.root.innerHTML = `
         <div class="px-3 py-6 text-center text-xs leading-relaxed text-muted-foreground">

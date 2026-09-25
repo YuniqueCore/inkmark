@@ -1,5 +1,6 @@
 /** 已有批注的锚定卡片：点击正文高亮（或侧栏编辑）弹出，贴着高亮位置带箭头，支持原位编辑。 */
 
+import { arrow, autoUpdate, computePosition, flip, offset, shift } from '@floating-ui/dom'
 import { escapeHtml, KIND_LABEL } from './editor'
 import { icon } from './icons'
 import { snippet } from '../core/text'
@@ -20,13 +21,17 @@ export class AnnotationPopup {
   /** 当前正在原位编辑的批注 */
   private editingId: string | null = null
   private anchorRect: DOMRect | null = null
+  private arrowEl: HTMLElement
+  private stopAutoUpdate: (() => void) | null = null
   /** popup 展示的批注集合（可能多条堆叠） */
   private items: Annotation[] = []
   private sourceText = ''
 
   constructor(private callbacks: PopupCallbacks) {
     this.el = document.createElement('div')
-    this.el.className = 'popover-panel fixed z-60 hidden w-[340px]'
+    this.el.className = 'popover-panel fixed z-60 hidden w-[420px]'
+    this.arrowEl = document.createElement('div')
+    this.arrowEl.className = 'popup-arrow absolute size-2.5 rotate-45 border bg-popover'
     document.body.append(this.el)
 
     document.addEventListener('mousedown', (e) => {
@@ -73,6 +78,8 @@ export class AnnotationPopup {
     this.items = []
     this.el.classList.add('hidden')
     this.el.innerHTML = ''
+    this.stopAutoUpdate?.()
+    this.stopAutoUpdate = null
   }
 
   /** 数据变更后由 main 调用：目标批注已不存在则关闭，否则重绘保持位置 */
@@ -93,7 +100,8 @@ export class AnnotationPopup {
     const cards = this.items
       .map((a) => this.renderItem(a))
       .join('<div class="my-2 border-t"></div>')
-    this.el.innerHTML = `<div class="p-3">${cards}</div><div class="popup-arrow"></div>`
+    this.el.innerHTML = `<div class="p-3">${cards}</div>`
+    this.el.append(this.arrowEl)
     this.bindItemEvents()
   }
 
@@ -211,32 +219,36 @@ export class AnnotationPopup {
 
   private place(): void {
     if (!this.anchorRect) return
-    const r = this.anchorRect
     this.el.classList.remove('hidden')
-    const w = this.el.offsetWidth || 340
-    const h = this.el.offsetHeight || 200
-    const arrow = 8
-    let left = clamp(r.left + r.width / 2 - w / 2, 8, window.innerWidth - w - 8)
-    let top = r.bottom + arrow
-    let arrowSide: 'top' | 'bottom' = 'top'
-    if (top + h > window.innerHeight - 8 && r.top - arrow - h > 8) {
-      top = r.top - arrow - h
-      arrowSide = 'bottom'
-    }
-    top = clamp(top, 8, window.innerHeight - h - 8)
-    // 箭头水平位置对准高亮中心（clamp 到卡片内）
-    const anchorCx = clamp(r.left + r.width / 2, left + 16, left + w - 16)
-    this.el.style.left = `${left}px`
-    this.el.style.top = `${top}px`
-    const arrowEl = this.el.querySelector('.popup-arrow') as HTMLElement | null
-    if (arrowEl) {
-      arrowEl.className =
-        'popup-arrow absolute size-2.5 rotate-45 border bg-popover ' +
-        (arrowSide === 'top'
-          ? '-top-1 border-l border-t'
-          : '-bottom-1 border-r border-b')
-      arrowEl.style.left = `${anchorCx - left - 5}px`
-    }
+    const reference = {getBoundingClientRect: () => this.anchorRect!}
+    // 编辑时内容高度变化，autoUpdate 跟随重定位；组件关闭时停掉
+    this.stopAutoUpdate?.()
+    this.stopAutoUpdate = autoUpdate(reference, this.el, () => {
+      if (this.el.classList.contains('hidden')) return
+      void computePosition(reference, this.el, {
+        placement: 'bottom',
+        strategy: 'fixed',
+        middleware: [
+          offset(10),
+          flip({fallbackPlacements: ['top']}),
+          shift({padding: 8}),
+          arrow({element: this.arrowEl, padding: 12}),
+        ],
+      }).then(({x, y, placement, middlewareData}) => {
+        this.el.style.left = `${x}px`
+        this.el.style.top = `${y}px`
+        const side = placement.split('-')[0]
+        const arrowData = middlewareData.arrow
+        if (arrowData) {
+          this.arrowEl.style.left = arrowData.x != null ? `${arrowData.x}px` : ''
+          this.arrowEl.style.top = arrowData.y != null ? `${arrowData.y}px` : ''
+        }
+        // 箭头贴边：指向侧留边框，另一侧隐藏
+        this.arrowEl.className =
+          'popup-arrow absolute size-2.5 rotate-45 border bg-popover ' +
+          (side === 'top' ? '-top-1 border-l border-t' : '-bottom-1 border-r border-b')
+      })
+    })
   }
 
   /** main 在点击高亮时设置锚矩形（视口坐标） */
@@ -249,6 +261,4 @@ function overlaps(a: Annotation, b: Annotation): boolean {
   return a.start < b.end && b.start < a.end
 }
 
-function clamp(v: number, lo: number, hi: number): number {
-  return Math.max(lo, Math.min(hi, v))
-}
+

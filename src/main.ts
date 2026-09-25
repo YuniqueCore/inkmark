@@ -27,6 +27,16 @@ interface AppState {
 }
 
 let state: AppState = { docs: [], activeDocId: '' }
+/** 筛选透镜：正文高亮与侧栏列表共用 */
+let onlyHighlightFiltered = false
+
+/** 编辑器实际渲染的批注：关闭"仅高亮筛选"时显示全部 */
+function editorAnnotations(): Annotation[] {
+  const doc = activeDoc()
+  if (!doc) return []
+  if (!onlyHighlightFiltered) return doc.annotations
+  return sidebar.visibleOf(doc.annotations)
+}
 
 const activeDoc = (): DocItem | undefined => state.docs.find((d) => d.id === state.activeDocId)
 
@@ -123,6 +133,15 @@ const sidebar = new SidebarView(sidebarEl, {
   },
   onFilterChange: (f) => {
     sidebar.setFilter(f)
+    rerender(false)
+  },
+  onKindFilterChange: (kinds) => {
+    sidebar.setKindFilter(kinds)
+    rerender(false)
+  },
+  onHighlightModeChange: (only) => {
+    onlyHighlightFiltered = only
+    sidebar.setHighlightMode(only)
     rerender(false)
   },
 })
@@ -274,7 +293,7 @@ function removeDoc(id: string): void {
 
 function rerender(syncPopup = true): void {
   const doc = activeDoc()
-  editor.render(doc?.text ?? '', doc?.annotations ?? [], loadSample)
+  editor.render(doc?.text ?? '', editorAnnotations(), loadSample)
   sidebar.render(doc?.text ?? '', doc?.annotations ?? [])
   fileTree.render(state.docs, state.activeDocId)
   if (syncPopup && doc) annotationPopup.sync(doc.text, doc.annotations)

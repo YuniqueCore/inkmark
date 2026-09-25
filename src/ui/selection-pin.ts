@@ -4,6 +4,7 @@
  * 左→右划停右端 → 右下；右→左划停左端 → 左下；右下→左上划 → 左上。
  */
 
+import { computePosition, offset, shift, size, limitShift } from '@floating-ui/dom'
 import { escapeHtml, KIND_LABEL } from './editor'
 import { icon } from './icons'
 import type { AnnotationKind } from '../core/types'
@@ -46,7 +47,7 @@ export class SelectionPin {
     this.pin.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" class="size-3.5"><path d="M12 5v14M5 12h14"/></svg>`
 
     this.card = document.createElement('div')
-    this.card.className = 'popover-panel fixed z-50 hidden w-[360px]'
+    this.card.className = 'popover-panel fixed z-50 hidden w-[400px]'
 
     document.body.append(this.pin, this.card)
 
@@ -107,18 +108,17 @@ export class SelectionPin {
 
   private placePin(): void {
     if (!this.info) return
-    const r = this.info.rect
-    const size = 28
-    // 从角点沿对角方向外偏：基础悬空 10px + 自身半径，让小点不压选区也不压鼠标轨迹
-    const off = 10 + size / 2
-    const dx = (this.corner === 'tl' || this.corner === 'bl' ? -1 : 1) * off
-    const dy = (this.corner === 'tl' || this.corner === 'tr' ? -1 : 1) * off
-    const x = (this.corner === 'tl' || this.corner === 'bl' ? r.left : r.right) + dx
-    const y = (this.corner === 'tl' || this.corner === 'tr' ? r.top : r.bottom) + dy
-    const left = clamp(x - size / 2, 6, window.innerWidth - size - 6)
-    const top = clamp(y - size / 2, 6, window.innerHeight - size - 6)
-    this.pin.style.left = `${left}px`
-    this.pin.style.top = `${top}px`
+    // 贴角 → floating-ui placement：tl→top-start / tr→top-end / bl→bottom-start / br→bottom-end
+    const placement = CORNER_PLACEMENT[this.corner]
+    const reference = rectReference(this.info.rect)
+    void computePosition(reference, this.pin, {
+      placement,
+      strategy: 'fixed',
+      middleware: [offset({mainAxis: 12, crossAxis: 22}), shift({padding: 8, limiter: limitShift()})],
+    }).then(({x, y}) => {
+      this.pin.style.left = `${x}px`
+      this.pin.style.top = `${y}px`
+    })
   }
 
   /** hover 小点 → 原位展开撰写卡片，展开方向由贴角决定 */
@@ -215,38 +215,23 @@ export class SelectionPin {
 
   private placeCard(): void {
     if (!this.info) return
-    const r = this.info.rect
-    const pinX = this.corner === 'tl' || this.corner === 'bl' ? r.left : r.right
-    const pinY = this.corner === 'tl' || this.corner === 'tr' ? r.top : r.bottom
-    const w = this.card.offsetWidth || 360
-    const h = this.card.offsetHeight || 220
-    // 卡片从 pin 向文档中心方向展开
-    let left: number
-    let top: number
-    let origin: string
-    const anchorX = clamp(pinX, 8, window.innerWidth - 8)
-    const anchorY = clamp(pinY, 8, window.innerHeight - 8)
-    const toRight = anchorX + w / 2 <= window.innerWidth
-    const below = anchorY + h + 12 <= window.innerHeight || anchorY < window.innerHeight / 2
-    if (toRight) {
-      left = anchorX - 14
-      origin = 'left'
-    } else {
-      left = anchorX + 14 - w
-      origin = 'right'
-    }
-    if (below) {
-      top = anchorY + 14
-      origin = `${origin === 'left' ? 'left' : 'right'} top`
-    } else {
-      top = anchorY - 14 - h
-      origin = `${origin === 'left' ? 'left' : 'right'} bottom`
-    }
-    left = clamp(left, 8, window.innerWidth - w - 8)
-    top = clamp(top, 8, window.innerHeight - h - 8)
-    this.card.style.left = `${left}px`
-    this.card.style.top = `${top}px`
-    this.card.style.transformOrigin = origin
+    // 卡片以 pin 为锚，向屏幕中心方向展开；size 中间件限制最大高度防溢出
+    const placement = CORNER_CARD_PLACEMENT[this.corner]
+    void computePosition(this.pin, this.card, {
+      placement,
+      strategy: 'fixed',
+      middleware: [
+        offset(10),
+        shift({padding: 8, limiter: limitShift()}),
+        size({apply: ({availableHeight}) => {
+          this.card.style.maxHeight = `${Math.max(220, availableHeight)}px`
+        }}),
+      ],
+    }).then(({x, y}) => {
+      this.card.style.left = `${x}px`
+      this.card.style.top = `${y}px`
+      this.card.style.transformOrigin = CARD_ORIGIN[placement] ?? 'top left'
+    })
   }
 }
 
@@ -257,6 +242,33 @@ function pickCorner(rect: DOMRect, mouse: { x: number; y: number }): Corner {
   const nearLeft = cx - rect.left <= rect.right - cx
   const nearTop = cy - rect.top <= rect.bottom - cy
   return nearLeft ? (nearTop ? 'tl' : 'bl') : nearTop ? 'tr' : 'br'
+}
+
+const CORNER_PLACEMENT: Record<Corner, 'top-start' | 'top-end' | 'bottom-start' | 'bottom-end'> = {
+  tl: 'top-start',
+  tr: 'top-end',
+  bl: 'bottom-start',
+  br: 'bottom-end',
+}
+
+/** 卡片从 pin 向屏幕中心展开的 placement 与 transform-origin */
+const CORNER_CARD_PLACEMENT: Record<Corner, 'top-start' | 'top-end' | 'bottom-start' | 'bottom-end'> = {
+  tl: 'bottom-start',
+  tr: 'bottom-end',
+  bl: 'top-start',
+  br: 'top-end',
+}
+
+const CARD_ORIGIN: Record<string, string> = {
+  'top-start': 'bottom left',
+  'top-end': 'bottom right',
+  'bottom-start': 'top left',
+  'bottom-end': 'top right',
+}
+
+/** 选择矩形 → floating-ui 虚拟引用 */
+function rectReference(rect: DOMRect): {getBoundingClientRect: () => DOMRect} {
+  return {getBoundingClientRect: () => rect}
 }
 
 function clamp(v: number, lo: number, hi: number): number {

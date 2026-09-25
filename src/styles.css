@@ -192,12 +192,20 @@
     animation: pop-in 0.12s ease-out;
   }
   .chip-toggle {
-    @apply inline-flex h-7 items-center rounded-md border border-transparent px-2.5 text-[12.5px]
+    @apply inline-flex h-7 items-center gap-1 rounded-md border border-transparent px-2.5 text-[12.5px]
       text-muted-foreground transition-colors hover:text-foreground;
   }
   .chip-toggle.on {
     @apply border-border bg-secondary text-secondary-foreground shadow-xs;
   }
+  /* 类型 chips：激活态使用对应标注色（筛选行与编辑 chips 共用） */
+  .kind-chip.on[data-kind="issue"] { color: var(--kind-issue); border-color: color-mix(in oklab, var(--kind-issue) 45%, transparent); background: var(--kind-issue-bg); }
+  .kind-chip.on[data-kind="suggestion"] { color: var(--kind-suggestion); border-color: color-mix(in oklab, var(--kind-suggestion) 45%, transparent); background: var(--kind-suggestion-bg); }
+  .kind-chip.on[data-kind="question"] { color: var(--kind-question); border-color: color-mix(in oklab, var(--kind-question) 45%, transparent); background: var(--kind-question-bg); }
+  .kind-chip.on[data-kind="highlight"] { color: var(--kind-highlight); border-color: color-mix(in oklab, var(--kind-highlight) 45%, transparent); background: var(--kind-highlight-bg); }
+  .kind-chip.on[data-kind="praise"] { color: var(--kind-praise); border-color: color-mix(in oklab, var(--kind-praise) 45%, transparent); background: var(--kind-praise-bg); }
+  .kind-chip.on[data-kind="slop"] { color: var(--kind-slop); border-color: color-mix(in oklab, var(--kind-slop) 45%, transparent); background: var(--kind-slop-bg); }
+  .dark .kind-chip.on[data-kind] { color: var(--foreground); }
 }
 
 @keyframes pop-in {
