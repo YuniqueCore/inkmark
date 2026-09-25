@@ -1,7 +1,7 @@
 /** 领域类型。核心模块（core/）不允许依赖 DOM —— 全部可独立测试。 */
 
-/** 批注类型：问题（AI slop / 错误）、建议、疑问、重点、slop 预扫描 */
-export type AnnotationKind = 'issue' | 'suggestion' | 'question' | 'highlight' | 'slop'
+/** 批注类型：问题、建议、疑问、重点、认可（写得好 + 原因）、slop 预扫描 */
+export type AnnotationKind = 'issue' | 'suggestion' | 'question' | 'highlight' | 'praise' | 'slop'
 
 export type AnnotationStatus = 'open' | 'resolved'
 
@@ -38,8 +38,27 @@ export interface AnnotationInput {
   meta?: SlopMeta
 }
 
-/** 工作台会话（localStorage 持久化单元） */
-export interface Session {
+/** 工作区文档：一个可批注的文本单元 */
+export interface DocItem {
+  id: string
+  name: string
+  /** 相对路径（文件夹导入时含目录层级），单文件导入为 '' */
+  path: string
+  text: string
+  annotations: Annotation[]
+  addedAt: number
+}
+
+/** 工作区会话 v2：多文档。localStorage 持久化单元 */
+export interface Workspace {
+  version: 2
+  docs: DocItem[]
+  activeDocId: string
+  savedAt: number
+}
+
+/** v1 旧会话（单文档），迁移用 */
+export interface SessionV1 {
   version: 1
   text: string
   annotations: Annotation[]

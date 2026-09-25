@@ -17,11 +17,12 @@ export const KIND_LABEL: Record<AnnotationKind, string> = {
   suggestion: '建议',
   question: '疑问',
   highlight: '重点',
+  praise: '认可',
   slop: 'AI 味',
 }
 
 /** 多类重叠时取优先级最高的底色 */
-const KIND_PRIORITY: AnnotationKind[] = ['slop', 'issue', 'suggestion', 'question', 'highlight']
+const KIND_PRIORITY: AnnotationKind[] = ['slop', 'issue', 'praise', 'suggestion', 'question', 'highlight']
 
 function renderBlockContent(blockText: string, blockAnns: Annotation[], blockStart: number): string {
   const segments = buildSegments(blockStart, blockText, blockAnns)

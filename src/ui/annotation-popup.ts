@@ -1,6 +1,7 @@
 /** 已有批注的锚定卡片：点击正文高亮（或侧栏编辑）弹出，贴着高亮位置带箭头，支持原位编辑。 */
 
 import { escapeHtml, KIND_LABEL } from './editor'
+import { icon } from './icons'
 import { snippet } from '../core/text'
 import type { Annotation, AnnotationKind } from '../core/types'
 
@@ -11,14 +12,7 @@ export interface PopupCallbacks {
   onCopySnippet: (text: string) => void
 }
 
-const KINDS: AnnotationKind[] = ['issue', 'suggestion', 'question', 'highlight']
-const KIND_ICON: Record<AnnotationKind, string> = {
-  issue: '⚠️',
-  suggestion: '💬',
-  question: '❓',
-  highlight: '✅',
-  slop: '⚠️',
-}
+const KINDS: AnnotationKind[] = ['issue', 'suggestion', 'question', 'highlight', 'praise']
 
 export class AnnotationPopup {
   private el: HTMLElement
@@ -117,9 +111,9 @@ export class AnnotationPopup {
           </div>
           <p class="mb-2 line-clamp-2 border-l-2 border-primary/30 pl-2 text-[12.5px] text-muted-foreground">“${escapeHtml(quote)}”</p>
           <div class="mb-2 flex flex-wrap gap-1">${KINDS.map(
-            (k) => `<button class="chip-toggle kind-chip ${a.kind === k ? 'on' : ''}" data-kind="${k}" data-role="edit-kind">${KIND_ICON[k]} ${KIND_LABEL[k]}</button>`,
+            (k) => `<button class="chip-toggle kind-chip ${a.kind === k ? 'on' : ''}" data-kind="${k}" data-role="edit-kind">${icon(k)} ${KIND_LABEL[k]}</button>`,
           ).join('')}</div>
-          <textarea class="input-base popup-edit-input min-h-16 resize-y text-sm">${escapeHtml(a.comment)}</textarea>
+          <textarea class="input-base popup-edit-input min-h-16 resize-y text-sm" placeholder="批注内容：问题给改法；认可写原因……">${escapeHtml(a.comment)}</textarea>
           <div class="mt-2 flex items-center justify-between">
             <span class="flex items-center gap-1 text-xs text-muted-foreground"><span class="kbd">⌘</span><span class="kbd">↵</span> 保存</span>
             <span class="flex gap-1.5">

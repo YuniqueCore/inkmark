@@ -5,6 +5,7 @@
  */
 
 import { escapeHtml, KIND_LABEL } from './editor'
+import { icon } from './icons'
 import type { AnnotationKind } from '../core/types'
 
 export interface SelectionInfo {
@@ -25,14 +26,7 @@ export interface PinCallbacks {
   onDismiss: () => void
 }
 
-const KINDS: AnnotationKind[] = ['issue', 'suggestion', 'question', 'highlight']
-const KIND_ICON: Record<AnnotationKind, string> = {
-  issue: '⚠️',
-  suggestion: '💬',
-  question: '❓',
-  highlight: '✅',
-  slop: '⚠️',
-}
+const KINDS: AnnotationKind[] = ['issue', 'suggestion', 'question', 'highlight', 'praise']
 
 export class SelectionPin {
   private pin: HTMLElement
@@ -114,11 +108,15 @@ export class SelectionPin {
   private placePin(): void {
     if (!this.info) return
     const r = this.info.rect
-    const x = this.corner === 'tl' || this.corner === 'bl' ? r.left : r.right
-    const y = this.corner === 'tl' || this.corner === 'tr' ? r.top : r.bottom
     const size = 28
-    const left = clamp(x - size / 2, 8, window.innerWidth - size - 8)
-    const top = clamp(y - size / 2, 8, window.innerHeight - size - 8)
+    // 从角点沿对角方向外偏：基础悬空 10px + 自身半径，让小点不压选区也不压鼠标轨迹
+    const off = 10 + size / 2
+    const dx = (this.corner === 'tl' || this.corner === 'bl' ? -1 : 1) * off
+    const dy = (this.corner === 'tl' || this.corner === 'tr' ? -1 : 1) * off
+    const x = (this.corner === 'tl' || this.corner === 'bl' ? r.left : r.right) + dx
+    const y = (this.corner === 'tl' || this.corner === 'tr' ? r.top : r.bottom) + dy
+    const left = clamp(x - size / 2, 6, window.innerWidth - size - 6)
+    const top = clamp(y - size / 2, 6, window.innerHeight - size - 6)
     this.pin.style.left = `${left}px`
     this.pin.style.top = `${top}px`
   }
@@ -137,7 +135,7 @@ export class SelectionPin {
           “${escapeHtml(quoted.length > 90 ? quoted.slice(0, 90) + '……' : quoted)}”
         </p>
         <div class="mb-2.5 flex flex-wrap gap-1">${KINDS.map(
-          (k) => `<button class="chip-toggle kind-chip" data-kind="${k}">${KIND_ICON[k]} ${KIND_LABEL[k]}</button>`,
+          (k) => `<button class="chip-toggle kind-chip" data-kind="${k}">${icon(k)} ${KIND_LABEL[k]}</button>`,
         ).join('')}</div>
         <textarea id="pin-composer-input" class="input-base min-h-20 resize-y" placeholder="批注内容：指出问题、给出改法……"></textarea>
         <div class="mt-2.5 flex items-center justify-between">

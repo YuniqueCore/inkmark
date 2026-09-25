@@ -84,18 +84,23 @@
   --kind-highlight-bg: rgba(16, 185, 129, 0.16);
   --kind-slop: #dc2626;
   --kind-slop-bg: rgba(239, 68, 68, 0.12);
+  --kind-praise: #047857;
+  --kind-praise-bg: rgba(16, 185, 129, 0.16);
 }
 .dark {
-  --kind-issue: #fbbf24;
-  --kind-issue-bg: rgba(245, 158, 11, 0.14);
-  --kind-suggestion: #93c5fd;
-  --kind-suggestion-bg: rgba(59, 130, 246, 0.16);
-  --kind-question: #c4b5fd;
-  --kind-question-bg: rgba(139, 92, 246, 0.16);
-  --kind-highlight: #6ee7b7;
-  --kind-highlight-bg: rgba(16, 185, 129, 0.14);
-  --kind-slop: #f87171;
-  --kind-slop-bg: rgba(239, 68, 68, 0.14);
+  /* 暗色下提高底色不透明度并整体压暗，保证与 foreground 的对比 */
+  --kind-issue: #fcd34d;
+  --kind-issue-bg: rgba(217, 119, 6, 0.30);
+  --kind-suggestion: #bfdbfe;
+  --kind-suggestion-bg: rgba(37, 99, 235, 0.30);
+  --kind-question: #ddd6fe;
+  --kind-question-bg: rgba(109, 40, 217, 0.32);
+  --kind-highlight: #a7f3d0;
+  --kind-highlight-bg: rgba(5, 150, 105, 0.30);
+  --kind-slop: #fecaca;
+  --kind-slop-bg: rgba(185, 28, 28, 0.34);
+  --kind-praise: #6ee7b7;
+  --kind-praise-bg: rgba(5, 150, 105, 0.30);
 }
 
 @theme inline {
@@ -109,6 +114,8 @@
   --color-kind-highlight-bg: var(--kind-highlight-bg);
   --color-kind-slop: var(--kind-slop);
   --color-kind-slop-bg: var(--kind-slop-bg);
+  --color-kind-praise: var(--kind-praise);
+  --color-kind-praise-bg: var(--kind-praise-bg);
 }
 
 /* ---------------------------------------------------------------- 基础 */
@@ -220,8 +227,25 @@
   text-decoration: underline wavy var(--kind-slop) 1px;
   text-underline-offset: 4px;
 }
+.dark .seg-hl {
+  box-shadow: inset 0 -2px 0 color-mix(in oklab, currentColor 12%, transparent);
+}
 .seg-hl.active {
   outline: 2px solid var(--ring);
   outline-offset: 1px;
   animation: flash-ring 0.9s ease-out 1;
+}
+
+/* ---------------------------------------------------------------- 文档树 */
+
+@layer components {
+  .tree-row {
+    @apply flex w-full items-center gap-1.5 rounded-md px-1.5 py-[5px] text-left text-[13px]
+      cursor-pointer select-none transition-colors
+      hover:bg-accent hover:text-accent-foreground;
+  }
+  .tree-remove {
+    @apply ml-auto flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground
+      hover:bg-destructive/10 hover:text-destructive;
+  }
 }

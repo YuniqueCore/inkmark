@@ -47,11 +47,17 @@ describe('exportSnippets', () => {
 })
 
 describe('exportReview', () => {
-  it('输出 Markdown 引用块，问题带 ⚠️', () => {
+  it('输出 Markdown 引用块，问题带 [!] 文本标记（不用 emoji）', () => {
     const out = exportReview(TEXT, [ann('a', 4, 14, '起手壳')])
     expect(out).toContain('批注反馈（共 1 条）：')
     expect(out).toContain('> 原文：随着技术的不断发展。')
-    expect(out).toContain('> ⚠️ 批注①（问题）：起手壳')
+    expect(out).toContain('> [!] 批注①（问题）：起手壳')
+  })
+
+  it('认可批注带 [+] 标记', () => {
+    const praise = { ...ann('p', 4, 14, '这段讲清楚了取舍'), kind: 'praise' as const }
+    const out = exportReview(TEXT, [praise])
+    expect(out).toContain('> [+] 批注①（认可）：这段讲清楚了取舍')
   })
   it('多行锚点在引用里压成单行', () => {
     const out = exportReview('AAA\n\nBBB'.replace('AAA', '行一\n行二'), [ann('a', 0, 6, 'c')])

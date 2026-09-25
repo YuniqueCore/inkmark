@@ -17,16 +17,18 @@ export const KIND_LABEL: Record<AnnotationKind, string> = {
   suggestion: '建议',
   question: '疑问',
   highlight: '重点',
+  praise: '认可',
   slop: 'AI 味',
 }
 
-/** 评审引用块里的风险符号：问题/AI 味用 ⚠️，其余用 💬 */
+/** 评审引用块里的前缀符号（纯文本标记，不用 emoji） */
 export const KIND_MARK: Record<AnnotationKind, string> = {
-  issue: '⚠️',
-  slop: '⚠️',
-  suggestion: '💬',
-  question: '❓',
-  highlight: '✅',
+  issue: '[!]',
+  slop: '[!]',
+  suggestion: '[~]',
+  question: '[?]',
+  highlight: '[*]',
+  praise: '[+]',
 }
 
 /** 按文档位置排序并编号：①②③…（超过 20 用 (21) 形式）。返回 id → 标号。 */
