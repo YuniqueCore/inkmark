@@ -17,8 +17,6 @@ const TABS: Array<{ id: ExportFormat; label: string; hint: string }> = [
 export class ExporterView {
   private modal: HTMLElement
   private overlay: HTMLElement
-  private format: ExportFormat = 'inline'
-  private includeResolved = false
 
   constructor(
     modal: HTMLElement,
@@ -35,6 +33,9 @@ export class ExporterView {
     this.modal.classList.remove('hidden')
   }
 
+  private format = 'inline' as ExportFormat
+  private includeResolved = false
+
   close(): void {
     this.overlay.classList.add('hidden')
     this.modal.classList.add('hidden')
@@ -44,22 +45,35 @@ export class ExporterView {
   private render(text: string, annotations: Annotation[]): void {
     const content = exportAs(this.format, text, annotations, { includeResolved: this.includeResolved })
     const tab = TABS.find((t) => t.id === this.format)!
+    this.modal.className =
+      'fixed left-1/2 top-1/2 z-100 hidden w-[min(880px,94vw)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border bg-card text-card-foreground shadow-2xl'
     this.modal.innerHTML = `
-      <div class="tabs">
-        ${TABS.map(
-          (t) => `<button class="tab ${this.format === t.id ? 'on' : ''}" data-tab="${t.id}">${t.label}</button>`,
-        ).join('')}
-        <label class="label-check">
-          <input type="checkbox" id="inc-resolved" ${this.includeResolved ? 'checked' : ''}/>
+      <div class="flex items-center justify-between border-b px-5 py-3.5">
+        <div class="flex items-center gap-1" role="tablist">
+          ${TABS.map(
+            (t) =>
+              `<button role="tab" class="btn btn-ghost btn-sm ${this.format === t.id ? 'bg-secondary text-secondary-foreground' : 'text-muted-foreground'}" data-tab="${t.id}">${t.label}</button>`,
+          ).join('')}
+        </div>
+        <label class="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
+          <input type="checkbox" id="inc-resolved" class="size-3.5 accent-[var(--primary)]" ${this.includeResolved ? 'checked' : ''}/>
           包含已解决
         </label>
       </div>
-      <p style="margin:0 0 10px;color:var(--ink-soft);font-size:13px">${tab.hint}</p>
-      <textarea readonly id="export-preview"></textarea>
-      <div class="foot">
-        <button class="btn" data-op="download">下载 .md</button>
-        <button class="btn primary" data-op="copy">复制到剪贴板</button>
-        <button class="btn" data-op="close">关闭</button>
+      <div class="px-5 pt-3">
+        <p class="text-[13px] text-muted-foreground">${tab.hint}</p>
+        <textarea readonly id="export-preview" class="input-base mt-2.5 h-[46vh] resize-none font-mono text-[13px] leading-relaxed"></textarea>
+      </div>
+      <div class="flex items-center justify-between border-t bg-muted/40 px-5 py-3">
+        <span class="text-xs text-muted-foreground">${content.length.toLocaleString()} 字符</span>
+        <span class="flex gap-1.5">
+          <button class="btn btn-outline btn-sm" data-op="download">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+            下载 .md
+          </button>
+          <button class="btn btn-default btn-sm" data-op="copy">复制到剪贴板</button>
+          <button class="btn btn-ghost btn-sm" data-op="close">关闭</button>
+        </span>
       </div>`
     const preview = this.modal.querySelector('#export-preview') as HTMLTextAreaElement
     preview.value = content

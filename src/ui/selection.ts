@@ -3,6 +3,14 @@
 import { escapeHtml, KIND_LABEL } from './editor'
 import type { AnnotationKind } from '../core/types'
 
+const KIND_ICON: Record<AnnotationKind, string> = {
+  issue: '⚠️',
+  suggestion: '💬',
+  question: '❓',
+  highlight: '✅',
+  slop: '⚠️',
+}
+
 export interface SelectionInfo {
   start: number
   end: number
@@ -29,13 +37,20 @@ export class SelectionController {
 
   constructor(private callbacks: SelectionCallbacks) {
     this.toolbar = document.createElement('div')
-    this.toolbar.className = 'float-panel float-toolbar hidden'
+    this.toolbar.className = 'popover-panel hidden'
     this.toolbar.innerHTML = `
-      <button class="btn" data-op="annotate">批注</button>
-      <button class="btn" data-op="copy">复制</button>
-    `
+      <div class="flex items-center gap-0.5 p-1">
+        <button class="btn btn-ghost btn-sm" data-op="annotate">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M8 16V8l8 8h4"/></svg>
+          批注 <span class="kbd ml-1">⌘↵</span>
+        </button>
+        <button class="btn btn-ghost btn-sm" data-op="copy">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+          复制
+        </button>
+      </div>`
     this.composer = document.createElement('div')
-    this.composer.className = 'float-panel composer hidden'
+    this.composer.className = 'popover-panel hidden'
     document.body.append(this.toolbar, this.composer)
 
     this.toolbar.addEventListener('click', (e) => {
@@ -87,17 +102,23 @@ export class SelectionController {
     this.currentKind = kind
     this.editingId = editingId
     this.composer.innerHTML = `
-      <p class="quote">“${escapeHtml(info.quoted.length > 80 ? info.quoted.slice(0, 80) + '……' : info.quoted)}”</p>
-      <div class="kinds">${KINDS.map(
-        (k) => `<button class="kind-chip" data-kind="${k}">${KIND_LABEL[k]}</button>`,
-      ).join('')}</div>
-      <textarea id="composer-input" placeholder="批注内容：指出问题、给出改法……"></textarea>
-      <div class="row">
-        <span class="hint">⌘/Ctrl + Enter 提交 · Esc 取消</span>
-        <span>
-          <button class="btn" data-op="cancel">取消</button>
-          <button class="btn primary" data-op="submit">${editingId ? '保存' : '添加批注'}</button>
-        </span>
+      <div class="w-[360px] p-3">
+        <p class="mb-2.5 line-clamp-2 border-l-2 border-primary/30 pl-2 text-[13px] text-muted-foreground">
+          “${escapeHtml(info.quoted.length > 90 ? info.quoted.slice(0, 90) + '……' : info.quoted)}”
+        </p>
+        <div class="mb-2.5 flex flex-wrap gap-1">${KINDS.map(
+          (k) => `<button class="chip-toggle kind-chip" data-kind="${k}">${KIND_ICON[k]} ${KIND_LABEL[k]}</button>`,
+        ).join('')}</div>
+        <textarea id="composer-input" class="input-base min-h-20 resize-y" placeholder="批注内容：指出问题、给出改法……"></textarea>
+        <div class="mt-2.5 flex items-center justify-between">
+          <span class="flex items-center gap-1 text-xs text-muted-foreground">
+            <span class="kbd">⌘</span><span class="kbd">↵</span> 提交 · <span class="kbd">Esc</span> 取消
+          </span>
+          <span class="flex gap-1.5">
+            <button class="btn btn-ghost btn-sm" data-op="cancel">取消</button>
+            <button class="btn btn-default btn-sm" data-op="submit">${editingId ? '保存修改' : '添加批注'}</button>
+          </span>
+        </div>
       </div>`
     const input = this.composer.querySelector('#composer-input') as HTMLTextAreaElement
     input.value = comment

@@ -254,6 +254,21 @@ async function clearAll(): Promise<void> {
   rerender()
 }
 
+// 暗色切换
+const THEME_KEY = 'inkmark:theme'
+function applyThemeButton(): void {
+  const dark = document.documentElement.classList.contains('dark')
+  $('#btn-theme').innerHTML = dark
+    ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>`
+    : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>`
+}
+$('#btn-theme').addEventListener('click', () => {
+  const dark = document.documentElement.classList.toggle('dark')
+  localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light')
+  applyThemeButton()
+})
+applyThemeButton()
+
 $('#btn-sample').addEventListener('click', loadSample)
 $('#btn-load').addEventListener('click', () => $('#file-input').click())
 $('#file-input').addEventListener('change', (e) => {
@@ -281,13 +296,14 @@ function toast(message: string): void {
   let el = document.querySelector('.toast') as HTMLElement | null
   if (!el) {
     el = document.createElement('div')
-    el.className = 'toast'
+    el.className =
+      'toast pointer-events-none fixed bottom-6 left-1/2 z-200 -translate-x-1/2 rounded-md border bg-primary px-3.5 py-2 text-sm text-primary-foreground shadow-lg opacity-0 transition-opacity duration-200'
     document.body.append(el)
   }
   el.textContent = message
-  el.classList.add('show')
+  el.classList.add('opacity-95')
   clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => el!.classList.remove('show'), 1800)
+  toastTimer = setTimeout(() => el!.classList.remove('opacity-95'), 1800)
 }
 
 // ---------------------------------------------------------------- 启动

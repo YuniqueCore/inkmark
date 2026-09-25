@@ -38,7 +38,7 @@ export class SidebarView {
     const chips = (['all', 'open', 'resolved'] as StatusFilter[])
       .map(
         (f) =>
-          `<button class="chip ${this.filter === f ? 'on' : ''}" data-filter="${f}">${
+          `<button class="chip-toggle ${this.filter === f ? 'on' : ''}" data-filter="${f}">${
             f === 'all'
               ? `全部 ${annotations.length}`
               : f === 'open'
@@ -51,21 +51,25 @@ export class SidebarView {
     const kinds = [...new Set(annotations.map((a) => a.kind))] as AnnotationKind[]
     const kindChips =
       kinds.length > 0
-        ? `<div class="side-filters">${kinds
-            .map((k) => `<span class="chip">${KIND_LABEL[k]}</span>`)
+        ? `<div class="mb-3 flex flex-wrap gap-1.5 px-1">${kinds
+            .map((k) => `<span class="badge bg-secondary text-secondary-foreground">${KIND_LABEL[k]}</span>`)
             .join('')}</div>`
         : ''
 
     const cards = shown.map((a) => this.renderCard(text, a)).join('')
 
     this.root.innerHTML = `
-      <div class="side-head">
-        <h3>批注</h3>
-        <span class="count">${open} 条待处理</span>
+      <div class="mb-3 flex items-baseline justify-between px-1">
+        <h3 class="text-sm font-semibold tracking-tight">批注</h3>
+        <span class="text-xs text-muted-foreground">${open} 条待处理</span>
       </div>
-      <div class="side-filters">${chips}</div>
+      <div class="mb-3 flex flex-wrap gap-1.5 px-1">${chips}</div>
       ${kindChips}
-      ${shown.length === 0 ? '<div class="side-empty">划选正文文字，或运行 slop 预扫描</div>' : cards}
+      ${shown.length === 0
+        ? `<div class="mt-16 rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+             划选正文文字写批注，<br>或点顶栏「slop 预扫描」
+           </div>`
+        : `<div class="flex flex-col gap-2.5">${cards}</div>`}
     `
 
     this.root.querySelectorAll('[data-filter]').forEach((btn) =>
@@ -92,20 +96,26 @@ export class SidebarView {
 
   private renderCard(text: string, a: Annotation): string {
     const quote = snippet(text, a.start, a.end, 90)
-    const slopInfo = a.meta ? `<span class="badge k-slop">${escapeHtml(a.meta.label)}</span>` : ''
+    const slopInfo = a.meta
+      ? `<span class="badge border-transparent" style="color:var(--kind-slop);background:var(--kind-slop-bg)">${escapeHtml(a.meta.label)}</span>`
+      : ''
+    const active = this.activeId === a.id
     return `
-      <div class="ann-card ${a.status === 'resolved' ? 'resolved' : ''} ${this.activeId === a.id ? 'active' : ''}" data-id="${a.id}">
-        <div class="meta">
-          <span class="badge k-${a.kind}">${KIND_LABEL[a.kind]}</span>
+      <div class="card ann-card p-3 transition-shadow ${a.status === 'resolved' ? 'opacity-60' : ''} ${active ? 'ring-2 ring-ring/40' : 'hover:shadow-md'}" data-id="${a.id}">
+        <div class="mb-1.5 flex items-center gap-1.5">
+          <span class="badge border-transparent" style="color:var(--kind-${a.kind});background:var(--kind-${a.kind}-bg)">${KIND_LABEL[a.kind]}</span>
           ${slopInfo}
+          ${a.status === 'resolved' ? '<span class="badge bg-secondary text-secondary-foreground">已解决</span>' : ''}
         </div>
-        <blockquote class="quote" data-op="focus">“${escapeHtml(quote)}”</blockquote>
-        <div class="comment">${escapeHtml(a.comment)}</div>
-        <div class="ops">
-          <button class="btn" data-op="focus">定位</button>
-          <button class="btn" data-op="edit">编辑</button>
-          <button class="btn" data-op="toggle">${a.status === 'open' ? '解决' : '重开'}</button>
-          <button class="btn" data-op="delete">删除</button>
+        <blockquote class="mb-1.5 cursor-pointer border-l-2 border-border pl-2 text-[13px] text-muted-foreground transition-colors hover:border-ring" data-op="focus">
+          “${escapeHtml(quote)}”
+        </blockquote>
+        <div class="whitespace-pre-wrap text-sm leading-relaxed">${escapeHtml(a.comment)}</div>
+        <div class="mt-2 flex gap-0.5">
+          <button class="btn btn-ghost btn-sm h-7 px-2 text-xs" data-op="focus">定位</button>
+          <button class="btn btn-ghost btn-sm h-7 px-2 text-xs" data-op="edit">编辑</button>
+          <button class="btn btn-ghost btn-sm h-7 px-2 text-xs" data-op="toggle">${a.status === 'open' ? '解决' : '重开'}</button>
+          <button class="btn btn-ghost btn-sm btn-destructive h-7 px-2 text-xs" data-op="delete">删除</button>
         </div>
       </div>`
   }

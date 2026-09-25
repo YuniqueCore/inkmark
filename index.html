@@ -5,27 +5,48 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>InkMark · 划词批注工作台</title>
     <link rel="stylesheet" href="/src/styles.css" />
+    <script>
+      // 首屏前应用主题，避免闪烁
+      const theme = localStorage.getItem('inkmark:theme')
+      if (theme === 'dark' || (!theme && matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark')
+      }
+    </script>
   </head>
-  <body>
-    <header class="topbar">
-      <div class="brand">InkMark<span class="brand-sub">划词批注工作台</span></div>
-      <div class="actions">
-        <button id="btn-sample" class="btn ghost" title="载入一段带 AI 味的示例文本">示例</button>
-        <button id="btn-load" class="btn ghost" title="打开 .txt / .md 文件">打开文件</button>
-        <button id="btn-scan" class="btn ghost" title="用 anti-slop 词库预扫描套话，生成候选批注">slop 预扫描</button>
-        <button id="btn-export" class="btn primary" title="导出批注">导出</button>
-        <button id="btn-clear" class="btn ghost danger" title="清空文本与全部批注">清空</button>
-        <input id="file-input" type="file" accept=".txt,.md,.markdown,text/plain" hidden />
+  <body class="h-full">
+    <header class="sticky top-0 z-20 border-b bg-card/80 backdrop-blur-md">
+      <div class="mx-auto flex h-14 max-w-[1400px] items-center justify-between gap-3 px-4 sm:px-6">
+        <div class="flex items-baseline gap-2.5">
+          <span class="text-[17px] font-semibold tracking-tight">InkMark</span>
+          <span class="hidden text-[12.5px] text-muted-foreground sm:inline">划词批注工作台</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <button id="btn-sample" class="btn btn-ghost btn-sm" title="载入一段带 AI 味的示例文本">示例</button>
+          <button id="btn-load" class="btn btn-ghost btn-sm" title="打开 .txt / .md / 会话 .json">打开文件</button>
+          <span class="mx-1 h-5 w-px bg-border"></span>
+          <button id="btn-scan" class="btn btn-outline btn-sm" title="用 anti-slop 词库预扫描套话，生成候选批注">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+            slop 预扫描
+          </button>
+          <button id="btn-export" class="btn btn-default btn-sm" title="导出批注（⌘S）">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+            导出
+          </button>
+          <span class="mx-1 h-5 w-px bg-border"></span>
+          <button id="btn-theme" class="btn btn-ghost btn-sm" title="切换明暗主题" aria-label="切换主题"></button>
+          <button id="btn-clear" class="btn btn-ghost btn-sm btn-destructive" title="清空文本与全部批注">清空</button>
+          <input id="file-input" type="file" accept=".txt,.md,.markdown,.json,text/plain" hidden />
+        </div>
       </div>
     </header>
 
-    <main class="layout">
-      <section id="editor" class="editor" aria-label="批注文本区"></section>
-      <aside id="sidebar" class="sidebar" aria-label="批注列表"></aside>
+    <main class="mx-auto grid h-[calc(100vh-57px)] max-w-[1400px] grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px]">
+      <section id="editor" class="editor overflow-y-auto px-5 py-10 sm:px-10" aria-label="批注文本区"></section>
+      <aside id="sidebar" class="overflow-y-auto border-t bg-card/50 p-4 lg:border-l lg:border-t-0" aria-label="批注列表"></aside>
     </main>
 
-    <div id="overlay" class="overlay hidden"></div>
-    <div id="export-modal" class="modal hidden" role="dialog" aria-label="导出批注"></div>
+    <div id="overlay" class="fixed inset-0 z-90 hidden bg-black/50 backdrop-blur-[2px]"></div>
+    <div id="export-modal" class="hidden" role="dialog" aria-modal="true" aria-label="导出批注"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

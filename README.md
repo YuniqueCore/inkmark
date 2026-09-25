@@ -2,7 +2,7 @@
 
 给 AI 改过的文本做**行内批注**的纯网页小工具。划选文字写批注，一键导出三种格式，把"哪里有问题"准确递回给 AI。
 
-零运行时依赖：TypeScript + Vite，构建产物一个 HTML + 一个 JS。
+UI 按 shadcn/ui 语系构建（Tailwind CSS v4 + 设计 token，灵感来自 rareui）：中性 zinc 底、细边框、subtle 阴影、明暗双主题（顶栏切换，跟随系统偏好，localStorage 记忆）。构建产物 gzip 约 32KB。
 
 ## 功能
 
@@ -15,6 +15,7 @@
 - **slop 预扫描**：内置 [anti-slop-kit](https://github.com/chengzhi-c/natural-talk) 的中英文词库（zh 169 条 / en 212 条），一键把套话候选标成红色波浪线预填批注，人工复核后解决或删除。代码块、行内代码、URL 内不扫。
 - **批注管理**：侧栏列表，按状态筛选，定位 / 编辑 / 解决 / 删除。
 - **自动保存**：localStorage；也可导出 / 导入 JSON 会话（打开文件时选 .json 即导入）。
+- **明暗主题**：一键切换，首屏内联脚本应用偏好，无闪烁。
 
 ## 快速开始
 
