@@ -119,10 +119,12 @@ export class SelectionPin {
   /** 小点锚定鼠标停点（虚拟点引用），placement 决定它在停点的哪个象限 */
   private placePin(): Promise<void> {
     if (!this.info) return Promise.resolve()
-    // 横向：沿方向在选区端缘外 24px；纵向：小点整体放在选区块外缘 18px，
-    // 永不压住正文（含选区上/下一行）。
+    // 横向：跟随鼠标停点（沿 side 方向外移 16px），并夹取在选区横向范围
+    // 附近——否则最后一行很短时，小点会飞到最长行右缘外（「跑得好远」的根因）；
+    // 纵向：整体放在选区块外缘 18px，永不压住正文（含选区上/下一行）。
     const r = this.info.rect
-    const cx = (this.pinSide === 'left' ? r.left - 24 : r.right + 24)
+    const m = this.info.mouse
+    const cx = (this.pinSide === 'left' ? -16 : 16) + clamp(m.x, r.left, r.right)
     const cy = this.pinVertical === 'up' ? r.top - 18 : r.bottom + 18
     this.pin.style.left = `${clamp(cx - 14, 8, window.innerWidth - 36)}px`
     this.pin.style.top = `${clamp(cy - 14, 8, window.innerHeight - 36)}px`
