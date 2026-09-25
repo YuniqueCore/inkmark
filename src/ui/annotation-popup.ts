@@ -58,7 +58,7 @@ export class AnnotationPopup {
     }
     this.sourceText = text
     this.items = annotations
-      .filter((a) => overlaps(a, anchor))
+      .filter((a) => a.target === anchor.target && overlaps(a, anchor))
       .sort((x, y) => (x.id === id ? -1 : y.id === id ? 1 : x.start - y.start))
     this.activeId = id
     this.editingId = edit ? id : null
@@ -82,16 +82,17 @@ export class AnnotationPopup {
     this.stopAutoUpdate = null
   }
 
-  /** 数据变更后由 main 调用：目标批注已不存在则关闭，否则重绘保持位置 */
-  sync(text: string, annotations: Annotation[]): void {
+  /** 数据变更后由 main 调用：目标批注已不存在则关闭，否则重绘保持位置。
+   * 批注分原文/改稿两侧，摘录文本按锚定侧选取。 */
+  sync(text: string, annotations: Annotation[], revised?: string): void {
     if (this.el.classList.contains('hidden')) return
     if (!this.activeId || !annotations.some((a) => a.id === this.activeId)) {
       this.close()
       return
     }
     const anchor = annotations.find((a) => a.id === this.activeId)!
-    this.items = annotations.filter((a) => overlaps(a, anchor))
-    this.sourceText = text
+    this.items = annotations.filter((a) => a.target === anchor.target && overlaps(a, anchor))
+    this.sourceText = anchor.target === 'revised' ? (revised ?? text) : text
     this.render()
     this.place()
   }

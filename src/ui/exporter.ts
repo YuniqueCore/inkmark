@@ -59,7 +59,10 @@ export class ExporterView {
     if (this.format === 'w3c') {
       return JSON.stringify(toW3C(doc, { includeResolved: this.includeResolved }), null, 2)
     }
-    return exportAs(this.format, doc.text, doc.annotations, { includeResolved: this.includeResolved })
+    return exportAs(this.format, doc.text, doc.annotations, {
+      includeResolved: this.includeResolved,
+      revisedText: doc.revised,
+    })
   }
 
   private render(): void {

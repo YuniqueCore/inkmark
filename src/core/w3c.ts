@@ -49,11 +49,15 @@ const MOTIVATION_TO_KIND: Record<string, AnnotationKind> = {
   highlighting: 'highlight',
 }
 
-/** 内部批注 → W3C Annotation 数组。 */
+/** 内部批注 → W3C Annotation 数组。改稿侧批注的 target.source 带 `#revised` 标记。 */
 export function toW3C(doc: DocItem, opts?: { includeResolved?: boolean }): W3CAnnotation[] {
+  const revised = doc.revised
   return doc.annotations
     .filter((a) => opts?.includeResolved || a.status === 'open')
     .map((a) => {
+      const isRevised = a.target === 'revised'
+      const sourceText = isRevised ? revised : doc.text
+      if (sourceText === undefined) return null
       const bodies: TextualBody[] = [{ type: 'TextualBody', value: a.comment, purpose: 'describing' }]
       bodies.push({ type: 'TextualBody', value: a.kind, purpose: 'tagging' })
       if (a.status === 'resolved') bodies.push({ type: 'TextualBody', value: 'resolved', purpose: 'tagging' })
@@ -66,14 +70,15 @@ export function toW3C(doc: DocItem, opts?: { includeResolved?: boolean }): W3CAn
         modified: new Date(a.updatedAt).toISOString(),
         body: bodies,
         target: {
-          source: `urn:inkmark:doc:${doc.id}`,
+          source: isRevised ? `urn:inkmark:doc:${doc.id}#revised` : `urn:inkmark:doc:${doc.id}`,
           selector: [
-            { type: 'TextQuoteSelector' as const, ...textQuoteSelector(doc.text, a.start, a.end) },
+            { type: 'TextQuoteSelector' as const, ...textQuoteSelector(sourceText, a.start, a.end) },
             { type: 'TextPositionSelector' as const, start: a.start, end: a.end },
           ],
         },
       }
     })
+    .filter((a): a is W3CAnnotation => a !== null)
 }
 
 export interface W3CImportResult {
@@ -83,13 +88,24 @@ export interface W3CImportResult {
   total: number
 }
 
-/** 从任意解析出的 JSON 导入 W3C 批注：接受数组 / {items} / 单对象。 */
-export function fromW3C(data: unknown, text: string, now = Date.now()): W3CImportResult {
+/** 从任意解析出的 JSON 导入 W3C 批注：接受数组 / {items} / 单对象。
+ * 带 `#revised` source 的条目改锚 revisedText（对照侧批注 roundtrip）。 */
+export function fromW3C(
+  data: unknown,
+  text: string,
+  opts?: { revisedText?: string; now?: number },
+): W3CImportResult {
   const items = collectItems(data)
+  const now = opts?.now ?? Date.now()
   const annotations: Annotation[] = []
   let unmatched = 0
   items.forEach((item, idx) => {
-    const ann = parseOne(item, text, now, idx)
+    const obj = item as Record<string, unknown> | null
+    const isRevised =
+      !!obj && typeof obj === 'object' &&
+      (obj as { target?: { source?: unknown } })?.target?.source?.toString().includes('#revised') === true
+    const targetText = isRevised ? opts?.revisedText : text
+    const ann = targetText === undefined ? null : parseOne(item, targetText, now, idx, isRevised)
     if (ann) annotations.push(ann)
     else unmatched++
   })
@@ -107,7 +123,7 @@ function collectItems(data: unknown): unknown[] {
   return []
 }
 
-function parseOne(item: unknown, text: string, now: number, idx: number): Annotation | null {
+function parseOne(item: unknown, text: string, now: number, idx: number, isRevised = false): Annotation | null {
   if (!item || typeof item !== 'object') return null
   const obj = item as Record<string, unknown>
   const target = obj.target as Record<string, unknown> | undefined
@@ -147,6 +163,7 @@ function parseOne(item: unknown, text: string, now: number, idx: number): Annota
     comment,
     status,
     source: 'manual',
+    ...(isRevised ? { target: 'revised' as const } : {}),
     createdAt: created,
     updatedAt: modified,
   }
@@ -159,8 +176,9 @@ function asString(v: unknown): string | undefined {
 /**
  * 锚点解析：①位置选择器处原文与 exact 一致 → 直接用；②全文唯一直接用；
  * ③多处命中时用 prefix / suffix 消歧（匹配数最多者，平局取最早）。
+ * 编辑原文后的批注重锚（core/reanchor.ts）复用同一逻辑。
  */
-function reanchor(
+export function reanchor(
   text: string,
   exact: string,
   prefix: string | undefined,

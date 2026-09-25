@@ -15,6 +15,8 @@ export interface Annotation {
   status: AnnotationStatus
   /** manual = 人工划词；slop = 词库预扫描 */
   source: 'manual' | 'slop'
+  /** 锚定侧：缺省 = 原文；'revised' = AI 改稿（对照视图的新增行，偏移相对 doc.revised） */
+  target?: 'revised'
   /** slop 命中的词库元数据 */
   meta?: SlopMeta
   createdAt: number
@@ -35,6 +37,8 @@ export interface AnnotationInput {
   kind: AnnotationKind
   comment: string
   source?: 'manual' | 'slop'
+  /** 缺省锚定原文；'revised' = 对照视图改稿侧 */
+  target?: 'revised'
   meta?: SlopMeta
 }
 
@@ -90,6 +94,12 @@ export interface SlopEntry {
   mode?: 'plain' | 'cluster' | 'density'
   cluster_min?: number
   density_min?: number
+  /** 权重与计分（对齐 slop_check.py）：w 缺省 0，cluster_w/density_w 缺省 = w */
+  w?: number
+  cluster_w?: number
+  density_w?: number
+  /** false = 仅清晰度建议，不计入评分（缺省 true） */
+  evidence?: boolean
   fix?: string
   note?: string
 }
@@ -100,6 +110,22 @@ export interface SlopHit {
   matched: string
   categoryId: string
   label: string
+  /** 达标后计的权重（plain=w；cluster=cluster_w；density=density_w） */
+  weight?: number
+  /** false = 仅清晰度建议，不计入评分 */
+  evidence?: boolean
   fix?: string
   note?: string
+}
+
+/** 评分分档（对齐 slop_check.py SCORE_BANDS） */
+export type SlopBand = 'clean' | 'light' | 'noticeable' | 'heavy'
+
+export interface SlopReport {
+  hits: SlopHit[]
+  /** 评分单位：CJK 字符 + 拉丁词 */
+  units: number
+  /** 证据权重合计 / 千单位，保留 1 位小数 */
+  score: number
+  band: SlopBand
 }

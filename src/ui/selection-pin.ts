@@ -24,6 +24,8 @@ export interface SelectionInfo {
   mouse: { x: number; y: number }
   /** 拖拽方向：true = 从前往后选（上→下/左→右），false = 从后往前 */
   forward: boolean
+  /** 锚定侧：缺省 = 原文；'b' = 对照视图的改稿新增行 */
+  side?: 'b'
 }
 
 type PinSide = 'left' | 'right'

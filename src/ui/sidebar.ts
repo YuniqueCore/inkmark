@@ -63,7 +63,7 @@ export class SidebarView {
     this.activeId = id
   }
 
-  render(text: string, annotations: Annotation[]): void {
+  render(text: string, annotations: Annotation[], revised?: string): void {
     const open = annotations.filter((a) => a.status === 'open').length
     const shown = this.visibleOf(annotations)
 
@@ -89,7 +89,7 @@ export class SidebarView {
          </button>`,
     ).join('')
 
-    const cards = shown.map((a) => this.renderCard(text, a)).join('')
+    const cards = shown.map((a) => this.renderCard(a.target === 'revised' ? (revised ?? '') : text, a)).join('')
 
     this.root.innerHTML = `
       <div class="mb-3 flex items-baseline justify-between px-1">
@@ -154,6 +154,7 @@ export class SidebarView {
         <div class="mb-1.5 flex items-center gap-1.5">
           <span class="badge border-transparent" style="color:var(--kind-${a.kind});background:var(--kind-${a.kind}-bg)">${KIND_LABEL[a.kind]}</span>
           ${slopInfo}
+          ${a.target === 'revised' ? '<span class="badge border-sky-500/40 text-sky-600 dark:text-sky-400">改稿</span>' : ''}
           ${a.status === 'resolved' ? '<span class="badge bg-secondary text-secondary-foreground">已解决</span>' : ''}
         </div>
         <blockquote class="mb-1.5 cursor-pointer border-l-2 border-border pl-2 text-[13px] text-muted-foreground transition-colors hover:border-ring" data-op="focus">

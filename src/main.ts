@@ -2,8 +2,9 @@
 
 import { numberAnnotations } from './core/export'
 import { diffLines, diffStats } from './core/diff'
+import { reanchorAnnotations } from './core/reanchor'
 import { splitBlocks } from './core/text'
-import { hitsToAnnotations, scanSlop } from './core/slop'
+import { hitsToAnnotations, scanSlopReport } from './core/slop'
 import { fromW3C } from './core/w3c'
 import { EditorView } from './ui/editor'
 import { ExporterView } from './ui/exporter'
@@ -35,6 +36,8 @@ let state: AppState = { docs: [], activeDocId: '' }
 let onlyHighlightFiltered = false
 /** 编辑区视图：批注视图（原文）或对照视图（原文 vs AI 改稿） */
 let viewMode: 'annotate' | 'diff' = 'annotate'
+/** 编辑原文模式：textarea 直改，完成时统一重锚 */
+let editingText = false
 
 /** 编辑器实际渲染的批注：关闭"仅高亮筛选"时显示全部 */
 function editorAnnotations(): Annotation[] {
@@ -67,9 +70,12 @@ const editor = new EditorView(editorEl, {
   onAnnotationClick: (id, rect) => {
     const doc = activeDoc()
     if (!doc) return
+    const ann = doc.annotations.find((a) => a.id === id)
+    // 批注分原文/改稿两侧，摘录与弹出内容按锚定侧取文本
+    const text = ann?.target === 'revised' ? (doc.revised ?? doc.text) : doc.text
     annotationPopup.setAnchorRect(rect)
     // 点击高亮直接进入编辑态
-    annotationPopup.openFor(id, doc.text, doc.annotations, true)
+    annotationPopup.openFor(id, text, doc.annotations, true)
     sidebar.setActive(id)
     rerender(false)
   },
@@ -111,7 +117,13 @@ const annotationPopup = new AnnotationPopup({
 
 const selectionPin = new SelectionPin({
   onCreate: (info, kind, comment) => {
-    addAnnotation({ start: info.start, end: info.end, kind, comment })
+    addAnnotation({
+      start: info.start,
+      end: info.end,
+      kind,
+      comment,
+      ...(info.side === 'b' ? { target: 'revised' as const } : {}),
+    })
   },
   onCopySelection: (quoted) => {
     void navigator.clipboard.writeText(quoted).then(() => toast('已复制选中文本'))
@@ -123,16 +135,25 @@ const selectionPin = new SelectionPin({
 
 const sidebar = new SidebarView(sidebarEl, {
   onFocus: (id) => {
+    const doc = activeDoc()
+    // 改稿侧批注只在对照视图里有正文锚点：定位时自动切过去
+    const ann = doc?.annotations.find((a) => a.id === id)
+    if (ann?.target === 'revised' && doc?.revised && viewMode !== 'diff') {
+      viewMode = 'diff'
+    }
     sidebar.setActive(id)
     rerender(false)
     editor.focusAnnotation(id)
   },
   onEdit: (a) => {
+    const doc = activeDoc()
+    if (!doc) return
     editor.focusAnnotation(a.id)
     const rect = rectOfAnnotation(a.id)
     if (!rect) return
+    const text = a.target === 'revised' ? (doc.revised ?? doc.text) : doc.text
     annotationPopup.setAnchorRect(rect)
-    annotationPopup.openFor(a.id, activeDoc()!.text, activeDoc()!.annotations, true)
+    annotationPopup.openFor(a.id, text, doc.annotations, true)
     sidebar.setActive(a.id)
   },
   onDelete: (id) => {
@@ -185,7 +206,8 @@ const exporter = new ExporterView($('#export-modal'), $('#overlay'), {
 
 // ---------------------------------------------------------------- 选区 → 偏移
 
-/** 把 DOM 选区换算成规范文本偏移。选区不在编辑区内返回 null。 */
+/** 把 DOM 选区换算成文本偏移。选区不在编辑区内返回 null；
+ * 对照视图的 add 行（data-side="b"）返回改稿侧偏移并带 side='b'。 */
 function resolveSelection(e: MouseEvent): SelectionInfo | null {
   const sel = window.getSelection()
   if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null
@@ -197,8 +219,13 @@ function resolveSelection(e: MouseEvent): SelectionInfo | null {
   if (start === null || end === null || end <= start) return null
   const doc = activeDoc()
   if (!doc) return null
-  const text = doc.text.slice(start, end)
-  if (text.trim() === '') return null
+  const blk = (range.startContainer.nodeType === Node.TEXT_NODE
+    ? range.startContainer.parentElement
+    : (range.startContainer as HTMLElement))?.closest('.editor-blk') as HTMLElement | null
+  const side = blk?.dataset.side === 'b' ? ('b' as const) : undefined
+  const text = side === 'b' ? (doc.revised ?? '') : doc.text
+  const quoted = text.slice(start, end)
+  if (quoted.trim() === '') return null
   // 拖拽方向：anchor（按下点）在 range 起点即正向选
   const forward =
     sel.anchorNode === range.startContainer && sel.anchorOffset === range.startOffset
@@ -206,9 +233,10 @@ function resolveSelection(e: MouseEvent): SelectionInfo | null {
     start,
     end,
     rect: range.getBoundingClientRect(),
-    quoted: text,
+    quoted,
     mouse: { x: e.clientX, y: e.clientY },
     forward,
+    ...(side ? { side } : {}),
   }
 }
 
@@ -329,6 +357,12 @@ async function removeDoc(id: string): Promise<void> {
 
 function rerender(syncPopup = true): void {
   const doc = activeDoc()
+  if (editingText) {
+    // 编辑模式由 renderEditMode 独占渲染区，这里只同步侧栏
+    sidebar.render(doc?.text ?? '', doc?.annotations ?? [], doc?.revised)
+    fileTree.render(state.docs, state.activeDocId)
+    return
+  }
   const inDiff = viewMode === 'diff' && !!doc?.revised
   let stats = ''
   if (inDiff) {
@@ -348,9 +382,12 @@ function rerender(syncPopup = true): void {
   diffBtn?.classList.toggle('bg-secondary', inDiff)
   diffBtn?.classList.toggle('text-secondary-foreground', inDiff)
   document.querySelector('#btn-diff-clear')?.classList.toggle('hidden', !inDiff)
-  sidebar.render(doc?.text ?? '', doc?.annotations ?? [])
+  const editBtn = document.querySelector('#btn-edit')
+  editBtn?.classList.toggle('bg-secondary', editingText)
+  editBtn?.classList.toggle('text-secondary-foreground', editingText)
+  sidebar.render(doc?.text ?? '', doc?.annotations ?? [], doc?.revised)
   fileTree.render(state.docs, state.activeDocId)
-  if (syncPopup && doc) annotationPopup.sync(doc.text, doc.annotations)
+  if (syncPopup && doc) annotationPopup.sync(doc.text, doc.annotations, doc.revised)
   markDirty()
 }
 
@@ -414,10 +451,65 @@ function runSlopScan(): void {
   const existing = new Set(
     doc.annotations.filter((a) => a.source === 'slop').map((a) => `${a.start}:${a.end}`),
   )
-  const hits = scanSlop(doc.text, LEXICONS).filter((h) => !existing.has(`${h.start}:${h.end}`))
+  const report = scanSlopReport(doc.text, LEXICONS)
+  const hits = report.hits.filter((h) => !existing.has(`${h.start}:${h.end}`))
   const anns = hitsToAnnotations(hits)
   mutateActive((d) => ({ ...d, annotations: [...d.annotations, ...anns] }))
-  toast(anns.length === 0 ? '没有发现新的候选信号' : `新增 ${anns.length} 条 slop 候选批注`)
+  const parts = [`评分 ${report.score}/千单位（${BAND_LABEL[report.band]}）`]
+  parts.push(anns.length === 0 ? '没有新的候选信号' : `新增 ${anns.length} 条候选批注`)
+  toast(parts.join('，'))
+}
+
+/** 分档中文名（评分 toast 用） */
+const BAND_LABEL: Record<string, string> = {
+  clean: '干净',
+  light: '轻微',
+  noticeable: '明显',
+  heavy: '严重',
+}
+
+// ---------------------------------------------------------------- 编辑原文（重锚）
+
+function toggleEdit(): void {
+  const doc = activeDoc()
+  if (!doc) {
+    toast('先导入或载入一段文本')
+    return
+  }
+  if (editingText) return
+  editingText = true
+  viewMode = 'annotate'
+  annotationPopup.close()
+  selectionPin.dismiss()
+  editor.renderEditMode(doc.text, {
+    onSave: (newText) => saveTextEdit(newText),
+    onCancel: () => {
+      editingText = false
+      rerender(false)
+    },
+  })
+  rerender(false)
+}
+
+function saveTextEdit(newText: string): void {
+  const doc = activeDoc()
+  if (!doc) return
+  editingText = false
+  if (newText === doc.text) {
+    rerender(false)
+    return
+  }
+  if (newText.trim() === '') {
+    toast('文本不能为空')
+    editingText = true
+    return
+  }
+  const { annotations, moved, clamped } = reanchorAnnotations(doc.text, newText, doc.annotations)
+  mutateActive((d) => ({ ...d, text: newText, annotations }))
+  const parts = ['已保存编辑']
+  if (moved > 0) parts.push(`${moved} 条批注重新锚定`)
+  if (clamped > 0) parts.push(`${clamped} 条钉在改动处`)
+  toast(parts.join('，'))
 }
 
 // ---------------------------------------------------------------- 对照视图（原文 vs AI 改稿）
@@ -428,6 +520,10 @@ async function toggleDiff(): Promise<void> {
     toast('先导入或载入一段文本')
     return
   }
+  if (editingText) {
+    toast('先完成或取消原文编辑')
+    return
+  }
   if (viewMode === 'diff') {
     viewMode = 'annotate'
     rerender(false)
@@ -436,7 +532,7 @@ async function toggleDiff(): Promise<void> {
   if (!doc.revised) {
     const text = await textDialog({
       title: `贴入「${doc.name}」的 AI 改稿`,
-      description: '粘贴 AI 改写后的全文，生成原文 vs 改稿的行级对照。批注仍锚定原文，钉在被改动的行上。',
+      description: '粘贴 AI 改写后的全文，生成原文 vs 改稿的行级对照。两侧都可以划选写批注。',
       placeholder: '把 AI 改稿的完整文本粘贴到这里…',
       confirmText: '生成对照',
     })
@@ -454,15 +550,23 @@ async function toggleDiff(): Promise<void> {
 async function clearRevised(): Promise<void> {
   const doc = activeDoc()
   if (!doc?.revised) return
+  const revisedCount = doc.annotations.filter((a) => a.target === 'revised').length
   const ok = await confirmDialog({
     title: '清除 AI 改稿？',
-    description: '只移除改稿文本与对照视图，文档原文和批注都会保留。',
+    description:
+      revisedCount > 0
+        ? `改稿上的 ${revisedCount} 条批注会一并删除；原文和原文批注保留。`
+        : '只移除改稿文本与对照视图，文档原文和批注都会保留。',
     confirmText: '清除',
     danger: true,
   })
   if (!ok) return
   viewMode = 'annotate'
-  mutateActive((d) => ({ ...d, revised: undefined }))
+  mutateActive((d) => ({
+    ...d,
+    revised: undefined,
+    annotations: d.annotations.filter((a) => a.target !== 'revised'),
+  }))
   toast('已清除改稿')
 }
 
@@ -618,6 +722,7 @@ $('#folder-input').addEventListener('change', (e) => {
   ;(e.target as HTMLInputElement).value = ''
 })
 $('#btn-scan').addEventListener('click', runSlopScan)
+$('#btn-edit').addEventListener('click', toggleEdit)
 $('#btn-diff').addEventListener('click', () => void toggleDiff())
 $('#btn-diff-clear').addEventListener('click', () => void clearRevised())
 $('#btn-export').addEventListener('click', maybeExport)

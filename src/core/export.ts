@@ -8,6 +8,8 @@ export interface ExportOptions {
   includeResolved?: boolean
   /** 行内标记里摘录锚点原文的长度上限 */
   maxSnippetLen?: number
+  /** AI 改稿全文：存在时，改稿侧批注（target === 'revised'）参与导出 */
+  revisedText?: string
 }
 
 const CIRCLED = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳'
@@ -45,6 +47,10 @@ function visible(anns: Annotation[], opts: ExportOptions): Annotation[] {
   return anns.filter((a) => opts.includeResolved || a.status !== 'resolved')
 }
 
+function anchorText(a: Annotation, text: string, opts: ExportOptions): string {
+  return a.target === 'revised' ? (opts.revisedText ?? text) : text
+}
+
 function marker(a: Annotation, num: string): string {
   const label = KIND_LABEL[a.kind]
   return `【批注${num}·${label}】${a.comment.trim()}`
@@ -53,9 +59,12 @@ function marker(a: Annotation, num: string): string {
 /**
  * 格式一：完整原文 + 行内批注。
  * 批注标记插在锚点范围结束处；同一位置多个批注按序并列。
+ * 改稿侧批注无法在原文中定位，单独列在文末。
  */
 export function exportInline(text: string, anns: Annotation[], opts: ExportOptions = {}): string {
   const picked = visible(anns, opts)
+  const inlineAnns = picked.filter((a) => a.target !== 'revised')
+  const revisedAnns = picked.filter((a) => a.target === 'revised')
   if (picked.length === 0) return text
   const numbers = numberAnnotations(picked)
   const blocks = splitBlocks(text)
@@ -65,7 +74,7 @@ export function exportInline(text: string, anns: Annotation[], opts: ExportOptio
     // 块前的分隔空行原样保留
     out.push(text.slice(cursor, block.start))
     const blockEnd = block.start + block.text.length
-    const here = picked
+    const here = inlineAnns
       .filter((a) => a.end > block.start && a.start < blockEnd)
       .sort((a, b) => a.end - b.end || a.start - b.start)
     let pos = block.start
@@ -82,6 +91,13 @@ export function exportInline(text: string, anns: Annotation[], opts: ExportOptio
     cursor = blockEnd
   }
   out.push(text.slice(cursor))
+  if (revisedAnns.length > 0) {
+    out.push(`\n\n—— 以下 ${revisedAnns.length} 条批注针对 AI 改稿（不在原文中定位）——`)
+    for (const a of revisedAnns) {
+      const num = numbers.get(a.id)!
+      out.push(`\n【批注${num}·${KIND_LABEL[a.kind]}】${a.comment.trim()}`)
+    }
+  }
   return out.join('')
 }
 
@@ -95,8 +111,9 @@ export function exportSnippets(text: string, anns: Annotation[], opts: ExportOpt
   return picked
     .map((a) => {
       const num = numbers.get(a.id)!
-      const quote = snippet(text, a.start, a.end, maxLen)
-      return `【片段${num}】${quote}\n【批注${num}·${KIND_LABEL[a.kind]}】${a.comment.trim()}`
+      const quote = snippet(anchorText(a, text, opts), a.start, a.end, maxLen)
+      const sideMark = a.target === 'revised' ? '（改稿）' : ''
+      return `【片段${num}】${sideMark}${quote}\n【批注${num}·${KIND_LABEL[a.kind]}】${a.comment.trim()}`
     })
     .join('\n\n')
 }
@@ -112,8 +129,9 @@ export function exportReview(text: string, anns: Annotation[], opts: ExportOptio
   const lines: string[] = [`批注反馈（共 ${picked.length} 条）：`]
   for (const a of picked) {
     const num = numbers.get(a.id)!
-    const quote = snippet(text, a.start, a.end, maxLen).replace(/\n+/g, ' ')
-    lines.push(`> 原文：${quote}`)
+    const quote = snippet(anchorText(a, text, opts), a.start, a.end, maxLen).replace(/\n+/g, ' ')
+    const sideLabel = a.target === 'revised' ? '改稿' : '原文'
+    lines.push(`> ${sideLabel}：${quote}`)
     lines.push(`> ${KIND_MARK[a.kind]} 批注${num}（${KIND_LABEL[a.kind]}）：${a.comment.trim()}`)
     lines.push('')
   }

@@ -4,7 +4,7 @@
  * 与参考实现的既有差异（有意保留）：未闭合代码围栏额外保护到文末，编辑中的半截围栏不误报。
  */
 
-import type { Annotation, SlopEntry, SlopHit, SlopLexicon } from './types'
+import type { Annotation, SlopBand, SlopEntry, SlopHit, SlopLexicon, SlopReport } from './types'
 
 interface CompiledEntry {
   regex: RegExp
@@ -104,8 +104,13 @@ function dedupe(hits: RawHit[]): RawHit[] {
   return kept
 }
 
-/** cluster / density 模式升级：达标才报，未达标静默。阈值语义对齐 slop_check.py escalate()。 */
-function escalate(entries: CompiledEntry[], hits: RawHit[], paraStarts: number[]): RawHit[] {
+/** cluster / density 模式升级：达标才报，未达标静默。阈值语义对齐 slop_check.py escalate()。
+ * 权重：plain→w；cluster→cluster_w（缺省 = w）；density→density_w（缺省 = w）。 */
+function escalate(
+  entries: CompiledEntry[],
+  hits: RawHit[],
+  paraStarts: number[],
+): Array<{ hit: RawHit; weight: number; evidence: boolean }> {
   const byEntry = new Map<CompiledEntry, RawHit[]>()
   for (const h of hits) {
     const list = byEntry.get(h.entry) ?? []
@@ -127,30 +132,34 @@ function escalate(entries: CompiledEntry[], hits: RawHit[], paraStarts: number[]
     }
   }
 
-  const out: RawHit[] = []
+  const out: Array<{ hit: RawHit; weight: number; evidence: boolean }> = []
+  const wOf = (e: CompiledEntry): number => e.entry.w ?? 0
   for (const [e, group] of byEntry) {
     const mode = e.entry.mode ?? 'plain'
     if (mode === 'plain') {
-      out.push(...group)
+      out.push(...group.map((hit) => ({ hit, weight: wOf(e), evidence: e.entry.evidence ?? true })))
     } else if (mode === 'cluster') {
       const min = e.entry.cluster_min ?? 1
       const byPara = catParaEntries.get(e.categoryId)
       for (const h of group) {
         const para = paragraphIndexOf(paraStarts, h.start)
-        if ((byPara?.get(para)?.size ?? 0) >= min) out.push(h)
+        if ((byPara?.get(para)?.size ?? 0) >= min)
+          out.push({ hit: h, weight: e.entry.cluster_w ?? wOf(e), evidence: e.entry.evidence ?? true })
       }
     } else {
-      if (group.length >= (e.entry.density_min ?? 1)) out.push(...group)
+      if (group.length >= (e.entry.density_min ?? 1))
+        out.push(...group.map((hit) => ({ hit, weight: e.entry.density_w ?? wOf(e), evidence: e.entry.evidence ?? true })))
     }
   }
   return out
 }
 
 /**
- * 扫描规范文本，产出 slop 命中。每个词库独立走「收集 → 去重 → 升级」（与 slop_check.py
- * 逐 pack 处理一致），跨词库合并后按位置排序。
+ * 扫描规范文本，产出完整报告（命中 + 评分分档）。每个词库独立走
+ * 「收集 → 去重 → 升级」（与 slop_check.py 逐 pack 处理一致），跨词库合并后按位置排序。
+ * 评分：证据权重合计 / 千单位（CJK 字符 + 拉丁词），分档 clean/light/noticeable/heavy。
  */
-export function scanSlop(text: string, lexicons: SlopLexicon[]): SlopHit[] {
+export function scanSlopReport(text: string, lexicons: SlopLexicon[]): SlopReport {
   const scannable = maskProtected(text)
   const paraStarts = splitParagraphStarts(scannable)
   const out: SlopHit[] = []
@@ -163,19 +172,45 @@ export function scanSlop(text: string, lexicons: SlopLexicon[]): SlopHit[] {
     }
     // 去重先于阈值升级：被更长匹配吞掉的命中不参与 cluster/density 计数
     const deduped = dedupe(collectMatches(entries, scannable))
-    for (const h of escalate(entries, deduped, paraStarts)) {
+    for (const { hit, weight, evidence } of escalate(entries, deduped, paraStarts)) {
       out.push({
-        start: h.start,
-        end: h.end,
-        matched: h.matched,
-        categoryId: h.entry.categoryId,
-        label: h.entry.label,
-        fix: h.entry.entry.fix,
-        note: h.entry.entry.note,
+        start: hit.start,
+        end: hit.end,
+        matched: hit.matched,
+        categoryId: hit.entry.categoryId,
+        label: hit.entry.label,
+        weight,
+        evidence,
+        fix: hit.entry.entry.fix,
+        note: hit.entry.entry.note,
       })
     }
   }
-  return out.sort((a, b) => a.start - b.start)
+  const hits = out.sort((a, b) => a.start - b.start)
+  const units = countUnits(text)
+  const weightSum = hits.reduce((sum, h) => (h.evidence === false ? sum : sum + (h.weight ?? 0)), 0)
+  const score = Math.round((weightSum * 1000) / units * 10) / 10
+  return { hits, units, score, band: scoreBand(score) }
+}
+
+/** 评分单位：CJK 字符 + 拉丁词（对齐 slop_check.py count_units，最少 1）。 */
+function countUnits(text: string): number {
+  const cjk = (text.match(/[\u4e00-\u9fff\u3400-\u4dbf]/gu) ?? []).length
+  const latin = (text.match(/[A-Za-z]+/g) ?? []).length
+  return Math.max(cjk + latin, 1)
+}
+
+/** 分档：<2 light，<5 noticeable，>0 其余 heavy，0 为 clean（对齐 slop_check.py）。 */
+function scoreBand(score: number): SlopBand {
+  if (score <= 0) return 'clean'
+  if (score < 2) return 'light'
+  if (score < 5) return 'noticeable'
+  return 'heavy'
+}
+
+/** 仅需要命中列表时的便捷入口（不计分开销可忽略，直接复用完整报告）。 */
+export function scanSlop(text: string, lexicons: SlopLexicon[]): SlopHit[] {
+  return scanSlopReport(text, lexicons).hits
 }
 
 /** 命中 → slop 候选批注（comment 自动组合类别与建议）。 */
