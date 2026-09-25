@@ -175,12 +175,16 @@ function resolveSelection(e: MouseEvent): SelectionInfo | null {
   if (!doc) return null
   const text = doc.text.slice(start, end)
   if (text.trim() === '') return null
+  // 拖拽方向：anchor（按下点）在 range 起点即正向选
+  const forward =
+    sel.anchorNode === range.startContainer && sel.anchorOffset === range.startOffset
   return {
     start,
     end,
     rect: range.getBoundingClientRect(),
     quoted: text,
     mouse: { x: e.clientX, y: e.clientY },
+    forward,
   }
 }
 

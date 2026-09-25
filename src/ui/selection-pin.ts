@@ -20,8 +20,10 @@ export interface SelectionInfo {
   /** 选区首行视口矩形 */
   rect: DOMRect
   quoted: string
-  /** mouseup 时鼠标视口坐标（方向判断与锚定点） */
+  /** mouseup 时鼠标视口坐标 */
   mouse: { x: number; y: number }
+  /** 拖拽方向：true = 从前往后选（上→下/左→右），false = 从后往前 */
+  forward: boolean
 }
 
 type PinSide = 'left' | 'right'
@@ -104,7 +106,7 @@ export class SelectionPin {
       return
     }
     this.info = info
-    ;({side: this.pinSide, vertical: this.pinVertical} = pickPinPlacement(info.rect, info.mouse))
+    ;({side: this.pinSide, vertical: this.pinVertical} = pickPinPlacement(info.rect, info.forward))
     this.collapse()
     // 先定位再显示，避免小点闪现在上一次的位置
     this.pin.classList.add('hidden')
@@ -117,12 +119,11 @@ export class SelectionPin {
   /** 小点锚定鼠标停点（虚拟点引用），placement 决定它在停点的哪个象限 */
   private placePin(): Promise<void> {
     if (!this.info) return Promise.resolve()
-    // 零尺寸虚拟点在 floating-ui 里属于边界场景（cross 对齐与主轴偏移行为
-    // 与文档语义不符），小点位置直接手算——行为完全确定：
-    // 中心 = 鼠标停点沿 side 方向外移 24px、沿 vertical 方向移 12px，再 clamp 视口。
-    const m = this.info.mouse
-    const cx = (this.pinSide === 'left' ? -24 : 24) + m.x
-    const cy = (this.pinVertical === 'up' ? -12 : 12) + m.y
+    // 横向：沿方向在选区端缘外 24px；纵向：小点整体放在选区块外缘 18px，
+    // 永不压住正文（含选区上/下一行）。
+    const r = this.info.rect
+    const cx = (this.pinSide === 'left' ? r.left - 24 : r.right + 24)
+    const cy = this.pinVertical === 'up' ? r.top - 18 : r.bottom + 18
     this.pin.style.left = `${clamp(cx - 14, 8, window.innerWidth - 36)}px`
     this.pin.style.top = `${clamp(cy - 14, 8, window.innerHeight - 36)}px`
     return Promise.resolve()
@@ -210,7 +211,7 @@ export class SelectionPin {
   /** 侧栏编辑等场景复用：以指定选区信息展开卡片 */
   openComposerFor(info: SelectionInfo, kind: AnnotationKind, comment: string): void {
     this.info = info
-    ;({side: this.pinSide, vertical: this.pinVertical} = pickPinPlacement(info.rect, info.mouse))
+    ;({side: this.pinSide, vertical: this.pinVertical} = pickPinPlacement(info.rect, info.forward))
     this.pin.classList.add('hidden')
     void this.placePin().then(() => {
       this.pin.classList.remove('hidden')
@@ -263,13 +264,18 @@ const CARD_ORIGIN: Record<string, string> = {
  * （此前用 mouse.y < 选区中线判定，单行时鼠标恰在行中部，纵向是掷硬币——
  * 这就是「右→左划位置不对」的根因之一。）
  */
-function pickPinPlacement(rect: DOMRect, mouse: {x: number; y: number}): {side: PinSide; vertical: 'up' | 'down'} {
-  const atLeft = mouse.x < rect.left + rect.width / 2
-  const multiLine = rect.height >= 48
-  const up = multiLine && mouse.y < rect.top + rect.height / 2
+/**
+ * 方向 → 小点侧别与纵向延伸。
+ * 横向：正向选（左→右）小点在选区右缘外，反向选在左缘外。
+ * 纵向：反向选且跨行（下→上）→ 小点在选区上方；其余（含单行，无纵向
+ * 拖拽分量）→ 选区下方，不遮正文。方向信号取自 selection 的 anchor——
+ * 按下点在上即正向，与鼠标松开时的像素位置无关，天然无歧义。
+ */
+function pickPinPlacement(rect: DOMRect, forward: boolean): {side: PinSide; vertical: 'up' | 'down'} {
+  const multiLine = rect.height >= 36
   return {
-    side: atLeft ? 'left' : 'right',
-    vertical: up ? 'up' : 'down',
+    side: forward ? 'right' : 'left',
+    vertical: !forward && multiLine ? 'up' : 'down',
   }
 }
 

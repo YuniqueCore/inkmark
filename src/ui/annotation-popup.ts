@@ -31,7 +31,7 @@ export class AnnotationPopup {
     this.el = document.createElement('div')
     this.el.className = 'popover-panel fixed z-60 hidden w-[420px]'
     this.arrowEl = document.createElement('div')
-    this.arrowEl.className = 'popup-arrow absolute size-2.5 rotate-45 border bg-popover'
+    this.arrowEl.className = 'popup-arrow absolute size-2.5 rotate-45 bg-popover'
     document.body.append(this.el)
 
     document.addEventListener('mousedown', (e) => {
@@ -243,10 +243,12 @@ export class AnnotationPopup {
           this.arrowEl.style.left = arrowData.x != null ? `${arrowData.x}px` : ''
           this.arrowEl.style.top = arrowData.y != null ? `${arrowData.y}px` : ''
         }
-        // 箭头贴边：指向侧留边框，另一侧隐藏
+        // 箭头位置：卡片在锚点下方（placement bottom）时箭头贴卡片顶边指向上方，
+        // 翻转到上方时贴底边。此前映射写反（卡片在下、箭头却跑到底部）。
+        // 无边框：菱形与卡片同底色，盖住卡片边线，视觉融为一体。
         this.arrowEl.className =
-          'popup-arrow absolute size-2.5 rotate-45 border bg-popover ' +
-          (side === 'top' ? '-top-1 border-l border-t' : '-bottom-1 border-r border-b')
+          'popup-arrow absolute size-2.5 rotate-45 bg-popover ' +
+          (side === 'bottom' ? '-top-[5px]' : '-bottom-[5px]')
       })
     })
   }
