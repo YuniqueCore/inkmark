@@ -39,8 +39,8 @@ function renderBlockContent(blockText: string, blockAnns: Annotation[], blockSta
 }
 
 export interface EditorCallbacks {
-  onSelectionChange: () => void
-  onAnnotationClick: (id: string) => void
+  onSelectionChange: (e: MouseEvent) => void
+  onAnnotationClick: (id: string, rect: DOMRect) => void
 }
 
 export class EditorView {
@@ -48,16 +48,25 @@ export class EditorView {
 
   constructor(root: HTMLElement, callbacks: EditorCallbacks) {
     this.root = root
-    this.root.addEventListener('mouseup', callbacks.onSelectionChange)
+    this.root.addEventListener('mouseup', (e) => callbacks.onSelectionChange(e))
     this.root.addEventListener('keyup', (e) => {
-      // Shift 方向键选词后同样唤起工具条
-      if (e.key.startsWith('Arrow') || e.key === 'a' || e.key === 'A') callbacks.onSelectionChange()
+      // Shift 方向键选词后同样唤起标注小点（锚定到选区矩形，鼠标点用选区中点近似）
+      if (e.key.startsWith('Arrow') || e.key === 'a' || e.key === 'A') {
+        const sel = window.getSelection()
+        if (sel && sel.rangeCount > 0) {
+          const rect = sel.getRangeAt(0).getBoundingClientRect()
+          callbacks.onSelectionChange(new MouseEvent('keyup', {
+            clientX: rect.left + rect.width / 2,
+            clientY: rect.bottom,
+          }))
+        }
+      }
     })
     this.root.addEventListener('click', (e) => {
       const target = (e.target as HTMLElement).closest('.seg-hl') as HTMLElement | null
       if (!target) return
       const ids = (target.dataset.annIds ?? '').split(' ').filter(Boolean)
-      if (ids.length > 0) callbacks.onAnnotationClick(ids[0]!)
+      if (ids.length > 0) callbacks.onAnnotationClick(ids[0]!, target.getBoundingClientRect())
     })
   }
 

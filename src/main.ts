@@ -8,7 +8,8 @@ import { EditorView } from './ui/editor'
 import { ExporterView } from './ui/exporter'
 import { SAMPLE_TEXT } from './ui/sample'
 import { SidebarView } from './ui/sidebar'
-import { SelectionController, type SelectionInfo } from './ui/selection'
+import { SelectionPin, type SelectionInfo } from './ui/selection-pin'
+import { AnnotationPopup } from './ui/annotation-popup'
 import { clearSession, loadSession, saveSession } from './ui/storage'
 import zhLexicon from './lexicons/zh.json'
 import enLexicon from './lexicons/en.json'
@@ -33,15 +34,52 @@ const $ = <T extends HTMLElement>(sel: string): T => {
 const editorEl = $('#editor')
 const sidebarEl = $('#sidebar')
 const editor = new EditorView(editorEl, {
-  onSelectionChange: () => selection.handleSelection(),
-  onAnnotationClick: (id) => focusAnnotation(id),
+  onSelectionChange: (e) => {
+    const info = resolveSelection(e)
+    if (info) selectionPin.showFor(info)
+    else selectionPin.dismiss()
+  },
+  onAnnotationClick: (id, rect) => {
+    annotationPopup.setAnchorRect(rect)
+    annotationPopup.openFor(id, state.text, state.annotations)
+    sidebar.setActive(id)
+    rerender(false)
+  },
+})
+const annotationPopup = new AnnotationPopup({
+  onUpdate: (id, kind, comment) => {
+    state.annotations = state.annotations.map((a) =>
+      a.id === id ? { ...a, kind, comment, updatedAt: Date.now() } : a,
+    )
+    rerender()
+  },
+  onDelete: (id) => {
+    state.annotations = state.annotations.filter((a) => a.id !== id)
+    rerender()
+  },
+  onToggleStatus: (id) => {
+    state.annotations = state.annotations.map((a) =>
+      a.id === id ? { ...a, status: a.status === 'open' ? 'resolved' : 'open', updatedAt: Date.now() } : a,
+    )
+    rerender()
+  },
+  onCopySnippet: (text) => {
+    void navigator.clipboard.writeText(text).then(() => toast('已复制片段'))
+  },
 })
 const sidebar = new SidebarView(sidebarEl, {
-  onFocus: (id) => focusAnnotation(id),
+  onFocus: (id) => {
+    sidebar.setActive(id)
+    rerender(false)
+    editor.focusAnnotation(id)
+  },
   onEdit: (a) => {
+    editor.focusAnnotation(a.id)
     const rect = rectOfAnnotation(a.id)
     if (!rect) return
-    selection.openComposerFor({ start: a.start, end: a.end, rect, quoted: '' }, a.kind, a.comment, a.id)
+    annotationPopup.setAnchorRect(rect)
+    annotationPopup.openFor(a.id, state.text, state.annotations, true)
+    sidebar.setActive(a.id)
   },
   onDelete: (id) => {
     state.annotations = state.annotations.filter((a) => a.id !== id)
@@ -55,7 +93,7 @@ const sidebar = new SidebarView(sidebarEl, {
   },
   onFilterChange: (f) => {
     sidebar.setFilter(f)
-    rerender()
+    rerender(false)
   },
 })
 const exporter = new ExporterView($('#export-modal'), $('#overlay'), {
@@ -68,7 +106,7 @@ const exporter = new ExporterView($('#export-modal'), $('#overlay'), {
 // ---------------------------------------------------------------- 选区 → 偏移
 
 /** 把 DOM 选区换算成规范文本偏移。选区不在编辑区内返回 null。 */
-function resolveSelection(): SelectionInfo | null {
+function resolveSelection(e: MouseEvent): SelectionInfo | null {
   const sel = window.getSelection()
   if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null
   const range = sel.getRangeAt(0)
@@ -79,12 +117,18 @@ function resolveSelection(): SelectionInfo | null {
   if (start === null || end === null || end <= start) return null
   const text = state.text.slice(start, end)
   if (text.trim() === '') return null
-  return { start, end, rect: range.getBoundingClientRect(), quoted: text }
+  return {
+    start,
+    end,
+    rect: range.getBoundingClientRect(),
+    quoted: text,
+    mouse: { x: e.clientX, y: e.clientY },
+  }
 }
 
 /** DOM 位置 → 规范文本偏移。 */
 function domPointToOffset(node: Node, offset: number): number | null {
-  const blk = (node.nodeType === Node.TEXT_NODE ? node.parentElement : node as HTMLElement)?.closest('.blk') as HTMLElement | null
+  const blk = (node.nodeType === Node.TEXT_NODE ? node.parentElement : node as HTMLElement)?.closest('.editor-blk') as HTMLElement | null
   if (!blk) return null
   const blockStart = Number(blk.dataset.start ?? 0)
   // node 自身内部的字符前缀：文本节点取 offset；元素节点取前导子节点的文本长度
@@ -152,15 +196,10 @@ function addAnnotation(input: AnnotationInput): void {
   rerender()
 }
 
-function focusAnnotation(id: string): void {
-  sidebar.setActive(id)
-  rerender()
-  editor.focusAnnotation(id)
-}
-
-function rerender(): void {
+function rerender(syncPopup = true): void {
   editor.render(state.text, state.annotations, loadSample)
   sidebar.render(state.text, state.annotations)
+  if (syncPopup) annotationPopup.sync(state.text, state.annotations)
   scheduleSave()
 }
 
@@ -176,23 +215,15 @@ function scheduleSave(): void {
 
 // ---------------------------------------------------------------- 工具条 / 弹层
 
-const selection = new SelectionController({
-  resolveSelection,
+const selectionPin = new SelectionPin({
   onCreate: (info, kind, comment) => {
-    if (selection.editing) {
-      // 编辑模式：覆盖原批注的 kind / comment（范围不变）
-      state.annotations = state.annotations.map((a) =>
-        a.id === selection.editing
-          ? { ...a, kind, comment, updatedAt: Date.now() }
-          : a,
-      )
-      rerender()
-      return
-    }
     addAnnotation({ start: info.start, end: info.end, kind, comment })
   },
   onCopySelection: (quoted) => {
     void navigator.clipboard.writeText(quoted).then(() => toast('已复制选中文本'))
+  },
+  onDismiss: () => {
+    sidebar.setActive(null)
   },
 })
 
