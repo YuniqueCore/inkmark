@@ -47,6 +47,8 @@ export interface DocItem {
   text: string
   annotations: Annotation[]
   addedAt: number
+  /** AI 改稿全文（对照视图）：存在时可在「原文 vs 改稿」diff 视图里复核批注 */
+  revised?: string
 }
 
 /** 工作区会话 v2：多文档。localStorage 持久化单元 */
@@ -82,6 +84,8 @@ export interface SlopCategory {
 export interface SlopEntry {
   /** 正则源码 */
   p: string
+  /** python re flag 名（IGNORECASE / MULTILINE / DOTALL），与 slop_check.py 同源 */
+  flags?: string[]
   /** plain 每次命中都报；cluster 同段 ≥2 个同类词条才报；density 全文 ≥N 次才报 */
   mode?: 'plain' | 'cluster' | 'density'
   cluster_min?: number

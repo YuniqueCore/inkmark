@@ -1,6 +1,9 @@
-/** slop 词库扫描：正则命中 → 去重叠 → cluster/density 阈值 → slop 候选批注。纯函数。 */
+/** slop 词库扫描 —— anti-slop-kit `slop_check.py` 的 TS 移植（候选信号检测，非作者鉴定）。
+ *
+ * 管线与参考实现一致：保护区掩码 → 逐词库收集 → 重叠去重 → cluster/density 升级 → 跨词库合并。
+ * 与参考实现的既有差异（有意保留）：未闭合代码围栏额外保护到文末，编辑中的半截围栏不误报。
+ */
 
-import { splitBlocks } from './text'
 import type { Annotation, SlopEntry, SlopHit, SlopLexicon } from './types'
 
 interface CompiledEntry {
@@ -10,141 +13,169 @@ interface CompiledEntry {
   entry: SlopEntry
 }
 
+/** python re flag 名 → JS flag。词库当前只用 IGNORECASE / MULTILINE；未知 flag 无 JS 对应，忽略。 */
+const PY_FLAGS: Record<string, string> = { IGNORECASE: 'i', MULTILINE: 'm', DOTALL: 's' }
+
 const compileCache = new Map<string, RegExp>()
 
-function compile(source: string): RegExp {
-  let re = compileCache.get(source)
+function compile(source: string, pyFlags: string[] = []): RegExp {
+  const key = pyFlags.join(',') + '\u0000' + source
+  let re = compileCache.get(key)
   if (!re) {
-    re = new RegExp(source, 'gu')
-    compileCache.set(source, re)
+    let jsFlags = 'gu'
+    for (const f of pyFlags) {
+      const mapped = PY_FLAGS[f]
+      if (mapped && !jsFlags.includes(mapped)) jsFlags += mapped
+    }
+    re = new RegExp(source, jsFlags)
+    compileCache.set(key, re)
   }
   return re
 }
 
-/**
- * 计算扫描保护区间：代码围栏、行内代码、URL。这些区域里的命中是引文/代码，不是 slop。
- */
-export function protectedRanges(text: string): Array<{ start: number; end: number }> {
-  const ranges: Array<{ start: number; end: number }> = []
-  const fence = /```[\s\S]*?(?:```|$)|~~~[\s\S]*?(?:~~~|$)/g
-  for (const m of text.matchAll(fence)) {
-    ranges.push({ start: m.index, end: m.index + m[0].length })
-  }
-  const withoutFences = replaceRanges(text, ranges)
-  for (const m of withoutFences.matchAll(/`[^`\n]+`/g)) {
-    if (m.index !== undefined) ranges.push({ start: m.index, end: m.index + m[0].length })
-  }
-  for (const m of withoutFences.matchAll(/https?:\/\/\S+/g)) {
-    if (m.index !== undefined) ranges.push({ start: m.index, end: m.index + m[0].length })
-  }
-  return ranges
-}
-
-function replaceRanges(text: string, ranges: Array<{ start: number; end: number }>): string {
-  // 按 UTF-16 单元替换，保证与 regex 的 index 对齐（不能 Array.from，会按码点拆分错位）
-  const chars = text.split('')
-  for (const r of ranges) {
-    for (let i = r.start; i < r.end && i < chars.length; i++) chars[i] = '·'
-  }
-  return chars.join('')
-}
-
-function inRanges(pos: number, ranges: Array<{ start: number; end: number }>): boolean {
-  return ranges.some((r) => pos >= r.start && pos < r.end)
+function blankOut(match: string): string {
+  // 等长占位且保留换行，保证偏移与段落结构不变（对齐 slop_check.py 的 protect()）
+  return match.replace(/[^\n]/g, '·')
 }
 
 /**
- * 扫描规范文本，产出 slop 命中。
- * - 重叠命中保留更长者（与 anti-slop-kit 的 dedupe 一致）
- * - cluster 词条：同一段落内同类目 ≥2 个不同词条才生效
- * - density 词条：全文命中数 ≥ density_min 才生效
- * - 代码/URL 内的命中丢弃
+ * 保护区掩码：代码围栏 → 行内代码 → URL / 邮箱（顺序对齐 slop_check.py）。
+ * 后续模式在前一步掩码后的文本上匹配，代码内的 URL 不会重复命中。
  */
-export function scanSlop(text: string, lexicons: SlopLexicon[]): SlopHit[] {
-  const entries: CompiledEntry[] = []
-  for (const lex of lexicons) {
-    for (const cat of lex.categories) {
-      for (const entry of cat.entries) {
-        entries.push({ regex: compile(entry.p), categoryId: cat.id, label: cat.label, entry })
-      }
+export function maskProtected(text: string): string {
+  let out = text.replace(/```[\s\S]*?(?:```|$)|~~~[\s\S]*?(?:~~~|$)/g, blankOut)
+  out = out.replace(/`[^`\n]+`/g, blankOut)
+  out = out.replace(/https?:\/\/\S+|\b[\w.-]+@[\w.-]+\.\w+\b/g, blankOut)
+  return out
+}
+
+/** 段落起始偏移：按空行分段（与 slop_check.py split_paragraphs 同一正则语义）。 */
+function splitParagraphStarts(scannable: string): number[] {
+  const starts: number[] = []
+  for (const m of scannable.matchAll(/[^\n]+(?:\n(?!\n)[^\n]*)*/g)) {
+    if (m.index !== undefined) starts.push(m.index)
+  }
+  return starts
+}
+
+function paragraphIndexOf(starts: number[], offset: number): number {
+  // bisect_right(starts, offset) - 1：落在空行分隔区的偏移归前一个段落
+  let lo = 0
+  let hi = starts.length
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (starts[mid]! <= offset) lo = mid + 1
+    else hi = mid
+  }
+  return lo - 1
+}
+
+interface RawHit {
+  entry: CompiledEntry
+  start: number
+  end: number
+  matched: string
+}
+
+function collectMatches(entries: CompiledEntry[], scannable: string): RawHit[] {
+  const hits: RawHit[] = []
+  for (const entry of entries) {
+    entry.regex.lastIndex = 0
+    for (const m of scannable.matchAll(entry.regex)) {
+      if (m.index === undefined) continue
+      hits.push({ entry, start: m.index, end: m.index + m[0].length, matched: m[0] })
+    }
+  }
+  // 位置更早优先；同位置更长者优先（「综上所述」压过「总之」）
+  hits.sort((a, b) => a.start - b.start || b.end - b.start - (a.end - a.start))
+  return hits
+}
+
+function dedupe(hits: RawHit[]): RawHit[] {
+  const kept: RawHit[] = []
+  let lastStart = -1
+  let lastEnd = -1
+  for (const h of hits) {
+    if (h.start < lastEnd && h.start >= lastStart) continue
+    kept.push(h)
+    lastStart = h.start
+    lastEnd = h.end
+  }
+  return kept
+}
+
+/** cluster / density 模式升级：达标才报，未达标静默。阈值语义对齐 slop_check.py escalate()。 */
+function escalate(entries: CompiledEntry[], hits: RawHit[], paraStarts: number[]): RawHit[] {
+  const byEntry = new Map<CompiledEntry, RawHit[]>()
+  for (const h of hits) {
+    const list = byEntry.get(h.entry) ?? []
+    list.push(h)
+    byEntry.set(h.entry, list)
+  }
+
+  // cluster：每段每个类目出现的不同词条集合，孤立的单词不构成信号
+  const catParaEntries = new Map<string, Map<number, Set<CompiledEntry>>>()
+  for (const e of entries) {
+    if (e.entry.mode !== 'cluster') continue
+    for (const h of byEntry.get(e) ?? []) {
+      const para = paragraphIndexOf(paraStarts, h.start)
+      const byPara = catParaEntries.get(e.categoryId) ?? new Map<number, Set<CompiledEntry>>()
+      const set = byPara.get(para) ?? new Set<CompiledEntry>()
+      set.add(e)
+      byPara.set(para, set)
+      catParaEntries.set(e.categoryId, byPara)
     }
   }
 
-  const protectedRangesList = protectedRanges(text)
+  const out: RawHit[] = []
+  for (const [e, group] of byEntry) {
+    const mode = e.entry.mode ?? 'plain'
+    if (mode === 'plain') {
+      out.push(...group)
+    } else if (mode === 'cluster') {
+      const min = e.entry.cluster_min ?? 1
+      const byPara = catParaEntries.get(e.categoryId)
+      for (const h of group) {
+        const para = paragraphIndexOf(paraStarts, h.start)
+        if ((byPara?.get(para)?.size ?? 0) >= min) out.push(h)
+      }
+    } else {
+      if (group.length >= (e.entry.density_min ?? 1)) out.push(...group)
+    }
+  }
+  return out
+}
 
-  // 第一遍：全部原始命中（含权重信息用于后续阈值）
-  const raw: Array<{ hit: SlopHit; entry: CompiledEntry; blockIndex: number }> = []
-  const blocks = splitBlocks(text)
-  for (const entry of entries) {
-    entry.regex.lastIndex = 0
-    for (const m of text.matchAll(entry.regex)) {
-      if (m.index === undefined) continue
-      if (inRanges(m.index, protectedRangesList)) continue
-      const blockIndex = blocks.findIndex(
-        (b) => m.index >= b.start && m.index < b.start + b.text.length,
-      )
-      raw.push({
-        hit: {
-          start: m.index,
-          end: m.index + m[0].length,
-          matched: m[0],
-          categoryId: entry.categoryId,
-          label: entry.label,
-          fix: entry.entry.fix,
-          note: entry.entry.note,
-        },
-        entry,
-        blockIndex,
+/**
+ * 扫描规范文本，产出 slop 命中。每个词库独立走「收集 → 去重 → 升级」（与 slop_check.py
+ * 逐 pack 处理一致），跨词库合并后按位置排序。
+ */
+export function scanSlop(text: string, lexicons: SlopLexicon[]): SlopHit[] {
+  const scannable = maskProtected(text)
+  const paraStarts = splitParagraphStarts(scannable)
+  const out: SlopHit[] = []
+  for (const lex of lexicons) {
+    const entries: CompiledEntry[] = []
+    for (const cat of lex.categories) {
+      for (const entry of cat.entries) {
+        entries.push({ regex: compile(entry.p, entry.flags), categoryId: cat.id, label: cat.label, entry })
+      }
+    }
+    // 去重先于阈值升级：被更长匹配吞掉的命中不参与 cluster/density 计数
+    const deduped = dedupe(collectMatches(entries, scannable))
+    for (const h of escalate(entries, deduped, paraStarts)) {
+      out.push({
+        start: h.start,
+        end: h.end,
+        matched: h.matched,
+        categoryId: h.entry.categoryId,
+        label: h.entry.label,
+        fix: h.entry.entry.fix,
+        note: h.entry.entry.note,
       })
     }
   }
-
-  // cluster 阈值：同段同类目 ≥ cluster_min 个不同词条
-  const clusterOk = new Set<string>()
-  const byBlockCat = new Map<string, Set<string>>()
-  for (const r of raw) {
-    if (r.entry.entry.mode !== 'cluster') continue
-    const key = `${r.blockIndex}:${r.entry.categoryId}`
-    const set = byBlockCat.get(key) ?? new Set<string>()
-    set.add(r.entry.entry.p)
-    byBlockCat.set(key, set)
-  }
-  for (const [key, set] of byBlockCat) {
-    const min = clusterMinFor(raw, key)
-    if (set.size >= min) clusterOk.add(key)
-  }
-  function clusterMinFor(rows: typeof raw, key: string): number {
-    const sample = rows.find((r) => `${r.blockIndex}:${r.entry.categoryId}` === key)
-    return sample?.entry.entry.cluster_min ?? 2
-  }
-
-  // density 阈值：全文命中数 ≥ density_min
-  const densityCount = new Map<string, number>()
-  for (const r of raw) {
-    if (r.entry.entry.mode !== 'density') continue
-    densityCount.set(r.entry.entry.p, (densityCount.get(r.entry.entry.p) ?? 0) + 1)
-  }
-
-  // 过滤阈值未达标的词条
-  const kept = raw.filter((r) => {
-    const mode = r.entry.entry.mode ?? 'plain'
-    if (mode === 'cluster') return clusterOk.has(`${r.blockIndex}:${r.entry.categoryId}`)
-    if (mode === 'density') return (densityCount.get(r.entry.entry.p) ?? 0) >= (r.entry.entry.density_min ?? 3)
-    return true
-  })
-
-  // 重叠去重：位置更早、更长的胜出（与 slop_check.py 的 dedupe 语义一致）
-  kept.sort((a, b) => a.hit.start - b.hit.start || b.hit.end - a.hit.end)
-  const out: SlopHit[] = []
-  let lastStart = -1
-  let lastEnd = -1
-  for (const r of kept) {
-    if (r.hit.start < lastEnd && r.hit.start >= lastStart) continue
-    out.push(r.hit)
-    lastStart = r.hit.start
-    lastEnd = r.hit.end
-  }
-  return out
+  return out.sort((a, b) => a.start - b.start)
 }
 
 /** 命中 → slop 候选批注（comment 自动组合类别与建议）。 */
