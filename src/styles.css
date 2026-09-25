@@ -230,6 +230,7 @@
 .seg-hl.k-suggestion { background: var(--kind-suggestion-bg); }
 .seg-hl.k-question { background: var(--kind-question-bg); }
 .seg-hl.k-highlight { background: var(--kind-highlight-bg); }
+.seg-hl.k-praise { background: var(--kind-praise-bg); }
 .seg-hl.k-slop {
   background: var(--kind-slop-bg);
   text-decoration: underline wavy var(--kind-slop) 1px;

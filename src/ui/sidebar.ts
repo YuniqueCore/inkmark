@@ -42,6 +42,14 @@ export class SidebarView {
     this.onlyHighlightFiltered = only
   }
 
+  /** 把类型并入当前筛选并返回新集合（调用方据此触发重渲染） */
+  includeKind(kind: AnnotationKind): Set<AnnotationKind> {
+    const next = new Set(this.kindFilter)
+    next.add(kind)
+    this.kindFilter = next
+    return next
+  }
+
   /** 当前筛选下的可见批注（列表与编辑器高亮共用同一份判定） */
   visibleOf(annotations: Annotation[]): Annotation[] {
     return annotations.filter(

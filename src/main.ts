@@ -248,6 +248,11 @@ function addAnnotation(input: AnnotationInput): void {
     ...input,
   }
   mutateActive((doc) => ({ ...doc, annotations: [...doc.annotations, ann] }))
+  // 「只高亮当前筛选」开启时，新批注若被类型筛选排除会立刻"消失"——
+  // 自动把它的类型纳入筛选，保证刚写的批注可见
+  if (onlyHighlightFiltered) {
+    sidebar.setKindFilter(sidebar.includeKind(input.kind))
+  }
 }
 
 /** 当前文档的不可变更新；无文档时静默忽略 */
