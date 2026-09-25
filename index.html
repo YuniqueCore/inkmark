@@ -40,6 +40,12 @@
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.34-4.34"/></svg>
             slop 预扫描
           </button>
+          <button id="btn-diff" class="btn btn-outline btn-sm" title="对照 AI 改稿：贴入改稿生成原文 vs 改稿 diff，批注钉在被改动的原文行上">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M11 18H8a2 2 0 0 1-2-2V9"/></svg>
+            对照
+          </button>
+          <span id="diff-stats" class="hidden font-mono text-xs text-muted-foreground" title="改稿新增 / 删除行数"></span>
+          <button id="btn-diff-clear" class="btn btn-ghost btn-sm btn-destructive hidden" title="清除 AI 改稿（原文与批注保留）">清除改稿</button>
           <button id="btn-export" class="btn btn-default btn-sm" title="导出批注（⌘S）">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
             导出

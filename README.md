@@ -6,14 +6,16 @@ UI 按 shadcn/ui 语系构建（Tailwind CSS v4 + 设计 token，灵感来自 ra
 
 ## 功能
 
-- **划词批注**：选中正文文字 → 浮动工具条 → 选类型（问题 / 建议 / 疑问 / 重点）→ 写批注。批注以彩色高亮留在原文上。
+- **划词批注**：选中正文文字 → 浮动工具条 → 选类型（问题 / 建议 / 疑问 / 重点 / 认可）→ 写批注。批注以彩色高亮留在原文上。
+- **对照视图**：贴入 AI 改稿，生成原文 vs 改稿的行级 track-changes diff（Myers 算法，超大改动自动降级）；批注钉在被改动的原文行上，"哪里被改了、哪里有意见"一眼对齐。
 - **三种导出**（顶栏「导出」或 ⌘/Ctrl+S）：
   1. **原文 + 批注**：完整原文，批注以 `【批注①·问题】……` 行内标记插在锚点后；
   2. **片段 + 批注**：逐条列出被批注的片段和对应批注；
   3. **评审引用块**：Markdown 引用格式，直接贴回聊天窗口给 AI agent。
   支持复制与下载 .md；默认不含已解决批注（可勾选包含）。
-- **slop 预扫描**：内置 [anti-slop-kit](https://github.com/YuniqueCore/natural-talk) 的中英文词库（zh 169 条 / en 212 条），一键把套话候选标成红色波浪线预填批注，人工复核后解决或删除。代码块、行内代码、URL 内不扫。
-- **批注管理**：侧栏列表，按状态筛选，定位 / 编辑 / 解决 / 删除。
+- **W3C Web Annotation 导入 / 导出**：批注可导出为标准 Annotation JSON（TextQuoteSelector + TextPositionSelector 双选择器）；导入时自动按 quote 在目标文本里重锚（位置失配 → 全文搜索 → prefix/suffix 消歧），锚不上的明确跳过、绝不错锚。打开 .json 文件即可导入。
+- **slop 预扫描**：内置 [anti-slop-kit](https://github.com/YuniqueCore/natural-talk) 的中英文词库（zh 169 条 / en 212 条），一键把套话候选标成红色波浪线预填批注，人工复核后解决或删除。扫描管线与 `slop_check.py` 完全对齐：代码围栏 / 行内代码 / URL / 邮箱保护、正则 flags、重叠去重先于 cluster/density 阈值升级。
+- **批注管理**：侧栏列表，按类型与状态筛选，定位 / 编辑 / 解决 / 删除，全部破坏性操作二次确认。
 - **自动保存**：localStorage；也可导出 / 导入 JSON 会话（打开文件时选 .json 即导入）。
 - **明暗主题**：一键切换，首屏内联脚本应用偏好，无闪烁。
 
@@ -38,7 +40,9 @@ src/
     text.ts      规范文本分块、摘录、W3C TextQuoteSelector
     anchors.ts   批注范围 → 渲染分段（扫描线）
     export.ts    三种导出格式
-    slop.ts      词库扫描：保护区间 / 重叠去重 / cluster / density
+    diff.ts      行级 Myers diff（对照视图）
+    w3c.ts       W3C Web Annotation 导入 / 导出与 robust 重锚
+    slop.ts      词库扫描：保护区掩码 / 去重 / cluster / density
   ui/            DOM 层（editor / selection / sidebar / exporter / storage）
   skill/         natural-talk 子模块——词库单一来源：
                  skill/references/anti-slop-kit/scripts/data/{zh,en}.json
@@ -49,7 +53,7 @@ tests/           vitest 正反例
 
 ## 已知边界与路线图
 
-- [ ] **Diff 对照**：原文 vs AI 改稿的 track-changes 视图，批注钉在 diff 片段上（对"审 AI 修改"最有用，v2 首项）
-- [ ] 批注锚定的 W3C Web Annotation 导入 / 导出（当前只在内存中持有 quote selector）
-- [ ] 跨设备会话同步（本地优先，可接任意存储）
-- [ ] slop 扫描的 cluster/density 阈值目前近似移植自 slop_check.py，未覆盖全部保护条款
+- [ ] **编辑原文 + robust anchoring**：当前原文只读；放开编辑需要 quote 重锚（W3C 导入路径已实现，可复用）
+- [ ] **对照视图下给新增行写批注**：当前批注只锚定原文，改稿新增行暂只读（需要把锚定模型扩展到双文档）
+- [ ] slop 扫描的评分分档（slop_check.py 的 score / band）：当前只产出候选批注，不打分
+

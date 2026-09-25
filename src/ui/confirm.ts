@@ -66,3 +66,62 @@ export function confirmDialog(opts: ConfirmOptions): Promise<boolean> {
 function escapeText(text: string): string {
   return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
 }
+
+export interface TextDialogOptions {
+  title: string
+  description?: string
+  placeholder?: string
+  value?: string
+  confirmText?: string
+  cancelText?: string
+  danger?: boolean
+}
+
+/** 带多行输入的弹层：贴入 AI 改稿等场景。Promise<string | null>，Esc / 遮罩 / 取消 → null。 */
+export function textDialog(opts: TextDialogOptions): Promise<string | null> {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div')
+    overlay.className = 'fixed inset-0 z-100 bg-black/50 backdrop-blur-[2px]'
+    const panel = document.createElement('div')
+    panel.className =
+      'fixed left-1/2 top-1/2 z-101 flex w-[min(720px,94vw)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border bg-card p-5 text-card-foreground shadow-2xl'
+    panel.style.animation = 'pop-in 0.14s ease-out'
+    panel.innerHTML = `
+      <h2 class="text-[15px] font-semibold leading-snug tracking-tight">${escapeText(opts.title)}</h2>
+      ${opts.description ? `<p class="mt-1.5 text-sm leading-relaxed text-muted-foreground">${escapeText(opts.description)}</p>` : ''}
+      <textarea id="text-dialog-input" rows="12" placeholder="${escapeText(opts.placeholder ?? '')}"
+        class="input-base mt-3 flex-1 resize-none font-mono text-[13px] leading-relaxed">${escapeText(opts.value ?? '')}</textarea>
+      <div class="mt-4 flex items-center justify-between">
+        <span class="text-xs text-muted-foreground">⌘/Ctrl + Enter 确认</span>
+        <span class="flex gap-2">
+          <button class="btn btn-outline btn-sm" data-op="cancel">${opts.cancelText ?? '取消'}</button>
+          <button class="btn btn-sm ${opts.danger ? 'confirm-danger' : 'btn-default'}" data-op="confirm">${opts.confirmText ?? '确认'}</button>
+        </span>
+      </div>`
+
+    const textarea = panel.querySelector('#text-dialog-input') as HTMLTextAreaElement
+    const finish = (result: string | null) => {
+      overlay.remove()
+      panel.remove()
+      document.removeEventListener('keydown', onKey, true)
+      resolve(result)
+    }
+    const confirm = () => finish(textarea.value)
+    const onKey = (e: KeyboardEvent) => {
+      e.stopPropagation()
+      if (e.key === 'Escape') finish(null)
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        confirm()
+      }
+    }
+
+    overlay.addEventListener('mousedown', () => finish(null))
+    panel.querySelector('[data-op="cancel"]')?.addEventListener('click', () => finish(null))
+    panel.querySelector('[data-op="confirm"]')?.addEventListener('click', confirm)
+    document.addEventListener('keydown', onKey, true)
+
+    document.body.append(overlay, panel)
+    textarea.focus()
+  })
+}

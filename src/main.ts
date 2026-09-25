@@ -1,14 +1,16 @@
 /** 应用装配：多文档工作区状态、事件接线、持久化。UI 模块各自只管画。 */
 
 import { numberAnnotations } from './core/export'
+import { diffLines, diffStats } from './core/diff'
 import { splitBlocks } from './core/text'
 import { hitsToAnnotations, scanSlop } from './core/slop'
+import { fromW3C } from './core/w3c'
 import { EditorView } from './ui/editor'
 import { ExporterView } from './ui/exporter'
 import { FileTreeView } from './ui/filetree'
 import { AnnotationPopup } from './ui/annotation-popup'
 import { SelectionPin, type SelectionInfo } from './ui/selection-pin'
-import { confirmDialog } from './ui/confirm'
+import { confirmDialog, textDialog } from './ui/confirm'
 import { SidebarView } from './ui/sidebar'
 import { initResizers } from './ui/resizer'
 import { SAMPLE_TEXT } from './ui/sample'
@@ -31,6 +33,8 @@ interface AppState {
 let state: AppState = { docs: [], activeDocId: '' }
 /** 筛选透镜：正文高亮与侧栏列表共用 */
 let onlyHighlightFiltered = false
+/** 编辑区视图：批注视图（原文）或对照视图（原文 vs AI 改稿） */
+let viewMode: 'annotate' | 'diff' = 'annotate'
 
 /** 编辑器实际渲染的批注：关闭"仅高亮筛选"时显示全部 */
 function editorAnnotations(): Annotation[] {
@@ -176,6 +180,7 @@ const exporter = new ExporterView($('#export-modal'), $('#overlay'), {
     void navigator.clipboard.writeText(content).then(() => toast('已复制到剪贴板'))
   },
   onClose: () => {},
+  onImportW3C: (file) => void importW3CFile(file),
 })
 
 // ---------------------------------------------------------------- 选区 → 偏移
@@ -324,7 +329,25 @@ async function removeDoc(id: string): Promise<void> {
 
 function rerender(syncPopup = true): void {
   const doc = activeDoc()
-  editor.render(doc?.text ?? '', editorAnnotations(), loadSample)
+  const inDiff = viewMode === 'diff' && !!doc?.revised
+  let stats = ''
+  if (inDiff) {
+    const rows = diffLines(doc!.text, doc!.revised!)
+    editor.renderDiff(rows, editorAnnotations())
+    const { added, removed } = diffStats(rows)
+    stats = `+${added} / −${removed}`
+  } else {
+    editor.render(doc?.text ?? '', editorAnnotations(), loadSample)
+  }
+  const diffStatsEl = document.querySelector('#diff-stats')
+  if (diffStatsEl) {
+    diffStatsEl.textContent = stats
+    diffStatsEl.classList.toggle('hidden', !inDiff)
+  }
+  const diffBtn = document.querySelector('#btn-diff')
+  diffBtn?.classList.toggle('bg-secondary', inDiff)
+  diffBtn?.classList.toggle('text-secondary-foreground', inDiff)
+  document.querySelector('#btn-diff-clear')?.classList.toggle('hidden', !inDiff)
   sidebar.render(doc?.text ?? '', doc?.annotations ?? [])
   fileTree.render(state.docs, state.activeDocId)
   if (syncPopup && doc) annotationPopup.sync(doc.text, doc.annotations)
@@ -397,6 +420,74 @@ function runSlopScan(): void {
   toast(anns.length === 0 ? '没有发现新的候选信号' : `新增 ${anns.length} 条 slop 候选批注`)
 }
 
+// ---------------------------------------------------------------- 对照视图（原文 vs AI 改稿）
+
+async function toggleDiff(): Promise<void> {
+  const doc = activeDoc()
+  if (!doc) {
+    toast('先导入或载入一段文本')
+    return
+  }
+  if (viewMode === 'diff') {
+    viewMode = 'annotate'
+    rerender(false)
+    return
+  }
+  if (!doc.revised) {
+    const text = await textDialog({
+      title: `贴入「${doc.name}」的 AI 改稿`,
+      description: '粘贴 AI 改写后的全文，生成原文 vs 改稿的行级对照。批注仍锚定原文，钉在被改动的行上。',
+      placeholder: '把 AI 改稿的完整文本粘贴到这里…',
+      confirmText: '生成对照',
+    })
+    if (text === null) return
+    if (text.trim() === '') {
+      toast('改稿内容为空')
+      return
+    }
+    mutateActive((d) => ({ ...d, revised: text }))
+  }
+  viewMode = 'diff'
+  rerender(false)
+}
+
+async function clearRevised(): Promise<void> {
+  const doc = activeDoc()
+  if (!doc?.revised) return
+  const ok = await confirmDialog({
+    title: '清除 AI 改稿？',
+    description: '只移除改稿文本与对照视图，文档原文和批注都会保留。',
+    confirmText: '清除',
+    danger: true,
+  })
+  if (!ok) return
+  viewMode = 'annotate'
+  mutateActive((d) => ({ ...d, revised: undefined }))
+  toast('已清除改稿')
+}
+
+// ---------------------------------------------------------------- W3C Web Annotation 导入
+
+/** 把 W3C Web Annotation JSON 合并进当前文档。不是 W3C 格式返回 false（交给下一处理链）。 */
+async function importW3CFile(file: File): Promise<boolean> {
+  const doc = activeDoc()
+  if (!doc) return false
+  try {
+    const parsed = JSON.parse(await file.text()) as unknown
+    const result = fromW3C(parsed, doc.text)
+    if (result.total === 0) return false
+    mutateActive((d) => ({ ...d, annotations: [...d.annotations, ...result.annotations] }))
+    toast(
+      result.unmatched > 0
+        ? `导入 ${result.annotations.length} 条批注，${result.unmatched} 条原文中找不到锚点已跳过`
+        : `导入 ${result.annotations.length} 条批注`,
+    )
+    return true
+  } catch {
+    return false
+  }
+}
+
 // ---------------------------------------------------------------- 文档导入
 
 async function importFiles(files: FileList | File[]): Promise<void> {
@@ -404,10 +495,18 @@ async function importFiles(files: FileList | File[]): Promise<void> {
   const newDocs: DocItem[] = []
   let truncated = 0
   let skipped = 0
+  let sideImported = 0 // 会话 / W3C JSON 走各自的处理链，有自己的成功提示
   for (const file of list) {
     const rel = (file as File & {webkitRelativePath?: string}).webkitRelativePath ?? ''
     if (file.name.endsWith('.json')) {
-      if (await importSessionFile(file)) continue
+      if (await importSessionFile(file)) {
+        sideImported++
+        continue
+      }
+      if (await importW3CFile(file)) {
+        sideImported++
+        continue
+      }
       skipped++
       continue
     }
@@ -434,7 +533,9 @@ async function importFiles(files: FileList | File[]): Promise<void> {
     })
   }
   if (newDocs.length === 0) {
-    toast(skipped > 0 ? `没有可导入的文本文件（跳过 ${skipped} 个）` : '没有可导入的文件')
+    if (sideImported === 0) {
+      toast(skipped > 0 ? `没有可导入的文本文件（跳过 ${skipped} 个）` : '没有可导入的文件')
+    }
     return
   }
   state = {
@@ -482,7 +583,7 @@ function maybeExport(): void {
     toast('当前文档还没有批注：划选正文文字，或运行 slop 预扫描')
     return
   }
-  exporter.open(doc.text, doc.annotations)
+  exporter.open(doc)
 }
 
 function clearCurrent(): void {
@@ -517,6 +618,8 @@ $('#folder-input').addEventListener('change', (e) => {
   ;(e.target as HTMLInputElement).value = ''
 })
 $('#btn-scan').addEventListener('click', runSlopScan)
+$('#btn-diff').addEventListener('click', () => void toggleDiff())
+$('#btn-diff-clear').addEventListener('click', () => void clearRevised())
 $('#btn-export').addEventListener('click', maybeExport)
 $('#btn-clear').addEventListener('click', () => void clearCurrent())
 $('#btn-tree').addEventListener('click', () => togglePanel('tree'))

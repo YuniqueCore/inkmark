@@ -245,6 +245,34 @@
   animation: flash-ring 0.9s ease-out 1;
 }
 
+/* ---------------------------------------------------------------- 对照视图（track-changes） */
+
+.diff-row {
+  @apply mb-px flex items-stretch gap-2 rounded-md;
+  padding: 2px 8px;
+}
+.diff-mark {
+  @apply w-4 shrink-0 select-none border-none text-right font-mono text-[13px] leading-[2.05];
+  color: var(--muted-foreground);
+}
+.diff-row.diff-del {
+  background: color-mix(in oklab, var(--destructive) 8%, transparent);
+  box-shadow: inset 2px 0 0 var(--destructive);
+}
+.diff-row.diff-del .diff-mark { color: var(--destructive); }
+.diff-row.diff-add {
+  background: color-mix(in oklab, #10b981 10%, transparent);
+  box-shadow: inset 2px 0 0 #10b981;
+}
+.diff-row.diff-add .diff-mark { color: #059669; }
+.diff-row.diff-add .diff-blk { color: color-mix(in oklab, currentColor 88%, #10b981); }
+.dark .diff-row.diff-del { background: color-mix(in oklab, var(--destructive) 16%, transparent); }
+.dark .diff-row.diff-add { background: color-mix(in oklab, #10b981 14%, transparent); }
+.diff-blk {
+  @apply mb-0 min-w-0 flex-1 text-[16.5px] leading-[2.05] tracking-[0.01em];
+}
+.diff-blk.editor-blk { margin: 0; }
+
 /* ---------------------------------------------------------------- 文档树 */
 
 @layer components {

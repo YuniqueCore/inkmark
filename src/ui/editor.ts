@@ -1,6 +1,7 @@
 /** 编辑区渲染：把块 + 分段画成 DOM。只负责画，不持状态。 */
 
 import { buildSegments } from '../core/anchors'
+import type { DiffRow } from '../core/diff'
 import { splitBlocks } from '../core/text'
 import type { Annotation, AnnotationKind } from '../core/types'
 
@@ -95,6 +96,31 @@ export class EditorView {
     const parts = blocks.map((b) => {
       const anns = annotations.filter((a) => a.start < b.start + b.text.length && a.end > b.start)
       return `<p class="editor-blk" data-start="${b.start}">${renderBlockContent(b.text, anns, b.start)}</p>`
+    })
+    this.root.innerHTML = parts.join('')
+  }
+
+  /**
+   * 对照视图：原文 vs AI 改稿的 track-changes 行渲染。
+   * del / equal 行带 .editor-blk + data-start——批注高亮、点击、划选换算全部复用批注视图的机制；
+   * add 行只展示改稿内容，不接受划选（批注锚定在原文上）。
+   */
+  renderDiff(rows: DiffRow[], annotations: Annotation[]): void {
+    const parts = rows.map((row) => {
+      const mark = row.type === 'del' ? '−' : row.type === 'add' ? '+' : ''
+      if (row.type === 'add') {
+        return (
+          `<div class="diff-row diff-add"><span class="diff-mark" aria-hidden="true">${mark}</span>` +
+          `<p class="diff-blk">${escapeHtml(row.text) || '<br>'}</p></div>`
+        )
+      }
+      const aStart = row.aStart ?? 0
+      const anns = annotations.filter((a) => a.start < aStart + row.text.length && a.end > aStart)
+      const inner = renderBlockContent(row.text, anns, aStart)
+      return (
+        `<div class="diff-row diff-${row.type}"><span class="diff-mark" aria-hidden="true">${mark}</span>` +
+        `<p class="editor-blk diff-blk" data-start="${aStart}">${inner || '<br>'}</p></div>`
+      )
     })
     this.root.innerHTML = parts.join('')
   }

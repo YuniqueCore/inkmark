@@ -1,22 +1,35 @@
-/** 导出弹层：三种格式预览 + 复制 + 下载。 */
+/** 导出弹层：四种格式预览 + 复制 + 下载；W3C 页支持把批注导出为 Web Annotation JSON。 */
 
-import { exportAs, type ExportFormat } from '../core/export'
-import type { Annotation } from '../core/types'
+import { exportAs } from '../core/export'
+import { toW3C } from '../core/w3c'
+import type { DocItem } from '../core/types'
 
 export interface ExporterCallbacks {
   onCopy: (content: string) => void
   onClose: () => void
+  /** W3C 页的「导入 Web Annotation JSON」：解析并合并进当前文档 */
+  onImportW3C: (file: File) => void
 }
 
-const TABS: Array<{ id: ExportFormat; label: string; hint: string }> = [
+type TabId = 'inline' | 'snippets' | 'review' | 'w3c'
+
+const TABS: Array<{ id: TabId; label: string; hint: string }> = [
   { id: 'inline', label: '原文 + 批注', hint: '完整原文，批注以行内标记插在锚点后' },
   { id: 'snippets', label: '片段 + 批注', hint: '只列被批注的片段和对应批注' },
   { id: 'review', label: '评审引用块', hint: 'Markdown 引用格式，直接贴回给 AI agent' },
+  {
+    id: 'w3c',
+    label: 'W3C 批注',
+    hint: 'W3C Web Annotation JSON（quote + position 双选择器），可导入回本工具或供其他标注工具使用',
+  },
 ]
 
 export class ExporterView {
   private modal: HTMLElement
   private overlay: HTMLElement
+  private format: TabId = 'inline'
+  private includeResolved = false
+  private doc: DocItem | null = null
 
   constructor(
     modal: HTMLElement,
@@ -27,14 +40,12 @@ export class ExporterView {
     this.overlay = overlay
   }
 
-  open(text: string, annotations: Annotation[]): void {
-    this.render(text, annotations)
+  open(doc: DocItem): void {
+    this.doc = doc
+    this.render()
     this.overlay.classList.remove('hidden')
     this.modal.classList.remove('hidden')
   }
-
-  private format = 'inline' as ExportFormat
-  private includeResolved = false
 
   close(): void {
     this.overlay.classList.add('hidden')
@@ -42,8 +53,20 @@ export class ExporterView {
     this.callbacks.onClose()
   }
 
-  private render(text: string, annotations: Annotation[]): void {
-    const content = exportAs(this.format, text, annotations, { includeResolved: this.includeResolved })
+  private content(): string {
+    const doc = this.doc
+    if (!doc) return ''
+    if (this.format === 'w3c') {
+      return JSON.stringify(toW3C(doc, { includeResolved: this.includeResolved }), null, 2)
+    }
+    return exportAs(this.format, doc.text, doc.annotations, { includeResolved: this.includeResolved })
+  }
+
+  private render(): void {
+    const doc = this.doc
+    if (!doc) return
+    const isW3C = this.format === 'w3c'
+    const content = this.content()
     const tab = TABS.find((t) => t.id === this.format)!
     this.modal.className =
       'fixed left-1/2 top-1/2 z-100 hidden w-[min(880px,94vw)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border bg-card text-card-foreground shadow-2xl'
@@ -62,14 +85,15 @@ export class ExporterView {
       </div>
       <div class="px-5 pt-3">
         <p class="text-[13px] text-muted-foreground">${tab.hint}</p>
-        <textarea readonly id="export-preview" class="input-base mt-2.5 h-[46vh] resize-none font-mono text-[13px] leading-relaxed"></textarea>
+        <textarea readonly id="export-preview" class="input-base mt-2.5 h-[42vh] resize-none font-mono text-[13px] leading-relaxed"></textarea>
       </div>
       <div class="flex items-center justify-between border-t bg-muted/40 px-5 py-3">
         <span class="text-xs text-muted-foreground">${content.length.toLocaleString()} 字符</span>
         <span class="flex gap-1.5">
+          ${isW3C ? `<button class="btn btn-outline btn-sm" data-op="import">导入 W3C JSON…</button>` : ''}
           <button class="btn btn-outline btn-sm" data-op="download">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-            下载 .md
+            下载 .${isW3C ? 'json' : 'md'}
           </button>
           <button class="btn btn-default btn-sm" data-op="copy">复制到剪贴板</button>
           <button class="btn btn-ghost btn-sm" data-op="close">关闭</button>
@@ -80,25 +104,40 @@ export class ExporterView {
 
     this.modal.querySelectorAll('[data-tab]').forEach((btn) =>
       btn.addEventListener('click', () => {
-        this.format = (btn as HTMLElement).dataset.tab as ExportFormat
-        this.render(text, annotations)
+        this.format = (btn as HTMLElement).dataset.tab as TabId
+        this.render()
       }),
     )
     this.modal.querySelector('#inc-resolved')?.addEventListener('change', (e) => {
       this.includeResolved = (e.target as HTMLInputElement).checked
-      this.render(text, annotations)
+      this.render()
     })
     this.modal.querySelector('[data-op="copy"]')?.addEventListener('click', () => {
       this.callbacks.onCopy(preview.value)
     })
     this.modal.querySelector('[data-op="download"]')?.addEventListener('click', () => {
-      const blob = new Blob([preview.value], { type: 'text/markdown;charset=utf-8' })
+      const blob = new Blob([preview.value], {
+        type: isW3C ? 'application/json;charset=utf-8' : 'text/markdown;charset=utf-8',
+      })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `inkmark-${this.format}-${new Date().toISOString().slice(0, 10)}.md`
+      a.download = `inkmark-${this.format}-${new Date().toISOString().slice(0, 10)}.${isW3C ? 'json' : 'md'}`
       a.click()
       URL.revokeObjectURL(url)
+    })
+    this.modal.querySelector('[data-op="import"]')?.addEventListener('click', () => {
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.accept = '.json,application/json'
+      input.addEventListener('change', () => {
+        const file = input.files?.[0]
+        if (file) {
+          this.callbacks.onImportW3C(file)
+          this.render()
+        }
+      })
+      input.click()
     })
     this.modal.querySelector('[data-op="close"]')?.addEventListener('click', () => this.close())
   }
