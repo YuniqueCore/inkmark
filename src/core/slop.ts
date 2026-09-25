@@ -213,6 +213,19 @@ export function scanSlop(text: string, lexicons: SlopLexicon[]): SlopHit[] {
   return scanSlopReport(text, lexicons).hits
 }
 
+/** 报告的类目分布：按命中数降序（平局按类目 id），侧栏统计卡用。 */
+export function reportCategoryCounts(
+  hits: SlopHit[],
+): Array<{ categoryId: string; label: string; count: number }> {
+  const byCat = new Map<string, { categoryId: string; label: string; count: number }>()
+  for (const h of hits) {
+    const entry = byCat.get(h.categoryId) ?? { categoryId: h.categoryId, label: h.label, count: 0 }
+    entry.count++
+    byCat.set(h.categoryId, entry)
+  }
+  return [...byCat.values()].sort((a, b) => b.count - a.count || a.categoryId.localeCompare(b.categoryId))
+}
+
 /** 命中 → slop 候选批注（comment 自动组合类别与建议）。 */
 export function hitsToAnnotations(hits: SlopHit[], now = Date.now()): Annotation[] {
   return hits.map((h, i) => ({

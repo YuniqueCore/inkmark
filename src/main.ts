@@ -5,6 +5,7 @@ import { diffLines, diffStats } from './core/diff'
 import { reanchorAnnotations } from './core/reanchor'
 import { splitBlocks } from './core/text'
 import { hitsToAnnotations, scanSlopReport } from './core/slop'
+import type { SlopReport } from './core/types'
 import { fromW3C } from './core/w3c'
 import { EditorView } from './ui/editor'
 import { ExporterView } from './ui/exporter'
@@ -38,6 +39,8 @@ let onlyHighlightFiltered = false
 let viewMode: 'annotate' | 'diff' = 'annotate'
 /** 编辑原文模式：textarea 直改，完成时统一重锚 */
 let editingText = false
+/** 各文档最近一次 slop 扫描报告（侧栏统计卡）：派生数据缓存，文本变化即失效 */
+const slopReports = new Map<string, SlopReport>()
 
 /** 编辑器实际渲染的批注：关闭"仅高亮筛选"时显示全部 */
 function editorAnnotations(): Annotation[] {
@@ -342,6 +345,7 @@ async function removeDoc(id: string): Promise<void> {
     danger: true,
   })
   if (!ok) return
+  slopReports.delete(id)
   const docs = state.docs.filter((d) => d.id !== id)
   state = {
     docs,
@@ -359,7 +363,7 @@ function rerender(syncPopup = true): void {
   const doc = activeDoc()
   if (editingText) {
     // 编辑模式由 renderEditMode 独占渲染区，这里只同步侧栏
-    sidebar.render(doc?.text ?? '', doc?.annotations ?? [], doc?.revised)
+    sidebar.render(doc?.text ?? '', doc?.annotations ?? [], { revised: doc?.revised })
     fileTree.render(state.docs, state.activeDocId)
     return
   }
@@ -385,7 +389,10 @@ function rerender(syncPopup = true): void {
   const editBtn = document.querySelector('#btn-edit')
   editBtn?.classList.toggle('bg-secondary', editingText)
   editBtn?.classList.toggle('text-secondary-foreground', editingText)
-  sidebar.render(doc?.text ?? '', doc?.annotations ?? [], doc?.revised)
+  sidebar.render(doc?.text ?? '', doc?.annotations ?? [], {
+    revised: doc?.revised,
+    slop: doc ? (slopReports.get(doc.id) ?? null) : null,
+  })
   fileTree.render(state.docs, state.activeDocId)
   if (syncPopup && doc) annotationPopup.sync(doc.text, doc.annotations, doc.revised)
   markDirty()
@@ -452,6 +459,7 @@ function runSlopScan(): void {
     doc.annotations.filter((a) => a.source === 'slop').map((a) => `${a.start}:${a.end}`),
   )
   const report = scanSlopReport(doc.text, LEXICONS)
+  slopReports.set(doc.id, report)
   const hits = report.hits.filter((h) => !existing.has(`${h.start}:${h.end}`))
   const anns = hitsToAnnotations(hits)
   mutateActive((d) => ({ ...d, annotations: [...d.annotations, ...anns] }))
@@ -505,6 +513,7 @@ function saveTextEdit(newText: string): void {
     return
   }
   const { annotations, moved, clamped } = reanchorAnnotations(doc.text, newText, doc.annotations)
+  slopReports.delete(doc.id) // 文本已变，上一次评分失效
   mutateActive((d) => ({ ...d, text: newText, annotations }))
   const parts = ['已保存编辑']
   if (moved > 0) parts.push(`${moved} 条批注重新锚定`)

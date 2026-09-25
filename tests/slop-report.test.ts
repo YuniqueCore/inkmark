@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { scanSlopReport } from '../src/core/slop'
+import { reportCategoryCounts, scanSlopReport } from '../src/core/slop'
 import type { SlopLexicon } from '../src/core/types'
 
 const lex = (entries: SlopLexicon['categories']): SlopLexicon => ({
@@ -82,5 +82,17 @@ describe('scanSlopReport 评分分档（对齐 slop_check.py）', () => {
     expect(scanSlopReport(longText, [mk(2)]).band).toBe('noticeable')
     // 同文本 w=3 → ≈5.0 → heavy（5.0 不小于 5）
     expect(scanSlopReport(longText, [mk(3)]).band).toBe('heavy')
+  })
+
+  it('reportCategoryCounts：按命中数降序聚合类目', () => {
+    const packs = lex([
+      { id: 'openers', label: '万能开场', entries: [{ p: '众所周知' }, { p: '随着.{0,6}的发展' }] },
+      { id: 'jargon', label: '黑话', entries: [{ p: '赋能' }] },
+    ])
+    const r = scanSlopReport('众所周知，随着时代的发展，众所周知地赋能。', [packs])
+    const cats = reportCategoryCounts(r.hits)
+    expect(cats[0]).toMatchObject({ categoryId: 'openers', label: '万能开场', count: 3 })
+    expect(cats[1]).toMatchObject({ categoryId: 'jargon', label: '黑话', count: 1 })
+    expect(reportCategoryCounts([])).toEqual([])
   })
 })

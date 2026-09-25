@@ -1,6 +1,8 @@
 /** 侧栏：批注列表、筛选、单条操作。 */
 
 import { snippet } from '../core/text'
+import { reportCategoryCounts } from '../core/slop'
+import type { SlopBand, SlopReport } from '../core/types'
 import type { Annotation, AnnotationKind } from '../core/types'
 import { escapeHtml, KIND_LABEL } from './editor'
 
@@ -14,6 +16,28 @@ export interface SidebarCallbacks {
   onFilterChange: (filter: StatusFilter) => void
   onKindFilterChange: (kinds: Set<AnnotationKind>) => void
   onHighlightModeChange: (only: boolean) => void
+}
+
+export interface SidebarRenderOptions {
+  /** AI 改稿全文：改稿侧批注（target === 'revised'）的摘录来源 */
+  revised?: string
+  /** 最近一次 slop 扫描报告（当前文档）：有则展示评分统计卡 */
+  slop?: SlopReport | null
+}
+
+/** 分档 → 徽标配色（亮暗主题都够对比） */
+const BAND_STYLE: Record<SlopBand, string> = {
+  clean: 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-400',
+  light: 'bg-amber-500/15 text-amber-700 dark:text-amber-400',
+  noticeable: 'bg-orange-500/15 text-orange-700 dark:text-orange-400',
+  heavy: 'bg-destructive/12 text-destructive',
+}
+
+const BAND_LABEL: Record<SlopBand, string> = {
+  clean: '干净',
+  light: '轻微',
+  noticeable: '明显',
+  heavy: '严重',
 }
 
 const ALL_KINDS: AnnotationKind[] = ['issue', 'suggestion', 'question', 'highlight', 'praise', 'slop']
@@ -63,7 +87,7 @@ export class SidebarView {
     this.activeId = id
   }
 
-  render(text: string, annotations: Annotation[], revised?: string): void {
+  render(text: string, annotations: Annotation[], opts: SidebarRenderOptions = {}): void {
     const open = annotations.filter((a) => a.status === 'open').length
     const shown = this.visibleOf(annotations)
 
@@ -89,13 +113,14 @@ export class SidebarView {
          </button>`,
     ).join('')
 
-    const cards = shown.map((a) => this.renderCard(a.target === 'revised' ? (revised ?? '') : text, a)).join('')
+    const cards = shown.map((a) => this.renderCard(a.target === 'revised' ? (opts.revised ?? '') : text, a)).join('')
 
     this.root.innerHTML = `
       <div class="mb-3 flex items-baseline justify-between px-1">
         <h3 class="text-sm font-semibold tracking-tight">批注</h3>
         <span class="text-xs text-muted-foreground">${open} 条待处理</span>
       </div>
+      ${opts.slop ? this.renderSlopCard(opts.slop) : ''}
       <div class="mb-1.5 flex flex-wrap gap-1.5 px-1">${chips}</div>
       <div class="mb-2 flex flex-wrap gap-1 px-1">${kindChips}</div>
       <label class="mb-3 flex cursor-pointer items-center gap-2 px-1 text-xs text-muted-foreground">
@@ -141,6 +166,32 @@ export class SidebarView {
       }
       card.addEventListener('click', () => this.callbacks.onFocus(id))
     }
+  }
+
+  /** slop 评分统计卡：评分 / 分档 / 单位数 / 类目分布（数据来自最近一次扫描报告） */
+  private renderSlopCard(report: SlopReport): string {
+    const cats = reportCategoryCounts(report.hits)
+    const top = cats
+      .slice(0, 4)
+      .map((c) => `${escapeHtml(c.label)} ×${c.count}`)
+      .join(' · ')
+    const rest = cats.length - Math.min(4, cats.length)
+    const catLine =
+      report.hits.length === 0
+        ? '<div class="mt-1.5 text-xs text-muted-foreground">未发现候选信号</div>'
+        : `<div class="mt-1.5 text-xs leading-relaxed text-muted-foreground">候选 ${report.hits.length} 处${top ? `：${top}` : ''}${rest > 0 ? ` 等 ${cats.length} 类` : ''}</div>`
+    return `
+      <div class="card mb-3 p-3">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-xs font-medium text-muted-foreground">slop 评分</span>
+          <span class="badge border-transparent ${BAND_STYLE[report.band]}">${BAND_LABEL[report.band]}</span>
+        </div>
+        <div class="mt-1 flex items-baseline gap-1">
+          <span class="text-xl font-semibold tracking-tight">${report.score}</span>
+          <span class="text-xs text-muted-foreground">/ 千单位（${report.units} 单位）</span>
+        </div>
+        ${catLine}
+      </div>`
   }
 
   private renderCard(text: string, a: Annotation): string {
