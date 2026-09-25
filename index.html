@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>InkMark · 划词批注工作台</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">InkMark<span class="brand-sub">划词批注工作台</span></div>
+      <div class="actions">
+        <button id="btn-sample" class="btn ghost" title="载入一段带 AI 味的示例文本">示例</button>
+        <button id="btn-load" class="btn ghost" title="打开 .txt / .md 文件">打开文件</button>
+        <button id="btn-scan" class="btn ghost" title="用 anti-slop 词库预扫描套话，生成候选批注">slop 预扫描</button>
+        <button id="btn-export" class="btn primary" title="导出批注">导出</button>
+        <button id="btn-clear" class="btn ghost danger" title="清空文本与全部批注">清空</button>
+        <input id="file-input" type="file" accept=".txt,.md,.markdown,text/plain" hidden />
+      </div>
+    </header>
+
+    <main class="layout">
+      <section id="editor" class="editor" aria-label="批注文本区"></section>
+      <aside id="sidebar" class="sidebar" aria-label="批注列表"></aside>
+    </main>
+
+    <div id="overlay" class="overlay hidden"></div>
+    <div id="export-modal" class="modal hidden" role="dialog" aria-label="导出批注"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,1328 @@
+{
+  "meta": {
+    "lang": "en",
+    "version": "1.3.0",
+    "unit_note": "Scoring unit: CJK chars + Latin words; report score = total weight per 1000 units",
+    "sources": [
+      "conorbronsdon/avoid-ai-writing patterns.md tier system (MIT)",
+      "blader/humanizer watch lists (MIT)",
+      "sam-paech/antislop-sampler slop phrase lists (Apache-2.0)",
+      "en.wikipedia Wikipedia:Signs of AI writing (CC BY-SA)",
+      "Kobak et al. 2024 excess vocabulary (delve/intricate/pivotal ...)",
+      "petergyang/no-ai-slop (MIT)",
+      "humzakt/ai-writing-markers vocabulary/phrases/structural (CC0-1.0 data)",
+      "MikkoParkkola/anti-ai-tell hard_ban/strong_flag/density_watch/copulative_avoidance (MIT)",
+      "tbhb/vale-ai-tells ai-tells styles（保守子集：LabelAndExplain/RhetoricalSelfAnswer/Metacommentary 等）",
+      "hardikpandya/stop-slop SKILL + PR#4/5/8 tells (MIT)",
+      "isatimur/de-slop slop-catalogue 与 _WEIGHTS (MIT)",
+      "shessenauer/deslop-ai-lint-skill taxonomy (MIT)",
+      "gabelul/slopbuster rules (MIT)",
+      "MohamedAbdallah-14/unslop skill (MIT)"
+    ]
+  },
+  "categories": [
+    {
+      "id": "tier1a",
+      "label": "Tier 1A — AI frequency markers (review every match)",
+      "note": "Far more common in LLM output than human prose. Cluster of these is evidence about how the text was produced. Legitimate technical or literal uses are protected.",
+      "entries": [
+        {
+          "p": "\\bdelv(?:e|ing|ed)\\b",
+          "w": 3,
+          "fix": "explore, dig into, look at"
+        },
+        {
+          "p": "\\btapest(?:ry|ries)\\b",
+          "w": 3,
+          "fix": "describe the actual complexity"
+        },
+        {
+          "p": "\\btestament to\\b",
+          "w": 3,
+          "fix": "shows, proves, demonstrates"
+        },
+        {
+          "p": "\\brealm\\b",
+          "w": 3,
+          "fix": "area, field, domain"
+        },
+        {
+          "p": "\\blandscape\\b",
+          "w": 2,
+          "note": "abstract/metaphorical use only; literal geography protected"
+        },
+        {
+          "p": "\\bparadigm(?:-shift(?:ing)?)?\\b",
+          "w": 3,
+          "fix": "model, approach, or name the shift"
+        },
+        {
+          "p": "\\bembark(?:s|ed|ing)?\\b",
+          "w": 3,
+          "fix": "start, begin"
+        },
+        {
+          "p": "\\bbeacon\\b",
+          "w": 3,
+          "fix": "example, guide; name what it is"
+        },
+        {
+          "p": "\\brobust\\b",
+          "w": 2,
+          "note": "engineering/statistics term of art protected",
+          "fix": "strong, reliable, solid"
+        },
+        {
+          "p": "\\bcomprehensive\\b",
+          "w": 2,
+          "fix": "thorough, complete, full"
+        },
+        {
+          "p": "\\bcutting-edge\\b",
+          "w": 3,
+          "fix": "latest, newest, advanced"
+        },
+        {
+          "p": "\\bleverag(?:e|ing|ed)\\b",
+          "w": 3,
+          "fix": "use"
+        },
+        {
+          "p": "\\bpivotal\\b",
+          "w": 3,
+          "fix": "important, key, critical"
+        },
+        {
+          "p": "\\bmeticulous(?:ly)?\\b",
+          "w": 3,
+          "fix": "careful, detailed, precise"
+        },
+        {
+          "p": "\\bseamless(?:ly)?\\b",
+          "w": 3,
+          "fix": "smooth, easy, without friction"
+        },
+        {
+          "p": "\\bgame-chang(?:er|ing)\\b",
+          "w": 3,
+          "fix": "say what specifically changed"
+        },
+        {
+          "p": "\\bnestled\\b",
+          "w": 3,
+          "fix": "is located, sits, is in"
+        },
+        {
+          "p": "\\bvibrant\\b",
+          "w": 3,
+          "fix": "describe what makes it active, or cut"
+        },
+        {
+          "p": "\\bthriving\\b",
+          "w": 2,
+          "fix": "growing, active, or cite a number"
+        },
+        {
+          "p": "\\bshowcas(?:e|ing|ed)\\b",
+          "w": 3,
+          "fix": "showing, demonstrating, or cut the clause"
+        },
+        {
+          "p": "\\bdeep dive\\b",
+          "w": 2,
+          "fix": "look at, examine"
+        },
+        {
+          "p": "\\bbustling\\b",
+          "w": 3,
+          "fix": "busy, active, or cite what makes it busy"
+        },
+        {
+          "p": "\\bintricat(?:e|ies)\\b",
+          "w": 3,
+          "fix": "complex, detailed, or name the complexity"
+        },
+        {
+          "p": "\\bever-evolving\\b",
+          "w": 3,
+          "fix": "changing, growing, or describe how"
+        },
+        {
+          "p": "\\benduring\\b",
+          "w": 2,
+          "fix": "lasting, long-running, or cite how long"
+        },
+        {
+          "p": "\\bdaunting\\b",
+          "w": 2,
+          "fix": "hard, difficult"
+        },
+        {
+          "p": "\\bholistic(?:ally)?\\b",
+          "w": 2,
+          "fix": "complete, full, whole"
+        },
+        {
+          "p": "\\bactionable\\b",
+          "w": 2,
+          "fix": "practical, useful, concrete"
+        },
+        {
+          "p": "\\bimpactful\\b",
+          "w": 2,
+          "fix": "effective, significant, or describe the impact"
+        },
+        {
+          "p": "\\blearnings\\b",
+          "w": 2,
+          "fix": "lessons, findings, takeaways"
+        },
+        {
+          "p": "\\bthought leadership\\b",
+          "w": 3,
+          "fix": "expertise, or describe the contribution"
+        },
+        {
+          "p": "\\bbest practices\\b",
+          "w": 2,
+          "fix": "what works, proven methods"
+        },
+        {
+          "p": "\\bsynerg(?:y|ies|istic)\\b",
+          "w": 3,
+          "fix": "describe the actual combined effect"
+        },
+        {
+          "p": "\\binterplay\\b",
+          "w": 2,
+          "fix": "relationship, connection, interaction"
+        },
+        {
+          "p": "\\bsupercharg(?:e|ed|ing)\\b",
+          "w": 3,
+          "fix": "speed up, improve"
+        },
+        {
+          "p": "\\bunparalleled\\b",
+          "w": 3,
+          "fix": "cite what makes it exceptional"
+        },
+        {
+          "p": "\\bawe-inspiring\\b",
+          "w": 3
+        },
+        {
+          "p": "\\bbreathtaking\\b",
+          "w": 2
+        },
+        {
+          "p": "\\btreasure trove\\b",
+          "w": 3
+        },
+        {
+          "p": "\\bat its core,?\\b",
+          "w": 2,
+          "fix": "cut; just state the thing"
+        },
+        {
+          "p": "\\b(plays|played) a (crucial|vital|pivotal|key) (role|part)\\b",
+          "w": 3,
+          "fix": "say what it actually does"
+        },
+        {
+          "p": "\\bstands as\\b",
+          "w": 2,
+          "fix": "is"
+        },
+        {
+          "p": "\\bserves as\\b",
+          "w": 2,
+          "evidence": false,
+          "fix": "is; clarity edit, not authorship evidence"
+        },
+        {
+          "p": "\\bunderscor(?:e|es|ing)\\b",
+          "w": 2,
+          "fix": "highlights, shows"
+        },
+        {
+          "p": "\\bfoster(?:s|ing|ed)?\\b",
+          "w": 2,
+          "fix": "encourage, support, build"
+        },
+        {
+          "p": "\\bharness(?:es|ing|ed)?\\b",
+          "w": 2,
+          "fix": "use, take advantage of"
+        },
+        {
+          "p": "\\bunlock(?:s|ing|ed)? (?:the )?(?:potential|power)\\b",
+          "w": 3
+        },
+        {
+          "p": "\\bnavigat(?:e|ing|ion of) the (?:complexities|challenges|landscape)\\b",
+          "w": 3,
+          "fix": "work through, handle"
+        },
+        {
+          "p": "\\bcommendable\\b",
+          "w": 3,
+          "fix": "say what was actually good",
+          "note": "Liang 2024: 9.8x fold-increase in ICLR reviews"
+        },
+        {
+          "p": "\\bgarner(?:s|ed|ing)?\\b",
+          "w": 2,
+          "fix": "won, earned, got"
+        },
+        {
+          "p": "\\bunveil(?:s|ed|ing)?\\b",
+          "w": 2,
+          "fix": "announced, released, showed"
+        },
+        {
+          "p": "\\binvaluable\\b",
+          "w": 2,
+          "fix": "helped how? name the outcome"
+        },
+        {
+          "p": "\\bnoteworthy\\b",
+          "w": 2,
+          "fix": "say what makes it worth noting"
+        },
+        {
+          "p": "\\bversatile\\b",
+          "w": 2,
+          "fix": "list the actual use cases"
+        },
+        {
+          "p": "\\bskyrocket(?:s|ed|ing)?\\b",
+          "w": 2,
+          "fix": "give the number"
+        },
+        {
+          "p": "\\baptly\\b",
+          "w": 2,
+          "fix": "cut the adverb"
+        },
+        {
+          "p": "\\blucidly\\b",
+          "w": 2,
+          "fix": "cut the adverb; if it explains, quote it"
+        },
+        {
+          "p": "\\bcomprehensively\\b",
+          "w": 2,
+          "fix": "say what was covered, or cut"
+        },
+        {
+          "p": "\\bat its heart,?\\b",
+          "w": 1,
+          "fix": "cut — just state the thing"
+        },
+        {
+          "p": "\\bfrictionless\\b",
+          "w": 2,
+          "fix": "say what friction was removed"
+        },
+        {
+          "p": "\\bturnkey\\b",
+          "w": 2,
+          "fix": "list what is included"
+        },
+        {
+          "p": "\\bbleeding-edge\\b",
+          "w": 2,
+          "fix": "name the actual version or technique"
+        },
+        {
+          "p": "\\bnext-generation\\b",
+          "w": 2,
+          "fix": "say what changed vs the last one"
+        }
+      ]
+    },
+    {
+      "id": "tier1b",
+      "label": "Tier 1B — clarity edits (wordiness, not authorship evidence)",
+      "note": "Replacing them is good writing regardless of who wrote the sentence; excluded from the AI-evidence score.",
+      "entries": [
+        {
+          "p": "\\butiliz(?:e|es|ing|ed)\\b",
+          "w": 1,
+          "evidence": false,
+          "fix": "use"
+        },
+        {
+          "p": "\\bin order to\\b",
+          "w": 1,
+          "evidence": false,
+          "fix": "to"
+        },
+        {
+          "p": "\\bdue to the fact that\\b",
+          "w": 1,
+          "evidence": false,
+          "fix": "because"
+        },
+        {
+          "p": "\\bboasts?\\b",
+          "w": 1,
+          "evidence": false,
+          "note": "verb sense; 'boasts a museum' not 'boasts about'",
+          "fix": "has"
+        },
+        {
+          "p": "\\bcommenc(?:e|es|ing|ed)\\b",
+          "w": 1,
+          "evidence": false,
+          "fix": "start, begin"
+        },
+        {
+          "p": "\\bascertain\\b",
+          "w": 1,
+          "evidence": false,
+          "fix": "find out, determine"
+        },
+        {
+          "p": "\\bendeavor\\b",
+          "w": 1,
+          "evidence": false,
+          "fix": "effort, attempt, try"
+        },
+        {
+          "p": "\\bmarks (?:a|an)\\b",
+          "w": 1,
+          "evidence": false,
+          "fix": "is"
+        },
+        {
+          "p": "\\brepresents? (?:a|an)\\b",
+          "w": 1,
+          "evidence": false,
+          "fix": "is"
+        },
+        {
+          "p": "\\bfeatures? (?:a|an)\\b",
+          "w": 1,
+          "evidence": false,
+          "fix": "has"
+        },
+        {
+          "p": "\\boffers? a glimpse\\b",
+          "w": 1,
+          "evidence": false,
+          "fix": "shows"
+        },
+        {
+          "p": "\\ba wide (?:variety|array|range) of\\b",
+          "w": 1,
+          "evidence": false,
+          "fix": "name the things, or give a number"
+        },
+        {
+          "p": "\\b(?:functions|acts|operates) as\\b",
+          "w": 1,
+          "evidence": false,
+          "fix": "is",
+          "note": "copula avoidance family (slopbuster #8)"
+        }
+      ]
+    },
+    {
+      "id": "tier2",
+      "label": "Tier 2 — flag when 2+ appear in the same paragraph",
+      "note": "Individually fine; two or more in one paragraph is a strong AI signal. Literal/technical uses protected.",
+      "entries": [
+        {
+          "p": "\\belevat(?:e|ing|ed)\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "improve, raise"
+        },
+        {
+          "p": "\\bunleash(?:es|ing|ed)?\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "release, enable"
+        },
+        {
+          "p": "\\bstreamlin(?:e|ing|ed)\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "simplify, speed up"
+        },
+        {
+          "p": "\\bempower(?:s|ing|ed)?\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "enable, let, allow"
+        },
+        {
+          "p": "\\bbolster(?:s|ing|ed)?\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "support, strengthen"
+        },
+        {
+          "p": "\\bspearhead(?:s|ing|ed)?\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "lead, drive"
+        },
+        {
+          "p": "\\bresonat(?:e|es|ing|ed) with\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "connect with, appeal to"
+        },
+        {
+          "p": "\\brevolutioniz(?:e|ing|ed)\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "changed, transformed"
+        },
+        {
+          "p": "\\bfacilitat(?:e|es|ing|ed)\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "help, enable, run"
+        },
+        {
+          "p": "\\bunderpin(?:s|ning|nings)?\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "support, basis"
+        },
+        {
+          "p": "\\bnuanced\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "specific, subtle, or name the nuance"
+        },
+        {
+          "p": "\\bcrucial\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "important, key, necessary"
+        },
+        {
+          "p": "\\bmultifaceted\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "describe the actual facets"
+        },
+        {
+          "p": "\\becosystem\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "note": "biology/tech term of art protected",
+          "fix": "system, community, market"
+        },
+        {
+          "p": "\\bmyriad\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "many, or give a number"
+        },
+        {
+          "p": "\\bplethora\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "many, a lot of"
+        },
+        {
+          "p": "\\bencompass(?:es|ing|ed)?\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "include, cover"
+        },
+        {
+          "p": "\\bcatalyz(?:e|es|ing|ed)\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "trigger, accelerate"
+        },
+        {
+          "p": "\\breimagin(?:e|ing|ed)\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "rethink, redesign"
+        },
+        {
+          "p": "\\bgalvaniz(?:e|es|ing|ed)\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "motivate, rally"
+        },
+        {
+          "p": "\\baugment(?:s|ing|ed)?\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "add to, expand"
+        },
+        {
+          "p": "\\bcultivat(?:e|es|ing|ed)\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "build, develop, grow"
+        },
+        {
+          "p": "\\billuminat(?:e|es|ing|ed)\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "clarify, explain"
+        },
+        {
+          "p": "\\belucidat(?:e|es|ing|ed)\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "explain, spell out"
+        },
+        {
+          "p": "\\bjuxtapos(?:e|es|ing|ed)\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "compare, set side by side"
+        },
+        {
+          "p": "\\btransform(?:ative|ation)\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "describe what changed and how"
+        },
+        {
+          "p": "\\bcornerstone\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "foundation, basis"
+        },
+        {
+          "p": "\\bparamount\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "most important, top priority"
+        },
+        {
+          "p": "\\bpoised to\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "ready, about to"
+        },
+        {
+          "p": "\\bburgeoning\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "growing, emerging"
+        },
+        {
+          "p": "\\bnascent\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "new, early-stage"
+        },
+        {
+          "p": "\\bquintessential\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "typical, classic"
+        },
+        {
+          "p": "\\boverarching\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "main, central"
+        },
+        {
+          "p": "\\bgroundbreaking\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "new, original"
+        },
+        {
+          "p": "\\brenowned\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "famous, known for"
+        },
+        {
+          "p": "\\bdiverse (?:array|range|tapestry) of\\b",
+          "w": 3,
+          "fix": "name the actual items"
+        },
+        {
+          "p": "\\bvital\\b",
+          "w": 0,
+          "cluster_w": 3,
+          "mode": "cluster",
+          "cluster_min": 2,
+          "fix": "important, necessary, or name what breaks without it"
+        }
+      ]
+    },
+    {
+      "id": "tier3",
+      "label": "Tier 3 — flag only at high density",
+      "note": "Normal words AI uses instead of specifics. Suppressed until the document is saturated; then replace some with numbers, comparisons, examples.",
+      "entries": [
+        {
+          "p": "\\bsignifican(?:t|tly)\\b",
+          "w": 0,
+          "mode": "density",
+          "density_min": 4,
+          "density_w": 2,
+          "fix": "give the number or comparison"
+        },
+        {
+          "p": "\\binnovati(?:ve|on|ons)\\b",
+          "w": 0,
+          "mode": "density",
+          "density_min": 3,
+          "density_w": 2,
+          "fix": "describe what is actually new"
+        },
+        {
+          "p": "\\beffectiv(?:e|ely)\\b",
+          "w": 0,
+          "mode": "density",
+          "density_min": 4,
+          "density_w": 2,
+          "fix": "say how, or cite a metric"
+        },
+        {
+          "p": "\\bdynamic(?:s)?\\b",
+          "w": 0,
+          "mode": "density",
+          "density_min": 4,
+          "density_w": 2,
+          "fix": "name the actual forces"
+        },
+        {
+          "p": "\\bscalabl(?:e|ity)\\b",
+          "w": 0,
+          "mode": "density",
+          "density_min": 3,
+          "density_w": 2,
+          "fix": "describe what scales and to what"
+        },
+        {
+          "p": "\\bcompelling\\b",
+          "w": 0,
+          "mode": "density",
+          "density_min": 3,
+          "density_w": 2,
+          "fix": "say why it compels"
+        },
+        {
+          "p": "\\bunprecedented\\b",
+          "w": 0,
+          "mode": "density",
+          "density_min": 3,
+          "density_w": 2,
+          "fix": "name the precedent it breaks"
+        },
+        {
+          "p": "\\bexceptional(?:ly)?\\b",
+          "w": 0,
+          "mode": "density",
+          "density_min": 3,
+          "density_w": 2,
+          "fix": "cite what makes it an exception"
+        },
+        {
+          "p": "\\bremarkabl(?:e|y)\\b",
+          "w": 0,
+          "mode": "density",
+          "density_min": 3,
+          "density_w": 2,
+          "fix": "say what is worth remarking on"
+        },
+        {
+          "p": "\\bsophisticated\\b",
+          "w": 0,
+          "mode": "density",
+          "density_min": 3,
+          "density_w": 2,
+          "fix": "describe the sophistication"
+        },
+        {
+          "p": "\\binstrumental\\b",
+          "w": 0,
+          "mode": "density",
+          "density_min": 3,
+          "density_w": 2,
+          "fix": "say what role it played"
+        },
+        {
+          "p": "\\b(?:world-class|state-of-the-art|best-in-class)\\b",
+          "w": 0,
+          "mode": "density",
+          "density_min": 3,
+          "density_w": 2,
+          "fix": "cite a benchmark or comparison"
+        },
+        {
+          "p": "\\bdramatic(?:ally)?\\b",
+          "w": 0,
+          "mode": "density",
+          "density_min": 3,
+          "density_w": 2,
+          "fix": "state the change"
+        },
+        {
+          "p": "\\b[Ee]nhanc(?:e|es|ed|ing|ments?)\\b",
+          "w": 0,
+          "mode": "density",
+          "density_min": 4,
+          "density_w": 1,
+          "fix": "improved what, by how much"
+        },
+        {
+          "p": "\\binsights?\\b",
+          "w": 0,
+          "mode": "density",
+          "density_min": 3,
+          "density_w": 2,
+          "fix": "what did you learn that you can act on"
+        },
+        {
+          "p": "\\bfindings\\b",
+          "w": 0,
+          "mode": "density",
+          "density_min": 3,
+          "density_w": 1,
+          "fix": "state the finding"
+        },
+        {
+          "p": "\\b[Ee]xhibi(?:t|ts|ted|ting)\\b",
+          "w": 0,
+          "mode": "density",
+          "density_min": 2,
+          "density_w": 2,
+          "fix": "showed"
+        },
+        {
+          "p": "\\balign(?:s|ed|ing)? with\\b",
+          "w": 0,
+          "mode": "density",
+          "density_min": 3,
+          "density_w": 1,
+          "fix": "matches, fits, agrees with"
+        },
+        {
+          "p": "\\b[Nn]ovel\\b",
+          "w": 0,
+          "mode": "density",
+          "density_min": 3,
+          "density_w": 2,
+          "fix": "say what is actually new"
+        }
+      ]
+    },
+    {
+      "id": "transitions",
+      "label": "Transitions & filler frames",
+      "note": "Restructure so the connection is obvious, or cut. One deliberate use in the writer's own voice is fine.",
+      "entries": [
+        {
+          "p": "\\bMoreover,|\\bFurthermore,|\\bAdditionally,",
+          "w": 1,
+          "fix": "and, also, on top of that; or restructure"
+        },
+        {
+          "p": "\\bIn conclusion,|\\bIn summary,|\\bTo sum up,?",
+          "w": 2,
+          "fix": "end on the last concrete point"
+        },
+        {
+          "p": "\\bIt'?s (?:important|worth) (?:to note|noting) (?:that )?",
+          "w": 2,
+          "fix": "just state it"
+        },
+        {
+          "p": "\\bAt the end of the day,?",
+          "w": 2,
+          "fix": "cut"
+        },
+        {
+          "p": "\\bWhen it comes to\\b",
+          "w": 1,
+          "fix": "talk about the thing directly"
+        },
+        {
+          "p": "\\bIn today'?s\\b",
+          "w": 2,
+          "fix": "state the specific context"
+        },
+        {
+          "p": "\\bIn an era where\\b",
+          "w": 2
+        },
+        {
+          "p": "\\bThat (?:being )?said,?",
+          "w": 1,
+          "fix": "but, yet; don't overuse"
+        },
+        {
+          "p": "\\bNeedless to say,?",
+          "w": 2
+        },
+        {
+          "p": "\\bThe reality is that\\b",
+          "w": 2,
+          "fix": "cut or state the claim"
+        },
+        {
+          "p": "\\bIn terms of\\b",
+          "w": 1,
+          "evidence": false,
+          "fix": "rewrite"
+        },
+        {
+          "p": "\\bgoing forward,?",
+          "w": 1
+        },
+        {
+          "p": "\\bIn essence,?|\\bUltimately,?|\\bConsequently,",
+          "w": 1,
+          "fix": "restructure so the connection is obvious, or cut"
+        },
+        {
+          "p": "\\bNotably,|\\bImportantly,",
+          "w": 1,
+          "fix": "if it matters, the sentence should show it"
+        },
+        {
+          "p": "^(?:Essentially|Fundamentally|Specifically|Significantly),",
+          "w": 1,
+          "flags": [
+            "MULTILINE"
+          ],
+          "fix": "cut the sentence opener"
+        },
+        {
+          "p": "\\b[Ii]t is (?:important|worth) (?:to note|noting) that\\b",
+          "w": 2,
+          "fix": "just state it"
+        },
+        {
+          "p": "\\b[Oo]ne must (?:remember|note|understand)\\b",
+          "w": 2,
+          "fix": "state the fact directly"
+        },
+        {
+          "p": "\\b[Gg]enerally speaking,?\\b|\\b[Ii]t should be noted that\\b",
+          "w": 1,
+          "fix": "state the fact; drop the throat-clear"
+        }
+      ]
+    },
+    {
+      "id": "chatbot_residue",
+      "label": "Chatbot artifacts & meta-narration",
+      "note": "Conversational tics from chat interfaces, not writing. Remove entirely.",
+      "entries": [
+        {
+          "p": "\\bI hope this helps",
+          "w": 3
+        },
+        {
+          "p": "(?:^|\\n)\\s*(?:Certainly|Absolutely|Of course|Great question)[!.]",
+          "w": 3,
+          "note": "仅命中独立短句回答；「Of course, ...」让步从句不受影响"
+        },
+        {
+          "p": "\\bFeel free to (?:reach out|let me know)",
+          "w": 3
+        },
+        {
+          "p": "\\bLet me know if (?:you|this)",
+          "w": 3
+        },
+        {
+          "p": "\\bHere'?s the (?:thing|deal):?",
+          "w": 3,
+          "fix": "cut and state the point"
+        },
+        {
+          "p": "\\bLet'?s (?:dive in|explore|take a look|break this down|unpack)",
+          "w": 3,
+          "fix": "start with the point"
+        },
+        {
+          "p": "\\bBuckle up",
+          "w": 3
+        },
+        {
+          "p": "\\bLook no further",
+          "w": 3
+        },
+        {
+          "p": "\\bAs an AI(?: language model)?\\b",
+          "w": 3
+        },
+        {
+          "p": "\\b(?:up to|as of) my last (?:training )?update\\b",
+          "w": 3
+        },
+        {
+          "p": "\\bIn this (?:article|post|essay),? we (?:will|'?ll) (?:explore|discuss|take)",
+          "w": 3,
+          "fix": "direct opening"
+        },
+        {
+          "p": "\\bWhat if I told you",
+          "w": 3
+        },
+        {
+          "p": "\\bThink about it:?",
+          "w": 2
+        },
+        {
+          "p": "\\b(?:Experts|Studies|Research) (?:agree|show|suggest|indicate)\\b",
+          "w": 2,
+          "fix": "name the source, or cut the claim"
+        },
+        {
+          "p": "\\b(?:marking|mark) a pivotal moment\\b",
+          "w": 3,
+          "fix": "state what happened"
+        },
+        {
+          "p": "\\bThe future looks bright\\b",
+          "w": 3,
+          "fix": "say something specific or nothing"
+        },
+        {
+          "p": "\\bOnly time will tell\\b",
+          "w": 3
+        },
+        {
+          "p": "\\b[Bb]ased on the (?:information|context) provided\\b",
+          "w": 2,
+          "fix": "cut; answer the question directly"
+        },
+        {
+          "p": "\\b[Ii] hope this (?:email|message) finds you well\\b",
+          "w": 2,
+          "fix": "delete the pleasantry"
+        },
+        {
+          "p": "\\b[Ee]ver wondered\\b",
+          "w": 2,
+          "fix": "engagement bait; state the answer"
+        },
+        {
+          "p": "\\b[Yy]ou'?re absolutely right\\b",
+          "w": 2,
+          "fix": "cut the flattery, answer directly"
+        },
+        {
+          "p": "\\b[Ii] cannot (?:browse|access) the (?:internet|web)\\b|\\b(?:no|don'?t have) access to real-time\\b",
+          "w": 2,
+          "fix": "capability disclaimer; state what the source shows"
+        },
+        {
+          "p": "\\b[Ww]hat would you like me to\\b",
+          "w": 2,
+          "fix": "answer, then offer one concrete next step"
+        },
+        {
+          "p": "\\b[Ll]et'?s be (?:honest|real),?",
+          "w": 2,
+          "note": "performed candor",
+          "fix": "make the point without announcing honesty"
+        },
+        {
+          "p": "\\b[Ww]ithout further ado,?\\b",
+          "w": 2,
+          "fix": "delete the announcement"
+        },
+        {
+          "p": "\\b[Ww]hat a (?:fascinating|great|wonderful)\\b",
+          "w": 2,
+          "fix": "cut the flattery (unslop sycophancy list)"
+        }
+      ]
+    },
+    {
+      "id": "structural",
+      "label": "Structural & formatting patterns",
+      "note": "Regex-level structural tells. Each finding is a candidate; meaning and genre decide.",
+      "entries": [
+        {
+          "p": "\\bnot [^.!?]{3,60}\\bbut\\b",
+          "w": 3,
+          "flags": [
+            "IGNORECASE"
+          ],
+          "fix": "state the point directly",
+          "note": "negative parallelism (adapted from antislop-sampler)"
+        },
+        {
+          "p": "\\b(?:isn'?t|not) (?:just|merely|simply)[^.!?]{3,60}\\b(?:it'?s|but)\\b",
+          "w": 3,
+          "flags": [
+            "IGNORECASE"
+          ],
+          "note": "not just X, it's Y"
+        },
+        {
+          "p": "\\bIt'?s not [^.!?]{2,50}\\.\\s*It'?s\\b",
+          "w": 3,
+          "note": "split-sentence binary contrast"
+        },
+        {
+          "p": "\\b(?:Not|Never) [a-z][^.!?]{1,30}\\.\\s*(?:Not|No)\\b",
+          "w": 2,
+          "note": "negative listing"
+        },
+        {
+          "p": "\\bImagine a world where\\b",
+          "w": 3,
+          "fix": "state the claim at the same confidence"
+        },
+        {
+          "p": "\\bPicture a (?:future|world)\\b",
+          "w": 3
+        },
+        {
+          "p": "\\bWhether you'?re (?:a|an) [^.!?]{3,50} or (?:a|an)\\b",
+          "w": 2,
+          "fix": "pick the audience you are addressing"
+        },
+        {
+          "p": " — ",
+          "w": 0,
+          "mode": "density",
+          "density_min": 4,
+          "density_w": 2,
+          "fix": "periods, commas, colons, parentheses",
+          "note": "em dash as universal connector"
+        },
+        {
+          "p": "(?:(?:^|\\s)#[A-Za-z0-9_]+){6,}",
+          "w": 2,
+          "flags": [
+            "MULTILINE"
+          ],
+          "note": "hashtag stuffing; issue refs, hex colors, code excluded by prose-only scan"
+        },
+        {
+          "p": "\\b(?:could potentially|may eventually|might ultimately|will potentially)\\b",
+          "w": 2,
+          "fix": "keep the one qualifier that carries the uncertainty"
+        },
+        {
+          "p": "\\b(?:delve|dive|journey) into the (?:world|realm) of\\b",
+          "w": 3
+        },
+        {
+          "p": "\\b(?:a testament to|a symbol of) (?:the )?(?:human|enduring|lasting)\\b",
+          "w": 3
+        },
+        {
+          "p": "\\b(?:highlighting|underscoring|reflecting|emphasizing|symbolizing|showcasing) (?:the|its)\\b",
+          "w": 2,
+          "fix": "keep only what the source supports",
+          "note": "superficial -ing rider"
+        },
+        {
+          "p": "\\b(?:Despite|Against) (?:these )?challenges[^.!?]{0,60}(?:continues to|remains)\\b",
+          "w": 3,
+          "fix": "name the challenge and the response, or cut"
+        },
+        {
+          "p": "\\bThe (?:result|answer|catch|kicker|bottom line|best part|worst part|irony|twist|takeaway|lesson|upside|downside|trade-?off|verdict|caveat|fix|short answer|hard part|scary part|surprising part|interesting part|point)\\?",
+          "w": 2,
+          "fix": "integrate the point into the surrounding sentence",
+          "note": "rhetorical self-answer: question mark used as a drumroll"
+        },
+        {
+          "p": "\\bThe (?:price|catch|kicker|upshot|tradeoff|trade-off|trick|cost|downside|flip side|bottom line|takeaway|result|answer|reason|lesson|moral|point|pitch|fix|payoff):",
+          "w": 1,
+          "fix": "write the sentence out; the label adds no information",
+          "note": "label-and-explain colon"
+        },
+        {
+          "p": "\\*\\*(?:Key (?:insight|takeaway|point)|Important|Note|Bottom line|The point)[.:]?\\*\\*",
+          "w": 2,
+          "fix": "cut the leftover chatbot markup",
+          "note": "leftover AI markup"
+        },
+        {
+          "p": "\\bThis matters because\\b|\\bThe (?:key|point|insight|idea|important thing) here is\\b",
+          "w": 2,
+          "fix": "delete the meta-commentary, keep the point"
+        },
+        {
+          "p": "\\b[Tt]his is where [^\\n.!?]{1,40} comes in\\b",
+          "w": 2,
+          "fix": "state the thing's role directly"
+        },
+        {
+          "p": "\\b[Tt]hink of it as\\b",
+          "w": 1,
+          "fix": "if the analogy explains a mechanism, keep it without the prompt"
+        },
+        {
+          "p": "\\bpav(?:es|ed|ing) the way\\b",
+          "w": 1,
+          "fix": "enabled, made possible"
+        },
+        {
+          "p": "\\bshed light on\\b",
+          "w": 1,
+          "fix": "explained, revealed"
+        },
+        {
+          "p": "\\bleft an indelible mark\\b",
+          "w": 2,
+          "fix": "say what changed and how it still shows"
+        },
+        {
+          "p": "\\bsetting the stage for\\b",
+          "w": 1,
+          "fix": "made the next step possible"
+        },
+        {
+          "p": "\\bthe transformative power of\\b",
+          "w": 2,
+          "fix": "say what it changes, for whom"
+        },
+        {
+          "p": "\\boffers? a glimpse (?:into|of)\\b",
+          "w": 1,
+          "fix": "shows a bit of; or name what is shown"
+        },
+        {
+          "p": "\\b[Mm]ake no mistake,?\\b",
+          "w": 2,
+          "note": "emphasis crutch",
+          "fix": "show why it matters instead of asserting it"
+        },
+        {
+          "p": "\\b[Ll]et me walk you through\\b",
+          "w": 2,
+          "fix": "delete the tour-guide frame"
+        },
+        {
+          "p": "\\b[Hh]ere'?s the truth[,:]\\b|\\b[Yy]ou'?ve been (?:told|led to believe)\\b",
+          "w": 1,
+          "note": "corrective reveal posture",
+          "fix": "make the claim with evidence, skip the reveal frame"
+        },
+        {
+          "p": "\\b[Ii]t wasn'?t [^.!?]{1,40}\\. [Ii]t wasn'?t",
+          "w": 2,
+          "note": "negative-listing staccato",
+          "fix": "state the one thing that was true"
+        },
+        {
+          "p": "\\b[Ss]omething (?:shifted|changed)\\.|\\b[Ee]verything changed\\.|\\b[Aa]nd then it hit me\\b",
+          "w": 2,
+          "note": "dramatic fragment",
+          "fix": "say what actually happened"
+        },
+        {
+          "p": "\\b(?:20\\d{2}-xx-xx|20\\d{2}-01-0[xX])\\b|\\baccess-date=20\\d{2}",
+          "w": 2,
+          "note": "leftover template data",
+          "fix": "fill or remove the placeholder"
+        },
+        {
+          "p": "\\bserves as a (?:powerful |sobering |stark |timely )?reminder (?:that|of)\\b",
+          "w": 2,
+          "fix": "say what reminds whom of what"
+        },
+        {
+          "p": "\\b[Rr]esults may vary\\b",
+          "w": 1,
+          "fix": "give the actual range or drop the claim"
+        },
+        {
+          "p": "\\bmore than just\\b|\\bgoes? beyond\\b",
+          "w": 1,
+          "note": "negative-parallelism kin (slopbuster #9)",
+          "fix": "state Y directly"
+        },
+        {
+          "p": "(?:[Ff]rom [^.;!?]{2,40} to [^.;!?]{2,40}[;,]?\\s*){2,}",
+          "w": 2,
+          "note": "false-range sweep: chained from-X-to-Y (slopbuster #12)",
+          "fix": "list the actual topics"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "name": "inkmark",
+  "private": true,
+  "version": "0.1.0",
+  "description": "划词批注工作台：给 AI 改过的文本做行内批注，一键导出原文+批注 / 片段+批注 / 评审引用块",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "check": "tsc --noEmit && vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vite": "^7.0.0",
+    "vitest": "^3.0.0"
+  }
+}
