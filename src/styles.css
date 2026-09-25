@@ -257,3 +257,30 @@
       hover:bg-destructive/10 hover:text-destructive;
   }
 }
+
+/* ---------------------------------------------------------------- 分隔拖拽条 */
+
+.resize-handle {
+  @apply relative flex shrink-0 cursor-col-resize items-center justify-center bg-transparent;
+  touch-action: none;
+}
+.resize-handle::before {
+  /* 命中区加宽，视觉条只有 4px */
+  content: '';
+  position: absolute;
+  inset: 0 -3px;
+}
+.resize-thumb {
+  @apply flex h-14 w-1 items-center justify-center rounded-full opacity-0 transition-opacity duration-150
+    text-muted-foreground bg-border;
+}
+.resize-handle:hover .resize-thumb,
+.resize-handle.dragging .resize-thumb {
+  @apply opacity-100;
+}
+.resize-handle.dragging .resize-thumb {
+  @apply bg-ring h-24;
+}
+body.select-none {
+  user-select: none;
+}

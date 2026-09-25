@@ -9,6 +9,7 @@ import { FileTreeView } from './ui/filetree'
 import { AnnotationPopup } from './ui/annotation-popup'
 import { SelectionPin, type SelectionInfo } from './ui/selection-pin'
 import { SidebarView } from './ui/sidebar'
+import { initResizers } from './ui/resizer'
 import { SAMPLE_TEXT } from './ui/sample'
 import type { Annotation, AnnotationInput, DocItem, SlopLexicon, Workspace } from './core/types'
 import { loadWorkspace, saveWorkspace } from './ui/storage'
@@ -460,27 +461,16 @@ function clearCurrent(): void {
   removeDoc(doc.id)
 }
 
-// 侧栏 / 文档树收起
+// 侧栏 / 文档树收起：flex 布局下隐藏元素自然退出，flex-1 的中区自动占满，
+// 不需要任何列模板映射（此前 grid 自动放置会把中区挤进 6px 分隔列）
 function togglePanel(which: 'tree' | 'sidebar'): void {
-  const layout = $('#layout')
-  const tree = $('#filetree')
-  const side = $('#sidebar')
-  const cols = {
-    both: 'grid h-[calc(100vh-57px)] grid-cols-1 lg:grid-cols-[240px_minmax(0,1fr)_380px]',
-    treeOnly: 'grid h-[calc(100vh-57px)] grid-cols-1 lg:grid-cols-[240px_minmax(0,1fr)]',
-    sideOnly: 'grid h-[calc(100vh-57px)] grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px]',
-    none: 'grid h-[calc(100vh-57px)] grid-cols-1',
-  }
-  let mode: keyof typeof cols
   if (which === 'tree') {
-    const off = tree.classList.toggle('hidden')
-    mode = off ? 'treeOnly' : 'both'
+    const off = $('#filetree').classList.toggle('hidden')
+    $('#handle-left').classList.toggle('hidden', off)
   } else {
-    const off = side.classList.toggle('hidden')
-    mode = off ? 'sideOnly' : 'both'
+    const off = $('#sidebar').classList.toggle('hidden')
+    $('#handle-right').classList.toggle('hidden', off)
   }
-  if (tree.classList.contains('hidden') && side.classList.contains('hidden')) mode = 'none'
-  layout.className = cols[mode]
 }
 
 $('#btn-sample').addEventListener('click', loadSample)
@@ -548,6 +538,13 @@ function bootstrap(): void {
   state = loadWorkspace()
   rerender(false)
   renderSaveStatus()
+  initResizers({
+    layout: $('#layout'),
+    leftHandle: $('#handle-left'),
+    rightHandle: $('#handle-right'),
+    treeEl,
+    sidebarEl,
+  })
 }
 
 bootstrap()
