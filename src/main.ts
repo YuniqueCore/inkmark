@@ -8,6 +8,7 @@ import { ExporterView } from './ui/exporter'
 import { FileTreeView } from './ui/filetree'
 import { AnnotationPopup } from './ui/annotation-popup'
 import { SelectionPin, type SelectionInfo } from './ui/selection-pin'
+import { confirmDialog } from './ui/confirm'
 import { SidebarView } from './ui/sidebar'
 import { initResizers } from './ui/resizer'
 import { SAMPLE_TEXT } from './ui/sample'
@@ -80,7 +81,16 @@ const annotationPopup = new AnnotationPopup({
     }))
   },
   onDelete: (id) => {
-    mutateActive((doc) => ({ ...doc, annotations: doc.annotations.filter((a) => a.id !== id) }))
+    void (async () => {
+      const ok = await confirmDialog({
+        title: '删除这条批注？',
+        description: '删除后不可恢复。',
+        confirmText: '删除',
+        danger: true,
+      })
+      if (!ok) return
+      mutateActive((doc) => ({ ...doc, annotations: doc.annotations.filter((a) => a.id !== id) }))
+    })()
   },
   onToggleStatus: (id) => {
     mutateActive((doc) => ({
@@ -122,7 +132,16 @@ const sidebar = new SidebarView(sidebarEl, {
     sidebar.setActive(a.id)
   },
   onDelete: (id) => {
-    mutateActive((doc) => ({ ...doc, annotations: doc.annotations.filter((a) => a.id !== id) }))
+    void (async () => {
+      const ok = await confirmDialog({
+        title: '删除这条批注？',
+        description: '删除后不可恢复。',
+        confirmText: '删除',
+        danger: true,
+      })
+      if (!ok) return
+      mutateActive((doc) => ({ ...doc, annotations: doc.annotations.filter((a) => a.id !== id) }))
+    })()
   },
   onToggleStatus: (id) => {
     mutateActive((doc) => ({
@@ -149,7 +168,7 @@ const sidebar = new SidebarView(sidebarEl, {
 
 const fileTree = new FileTreeView(treeEl, {
   onOpen: (id) => switchDoc(id),
-  onRemove: (id) => removeDoc(id),
+  onRemove: (id) => void removeDoc(id),
 })
 
 const exporter = new ExporterView($('#export-modal'), $('#overlay'), {
@@ -278,15 +297,17 @@ function switchDoc(id: string): void {
   rerender(false)
 }
 
-function removeDoc(id: string): void {
+async function removeDoc(id: string): Promise<void> {
   const doc = state.docs.find((d) => d.id === id)
   if (!doc) return
   const count = doc.annotations.length
-  const ok = window.confirm(
-    count > 0
-      ? `移除「${doc.name}」？其中 ${count} 条批注会一并删除。`
-      : `移除「${doc.name}」？`,
-  )
+  const ok = await confirmDialog({
+    title: `移除「${doc.name}」？`,
+    description:
+      count > 0 ? `其中 ${count} 条批注会一并删除，删除后不可恢复。` : '删除后不可恢复。',
+    confirmText: '移除',
+    danger: true,
+  })
   if (!ok) return
   const docs = state.docs.filter((d) => d.id !== id)
   state = {
@@ -497,7 +518,7 @@ $('#folder-input').addEventListener('change', (e) => {
 })
 $('#btn-scan').addEventListener('click', runSlopScan)
 $('#btn-export').addEventListener('click', maybeExport)
-$('#btn-clear').addEventListener('click', clearCurrent)
+$('#btn-clear').addEventListener('click', () => void clearCurrent())
 $('#btn-tree').addEventListener('click', () => togglePanel('tree'))
 $('#btn-sidebar').addEventListener('click', () => togglePanel('sidebar'))
 $('#overlay').addEventListener('click', () => exporter.close())

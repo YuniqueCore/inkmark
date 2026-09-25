@@ -285,3 +285,8 @@
 body.select-none {
   user-select: none;
 }
+
+/* 破坏性确认按钮 */
+.confirm-danger {
+  @apply bg-destructive text-white shadow-xs hover:bg-destructive/90;
+}
