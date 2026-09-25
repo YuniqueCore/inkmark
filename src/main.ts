@@ -87,27 +87,41 @@ function domPointToOffset(node: Node, offset: number): number | null {
   const blk = (node.nodeType === Node.TEXT_NODE ? node.parentElement : node as HTMLElement)?.closest('.blk') as HTMLElement | null
   if (!blk) return null
   const blockStart = Number(blk.dataset.start ?? 0)
-  let domOffset = offset
-  if (node.nodeType === Node.ELEMENT_NODE) {
-    // 元素节点：offset 指子节点序号，换算为其中文本长度
-    domOffset = Array.from(node.childNodes)
+  // node 自身内部的字符前缀：文本节点取 offset；元素节点取前导子节点的文本长度
+  const innerPrefix = (): number => {
+    if (node.nodeType === Node.TEXT_NODE) return offset
+    return Array.from(node.childNodes)
       .slice(0, offset)
       .reduce((acc, child) => acc + textLengthOf(child), 0)
   }
-  let acc = 0
-  let result: number | null = null
-  const walk = (n: Node): void => {
-    if (result !== null) return
-    if (n === node) {
-      result = acc + domOffset
-      return
-    }
-    acc += textLengthOf(n)
-    for (const child of Array.from(n.childNodes)) walk(child)
+  if (node === blk) {
+    const acc = Array.from(blk.childNodes)
+      .slice(0, offset)
+      .reduce((a, c) => a + textLengthOf(c), 0)
+    return blockStart + acc
   }
-  walk(blk)
-  // walk 结果是块内相对偏移，加上块起点才是规范文本坐标
-  return result === null ? null : blockStart + result
+  // 遍历块内 DOM：命中目标节点时累加其内部前缀；包含目标的容器递归进入；
+  // 其余兄弟按整段文本长度累加。<br> 由 textLengthOf 计 1，与规范文本的 \n 对应。
+  let acc = 0
+  let found = false
+  const visit = (n: Node): void => {
+    if (found) return
+    for (const child of Array.from(n.childNodes)) {
+      if (found) return
+      if (child === node) {
+        acc += innerPrefix()
+        found = true
+        return
+      }
+      if (child.contains(node)) {
+        visit(child)
+      } else {
+        acc += textLengthOf(child)
+      }
+    }
+  }
+  visit(blk)
+  return found ? blockStart + acc : null
 }
 
 function textLengthOf(node: Node): number {
