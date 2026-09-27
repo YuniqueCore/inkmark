@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { blockAt, snippet, splitBlocks, textQuoteSelector } from '../src/core/text'
+import { snippet, splitBlocks, textQuoteSelector } from '../src/core/text'
 
 describe('splitBlocks', () => {
   it('按空行分块，块偏移映射回原文无损', () => {
@@ -24,20 +24,6 @@ describe('splitBlocks', () => {
   it('空文本返回空数组', () => {
     expect(splitBlocks('')).toEqual([])
     expect(splitBlocks('\n\n\n')).toEqual([])
-  })
-})
-
-describe('blockAt', () => {
-  const blocks = splitBlocks('aaaa\n\nbbbb\n\ncccc')
-  it('落在块内返回该块', () => {
-    expect(blockAt(blocks, 0)?.text).toBe('aaaa')
-    expect(blockAt(blocks, 6)?.text).toBe('bbbb')
-  })
-  it('落在空行分隔区时归前一个块', () => {
-    expect(blockAt(blocks, 5)?.text).toBe('aaaa')
-  })
-  it('越界返回 undefined', () => {
-    expect(blockAt(blocks, 999)).toBeUndefined()
   })
 })
 

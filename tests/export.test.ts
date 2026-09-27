@@ -96,6 +96,21 @@ describe('偏移标注（@start-end，0-based 右端开区间）', () => {
   })
 })
 
+describe('失锚批注的导出标记', () => {
+  const lost = { ...ann('a', 4, 14, '起手壳'), anchorLost: true as const }
+
+  it('三种格式在偏移槽统一追加 ·失锚', () => {
+    expect(exportInline(TEXT, [lost])).toContain('【批注①·问题 @4-14·失锚】起手壳')
+    expect(exportSnippets(TEXT, [lost])).toContain('【片段① @4-14·失锚】')
+    expect(exportReview(TEXT, [lost])).toContain('> 原文 @4-14·失锚：')
+  })
+
+  it('正常批注不带失锚标记', () => {
+    expect(exportInline(TEXT, [ann('a', 4, 14, '起手壳')])).not.toContain('失锚')
+    expect(exportReview(TEXT, [ann('a', 4, 14, '起手壳')])).not.toContain('失锚')
+  })
+})
+
 describe('exportFileName', () => {
   it('来源文件名打头，去扩展名，带格式与日期', () => {
     const d = new Date('2026-09-28T00:00:00Z')

@@ -25,6 +25,8 @@ export class AnnotationPopup {
   private activeId: string | null = null
   /** 当前正在原位编辑的批注 */
   private editingId: string | null = null
+  /** 编辑态的类型选择（进入编辑时从批注自身初始化） */
+  private editKind: AnnotationKind = 'issue'
   private anchorRect: DOMRect | null = null
   private arrowEl: HTMLElement
   private stopAutoUpdate: (() => void) | null = null
@@ -236,8 +238,6 @@ export class AnnotationPopup {
       })
     })
   }
-
-  private editKind: AnnotationKind = 'issue'
 
   private saveEdit(): void {
     if (!this.editingId) return

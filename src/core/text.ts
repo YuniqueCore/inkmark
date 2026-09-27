@@ -51,28 +51,6 @@ export function splitBlocks(text: string): Block[] {
   return blocks
 }
 
-/** 找偏移所在的块（二分）。偏移落在空行分隔区时归前一个块；越过全文末尾返回 undefined。 */
-export function blockAt(blocks: Block[], offset: number): Block | undefined {
-  const last = blocks[blocks.length - 1]
-  if (!last || offset > last.start + last.text.length) return undefined
-  let lo = 0
-  let hi = blocks.length - 1
-  let found: Block | undefined
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1
-    const b = blocks[mid]!
-    if (offset < b.start) {
-      hi = mid - 1
-    } else if (offset >= b.start + b.text.length) {
-      found = b
-      lo = mid + 1
-    } else {
-      return b
-    }
-  }
-  return found
-}
-
 /** HTML 转义：渲染层把任意文本插入 innerHTML 模板的唯一出口（含属性值，
  * 引号转义防止属性逃逸）。此前 editor / confirm / filetree 各持一份且行为
  * 漂移（两份不转引号），已收敛为此处单源。 */

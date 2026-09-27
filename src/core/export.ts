@@ -49,7 +49,8 @@ function anchorText(a: Annotation, text: string, opts: ExportOptions): string {
 
 function marker(a: Annotation, num: string): string {
   const label = KIND_LABEL[a.kind]
-  return `【批注${num}·${label} @${a.start}-${a.end}】${a.comment.trim()}`
+  const lost = a.anchorLost ? '·失锚' : ''
+  return `【批注${num}·${label} @${a.start}-${a.end}${lost}】${a.comment.trim()}`
 }
 
 /**
@@ -111,7 +112,8 @@ export function exportSnippets(text: string, anns: Annotation[], opts: ExportOpt
       const num = numbers.get(a.id)!
       const quote = snippet(anchorText(a, text, opts), a.start, a.end, maxLen)
       const sideMark = a.target === 'revised' ? '（改稿）' : ''
-      return `【片段${num} @${a.start}-${a.end}】${sideMark}${quote}\n【批注${num}·${KIND_LABEL[a.kind]}】${a.comment.trim()}`
+      const lost = a.anchorLost ? '·失锚' : ''
+      return `【片段${num} @${a.start}-${a.end}${lost}】${sideMark}${quote}\n【批注${num}·${KIND_LABEL[a.kind]}】${a.comment.trim()}`
     })
     .join('\n\n')
   return opts.fileName ? `文件：${opts.fileName}\n\n${body}` : body
@@ -130,7 +132,7 @@ export function exportReview(text: string, anns: Annotation[], opts: ExportOptio
     const num = numbers.get(a.id)!
     const quote = snippet(anchorText(a, text, opts), a.start, a.end, maxLen).replace(/\n+/g, ' ')
     const sideLabel = a.target === 'revised' ? '改稿' : '原文'
-    lines.push(`> ${sideLabel} @${a.start}-${a.end}：${quote}`)
+    lines.push(`> ${sideLabel} @${a.start}-${a.end}${a.anchorLost ? '·失锚' : ''}：${quote}`)
     lines.push(`> ${KIND_MARK[a.kind]} 批注${num}（${KIND_LABEL[a.kind]}）：${a.comment.trim()}`)
     lines.push('')
   }
