@@ -239,6 +239,7 @@ function resolveSelection(e: MouseEvent): SelectionInfo | null {
     quoted,
     mouse: { x: e.clientX, y: e.clientY },
     forward,
+    docId: doc.id,
     ...(side ? { side } : {}),
   }
 }

@@ -37,16 +37,28 @@ export class AnnotationPopup {
     document.addEventListener('mousedown', (e) => {
       const t = e.target as HTMLElement
       if (this.el.contains(t) || t.closest('.seg-hl')) return
+      if (this.editingId) {
+        // 编辑中有未保存改动：误点外部不销毁编辑（保存/取消/Esc 才是出口）；
+        // 未改动则照常关闭
+        const a = this.items.find((x) => x.id === this.editingId)
+        const input = this.el.querySelector('.popup-edit-input') as HTMLTextAreaElement | null
+        if (a && input && input.value !== a.comment) return
+      }
       this.close()
     })
     document.addEventListener('keydown', (e) => {
+      if (e.isComposing) return // 输入法组合中的 Escape 是取消候选，不是关闭卡片
       if (e.key === 'Escape' && !this.el.classList.contains('hidden')) {
         // 编辑态先退出编辑，再关卡片
         if (this.editingId) this.render()
         else this.close()
       }
     })
-    window.addEventListener('resize', () => this.close())
+    window.addEventListener('resize', () => {
+      // 编辑中缩放窗口只重新定位，不销毁未保存的编辑
+      if (this.editingId) this.place()
+      else this.close()
+    })
   }
 
   /** 点击高亮入口：展示该位置的全部批注（编辑指定条时置顶） */
@@ -56,12 +68,19 @@ export class AnnotationPopup {
       this.close()
       return
     }
+    // 对同一条批注重复点击高亮：编辑中有未保存改动则保持原编辑不被重置
+    if (this.editingId && this.editingId === id) {
+      const input = this.el.querySelector('.popup-edit-input') as HTMLTextAreaElement | null
+      if (input && input.value !== anchor.comment) return
+    }
     this.sourceText = text
     this.items = annotations
       .filter((a) => a.target === anchor.target && overlaps(a, anchor))
       .sort((x, y) => (x.id === id ? -1 : y.id === id ? 1 : x.start - y.start))
     this.activeId = id
     this.editingId = edit ? id : null
+    // 编辑态直接保存时不应把类型悄悄改掉：从批注自身初始化 chip 选择
+    if (edit) this.editKind = anchor.kind
     this.el.classList.remove('hidden')
     this.render()
     this.place()
@@ -162,12 +181,22 @@ export class AnnotationPopup {
         )
       })
     })
-    // 编辑态键盘
+    // 编辑态键盘：Cmd+Enter 保存；Esc 退出编辑态回到展示（输入法组合中的
+    // Esc 属于取消候选，交给输入法）。其余按键不拦截，保持全局快捷键可用。
     const input = this.el.querySelector('.popup-edit-input') as HTMLTextAreaElement | null
     if (input) {
       input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) this.saveEdit()
-        e.stopPropagation()
+        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+          e.stopPropagation()
+          this.saveEdit()
+          return
+        }
+        if (e.key === 'Escape' && !e.isComposing) {
+          e.stopPropagation()
+          this.editingId = null
+          this.render()
+          this.place()
+        }
       })
     }
     this.el.querySelectorAll('[data-op]').forEach((btn) => {
@@ -177,6 +206,8 @@ export class AnnotationPopup {
         const id = (e.target as HTMLElement).closest('.popup-item')?.getAttribute('data-ann-id')
         if (!id) return
         if (op === 'edit') {
+          const a = this.items.find((x) => x.id === id)
+          if (a) this.editKind = a.kind
           this.editingId = id
           this.render()
           this.place()
@@ -221,7 +252,22 @@ export class AnnotationPopup {
   private place(): void {
     if (!this.anchorRect) return
     this.el.classList.remove('hidden')
-    const reference = {getBoundingClientRect: () => this.anchorRect!}
+    // 重渲染会替换高亮节点：取实时元素的矩形，滚动/缩放后卡片才能跟着锚点走
+    // （此前引用是打开时冻结的矩形，autoUpdate 虽随滚动重算、锚却不动）；
+    // 实时元素暂不在（重渲染间隙/被筛选隐藏）就沿用打开时的矩形，避免跳到左上角。
+    // contextElement 让 autoUpdate 能挂上高亮的滚动祖先监听（虚拟元素本身没有）。
+    const liveEl = this.activeId
+      ? document.querySelector(`.seg-hl[data-ann-ids~="${this.activeId}"]`)
+      : null
+    const reference = {
+      getBoundingClientRect: () => {
+        const live = this.activeId
+          ? document.querySelector(`.seg-hl[data-ann-ids~="${this.activeId}"]`)
+          : null
+        return live ? live.getBoundingClientRect() : this.anchorRect!
+      },
+      ...(liveEl ? {contextElement: liveEl} : {}),
+    }
     // 编辑时内容高度变化，autoUpdate 跟随重定位；组件关闭时停掉
     this.stopAutoUpdate?.()
     this.stopAutoUpdate = autoUpdate(reference, this.el, () => {

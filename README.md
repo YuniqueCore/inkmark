@@ -6,7 +6,7 @@ UI 按 shadcn/ui 语系构建（Tailwind CSS v4 + 设计 token，灵感来自 ra
 
 ## 功能
 
-- **划词批注**：选中正文文字 → 浮动工具条 → 选类型（问题 / 建议 / 疑问 / 重点 / 认可）→ 写批注。批注以彩色高亮留在原文上。
+- **划词批注**：选中正文文字 → 停点浮出标注小点 → hover 展开撰写卡片 → 选类型（问题 / 建议 / 疑问 / 重点 / 认可）→ 写批注。批注以彩色高亮留在原文上；**草稿保护**——输入中鼠标滑出 / 误点外部不丢稿，草稿按段落记账、重选即取回（Esc 显式取消才丢弃），卡片与弹层滚动缩放跟随锚点。
 - **编辑原文 + robust anchoring**：直接修改规范文本，完成后批注按引文自动重锚——quote 精确重定位（含 prefix/suffix 消歧），改掉的部分经行级 diff 位移钳到改动边界，批注永不因编辑丢失。
 - **对照视图**：贴入 AI 改稿，生成原文 vs 改稿的行级 track-changes diff（Myers 算法，超大改动自动降级）；**两侧都可划选写批注**——原文侧批注钉在被改动的行上，改稿侧批注钉在新增行上（侧栏带「改稿」标记），清除改稿时一并处理。
 - **三种导出**（顶栏「导出」或 ⌘/Ctrl+S）：
@@ -27,7 +27,7 @@ git clone --recurse-submodules https://github.com/YuniqueCore/inkmark.git
 bun install        # 或 npm install
 bun run dev        # 开发
 bun run build      # 类型检查 + 构建到 dist/
-bun run test       # vitest（32 个核心用例）
+bun run test       # vitest 单测
 ```
 
 > 词库来自 [natural-talk](https://github.com/YuniqueCore/natural-talk) 子模块（`skill/`），克隆时需要 `--recurse-submodules`；已克隆的仓库用 `git submodule update --init` 补齐。

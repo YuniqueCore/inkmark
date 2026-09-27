@@ -24,6 +24,8 @@ export interface SelectionInfo {
   mouse: { x: number; y: number }
   /** 拖拽方向：true = 从前往后选（上→下/左→右），false = 从后往前 */
   forward: boolean
+  /** 所属文档：草稿按文档+范围记账，避免不同文档同偏移串草稿 */
+  docId: string
   /** 锚定侧：缺省 = 原文；'b' = 对照视图的改稿新增行 */
   side?: 'b'
 }
@@ -49,6 +51,9 @@ export class SelectionPin {
   private closeTimer: ReturnType<typeof setTimeout> | undefined
   /** card 已展开（hover 进入过） */
   private expanded = false
+  /** 草稿按「文档+侧+范围」记账：写一半后划选了别处，重选同一段落可取回（含类型） */
+  private drafts = new Map<string, {text: string; kind: AnnotationKind}>()
+  private draftKey = ''
 
   constructor(private callbacks: PinCallbacks) {
     this.pin = document.createElement('button')
@@ -67,24 +72,31 @@ export class SelectionPin {
     this.card.addEventListener('mouseenter', () => this.cancelCollapse())
     this.card.addEventListener('mouseleave', () => this.scheduleCollapse())
 
+    this.card.addEventListener('input', () => this.saveDraft())
     this.card.addEventListener('click', (e) => {
       const chip = (e.target as HTMLElement).closest('.kind-chip') as HTMLElement | null
       if (chip) {
         this.kind = chip.dataset.kind as AnnotationKind
         this.refreshChips()
+        this.saveDraft()
       }
     })
     this.card.addEventListener('keydown', (e) => {
+      if (e.isComposing) return // 输入法组合中的 Enter/Escape 属于候选操作，不是提交或关闭
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) this.submit()
       if (e.key === 'Escape') {
         e.stopPropagation()
+        this.discardDraft() // Esc 是显式取消：丢弃草稿
         this.dismiss()
       }
     })
     this.card.addEventListener('click', (e) => {
       const op = (e.target as HTMLElement).dataset.op
       if (op === 'submit') this.submit()
-      if (op === 'cancel') this.dismiss()
+      if (op === 'cancel') {
+        this.discardDraft()
+        this.dismiss()
+      }
       if (op === 'copy') {
         if (this.info) this.callbacks.onCopySelection(this.info.quoted)
       }
@@ -93,12 +105,21 @@ export class SelectionPin {
     document.addEventListener('mousedown', (e) => {
       const t = e.target as HTMLElement
       if (this.pin.contains(t) || this.card.contains(t)) return
+      // 有草稿时点外部不销毁撰写状态：误触不该吞掉写了一半的批注，
+      // 重选同一段落即可取回；空卡片维持「点外部关闭」的习惯。
+      const input = this.card.querySelector('#pin-composer-input') as HTMLTextAreaElement | null
+      if (input && input.value.trim() !== '') return
       this.dismiss()
     })
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') this.dismiss()
+      if (e.isComposing) return
+      if (e.key === 'Escape') {
+        this.discardDraft() // Esc 是显式取消：丢弃草稿
+        this.dismiss()
+      }
     })
-    window.addEventListener('resize', () => this.dismiss())
+    window.addEventListener('resize', () => this.reanchor())
+    document.addEventListener('scroll', () => this.reanchor(), true)
   }
 
   /** mouseup 入口：选区稳定后亮出小点 */
@@ -108,6 +129,7 @@ export class SelectionPin {
       return
     }
     this.info = info
+    this.draftKey = `${info.docId}:${info.side ?? 'a'}:${info.start}:${info.end}`
     ;({side: this.pinSide, vertical: this.pinVertical} = pickPinPlacement(info.rect, info.forward))
     this.collapse()
     // 先定位再显示，避免小点闪现在上一次的位置
@@ -139,7 +161,8 @@ export class SelectionPin {
     if (this.expanded && !force) return
     this.expanded = true
     this.cancelCollapse()
-    this.kind = 'issue'
+    const draft = this.drafts.get(this.draftKey)
+    this.kind = draft?.kind ?? 'issue'
     const quoted = this.info.quoted
     this.card.innerHTML = `
       <div class="p-3">
@@ -161,11 +184,20 @@ export class SelectionPin {
         </div>
       </div>`
     this.refreshChips()
-    this.card.classList.add('hidden')
+    const input = this.card.querySelector('#pin-composer-input') as HTMLTextAreaElement | null
+    if (input && draft) input.value = draft.text
+    // 以 visibility:hidden 参与定位测量：display:none 会被 floating-ui 量成 0×0，
+    // shift 无法感知真实宽度，靠视口右缘时卡片按零宽度定位、整块撑出屏幕外。
+    // pop-in 动画的初始关键帧（scale 0.98）也会让测量矩形偏差几像素，一并停掉；
+    // 坐标落定后恢复，动画从正确位置起播。
+    this.card.classList.remove('hidden')
+    this.card.style.visibility = 'hidden'
+    this.card.style.animation = 'none'
     void this.placeCard().then(() => {
-      this.card.classList.remove('hidden')
-      const input = this.card.querySelector('#pin-composer-input') as HTMLTextAreaElement
-      input.focus()
+      this.card.style.visibility = ''
+      this.card.style.animation = ''
+      const input = this.card.querySelector('#pin-composer-input') as HTMLTextAreaElement | null
+      input?.focus()
     })
   }
 
@@ -176,6 +208,11 @@ export class SelectionPin {
   }
 
   private scheduleCollapse(): void {
+    // 已有草稿（含输入法组合中的文本）时不自动收起：hover 离开只应关掉「误触展开」
+    // 的空卡片，不能在输入途中吞掉撰写内容（卡片消失的根因）。写了一半的卡片只通过
+    // 提交 / 取消 / Esc / 点击卡片外部关闭。
+    const input = this.card.querySelector('#pin-composer-input') as HTMLTextAreaElement | null
+    if (input && input.value.trim() !== '') return
     this.cancelCollapse()
     this.closeTimer = setTimeout(() => this.collapse(), 320)
   }
@@ -198,7 +235,45 @@ export class SelectionPin {
       input.focus()
       return
     }
+    this.discardDraft()
     this.callbacks.onCreate(this.info, this.kind, comment)
+    this.dismiss()
+  }
+
+  /** 撰写内容记入当前范围的草稿（输入与切换类型时调用） */
+  private saveDraft(): void {
+    if (!this.draftKey) return
+    const input = this.card.querySelector('#pin-composer-input') as HTMLTextAreaElement | null
+    if (input) this.drafts.set(this.draftKey, {text: input.value, kind: this.kind})
+  }
+
+  private discardDraft(): void {
+    this.drafts.delete(this.draftKey)
+  }
+
+  /** 滚动 / 缩放后重新锚定：选区还活着就跟随其视口矩形（卡片一并重定位）；
+   * 选区没了但有草稿，收起小点、卡片作为写作面板原地保留；两者皆无才关闭。
+   * 重定位只改 left/top，不动焦点与内容，输入中的面板同样安全。 */
+  private reanchor(): void {
+    if (!this.info) return
+    const sel = window.getSelection()
+    const range = sel && sel.rangeCount > 0 ? sel.getRangeAt(0) : null
+    const startNode = range?.startContainer
+    const anchorEl = startNode
+      ? ((startNode.nodeType === Node.TEXT_NODE ? startNode.parentElement : (startNode as Element))?.closest('.editor-blk') ?? null)
+      : null
+    if (range && !sel!.isCollapsed && anchorEl) {
+      this.info = {...this.info, rect: range.getBoundingClientRect()}
+      void this.placePin().then(() => {
+        if (this.info && this.expanded) void this.placeCard()
+      })
+      return
+    }
+    const draft = this.drafts.get(this.draftKey)
+    if (draft && draft.text.trim() !== '') {
+      this.pin.classList.add('hidden')
+      return
+    }
     this.dismiss()
   }
 
@@ -210,21 +285,6 @@ export class SelectionPin {
     this.collapse()
     window.getSelection()?.removeAllRanges()
     this.callbacks.onDismiss()
-  }
-
-  /** 侧栏编辑等场景复用：以指定选区信息展开卡片 */
-  openComposerFor(info: SelectionInfo, kind: AnnotationKind, comment: string): void {
-    this.info = info
-    ;({side: this.pinSide, vertical: this.pinVertical} = pickPinPlacement(info.rect, info.forward))
-    this.pin.classList.add('hidden')
-    void this.placePin().then(() => {
-      this.pin.classList.remove('hidden')
-      this.expand(true)
-      const input = this.card.querySelector('#pin-composer-input') as HTMLTextAreaElement | null
-      if (input) input.value = comment
-      this.kind = kind
-      this.refreshChips()
-    })
   }
 
   /** 卡片以小点为锚，朝屏幕中心展开 */
