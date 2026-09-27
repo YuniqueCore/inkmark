@@ -81,6 +81,14 @@ export function toW3C(doc: DocItem, opts?: { includeResolved?: boolean }): W3CAn
     .filter((a): a is W3CAnnotation => a !== null)
 }
 
+/** 解析 target.source 的 inkmark URN：urn:inkmark:doc:<docId>[#revised]。
+ * 非 inkmark 来源（外部标注工具）返回 docId null，由导入方回落到当前文档。 */
+export function parseW3CSource(source: unknown): { docId: string | null; revised: boolean } {
+  const s = typeof source === 'string' ? source : ''
+  const m = s.match(/^urn:inkmark:doc:([^#]+?)(?:#revised)?$/)
+  return { docId: m ? m[1]! : null, revised: s.endsWith('#revised') }
+}
+
 export interface W3CImportResult {
   annotations: Annotation[]
   /** 无法锚定被跳过的条数（exact 不在目标文本中） */
@@ -95,7 +103,7 @@ export function fromW3C(
   text: string,
   opts?: { revisedText?: string; now?: number },
 ): W3CImportResult {
-  const items = collectItems(data)
+  const items = collectW3CItems(data)
   const now = opts?.now ?? Date.now()
   const annotations: Annotation[] = []
   let unmatched = 0
@@ -112,7 +120,8 @@ export function fromW3C(
   return { annotations, unmatched, total: items.length }
 }
 
-function collectItems(data: unknown): unknown[] {
+/** 收集 W3C 数据里的 Annotation 条目：数组 / {items} / 单对象 */
+export function collectW3CItems(data: unknown): unknown[] {
   if (Array.isArray(data)) return data
   if (data && typeof data === 'object') {
     const obj = data as Record<string, unknown>

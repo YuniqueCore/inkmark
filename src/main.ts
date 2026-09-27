@@ -3,9 +3,10 @@
 import { numberAnnotations } from './core/export'
 import { diffLines, diffStats } from './core/diff'
 import { importFileList, newDocId } from './core/import'
+import type { W3CRouted } from './core/import'
 import { reanchorAnnotations } from './core/reanchor'
 import { splitBlocks } from './core/text'
-import { hitsToAnnotations, scanSlopReport } from './core/slop'
+import { appendSample, hitsToAnnotations, scanSlopReport } from './core/slop'
 import type { SlopReport } from './core/types'
 import { EditorView } from './ui/editor'
 import { ExporterView } from './ui/exporter'
@@ -332,7 +333,7 @@ function rerender(syncPopup = true): void {
   editBtn?.classList.toggle('text-secondary-foreground', mode === 'edit')
   if (mode === 'edit') {
     // 编辑模式由 renderEditMode 独占渲染区，这里只同步侧栏
-    sidebar.render(doc?.text ?? '', doc?.annotations ?? [], { revised: doc?.revised })
+    sidebar.render(doc?.text ?? '', doc?.annotations ?? [], { revised: doc?.revised, slopHistory: doc?.slopHistory ?? [] })
     fileTree.render(state.docs, state.activeDocId)
     return
   }
@@ -353,6 +354,7 @@ function rerender(syncPopup = true): void {
   sidebar.render(doc?.text ?? '', doc?.annotations ?? [], {
     revised: doc?.revised,
     slop: doc ? (slopReports.get(doc.id) ?? null) : null,
+    slopHistory: doc?.slopHistory ?? [],
   })
   fileTree.render(state.docs, state.activeDocId)
   if (syncPopup && doc) annotationPopup.sync(doc.text, doc.annotations, doc.revised)
@@ -384,7 +386,14 @@ function runSlopScan(): void {
   slopReports.set(doc.id, report)
   const hits = report.hits.filter((h) => !existing.has(`${h.start}:${h.end}`))
   const anns = hitsToAnnotations(hits)
-  mutateActive((d) => ({ ...d, annotations: [...d.annotations, ...anns] }))
+  // 评分历史随文档持久化（appendSample 处理去重与封顶）
+  const history = appendSample(doc.slopHistory ?? [], {
+    at: Date.now(),
+    score: report.score,
+    band: report.band,
+    units: report.units,
+  })
+  mutateActive((d) => ({ ...d, annotations: [...d.annotations, ...anns], slopHistory: history }))
   const parts = [`评分 ${report.score}/千单位（${BAND_LABEL[report.band]}）`]
   parts.push(anns.length === 0 ? '没有新的候选信号' : `新增 ${anns.length} 条候选批注`)
   toast(parts.join('，'))
@@ -438,7 +447,7 @@ function saveTextEdit(newText: string): void {
   mutateActive((d) => ({ ...d, text: newText, annotations }))
   const parts = ['已保存编辑']
   if (moved > 0) parts.push(`${moved} 条批注重新锚定`)
-  if (clamped > 0) parts.push(`${clamped} 条钉在改动处`)
+  if (clamped > 0) parts.push(`${clamped} 条失锚（标记在改动处）`)
   toast(parts.join('，'))
 }
 
@@ -504,45 +513,70 @@ async function clearRevised(): Promise<void> {
 
 /** 文件导入编排：管线（分类/解析）在 core/import.ts，这里只做状态应用与提示 */
 async function importFiles(files: FileList | File[]): Promise<void> {
-  const r = await importFileList(files, activeDoc())
-  if (r.w3cFiles > 0) {
-    mutateActive((doc) => ({ ...doc, annotations: [...doc.annotations, ...r.w3cAnnotations] }))
-    toast(
-      `导入 ${r.w3cAnnotations.length} 条批注${
-        r.w3cUnmatched > 0 ? `，${r.w3cUnmatched} 条原文中找不到锚点已跳过` : ''
-      }`,
-    )
-  }
+  const r = await importFileList(files, { docs: state.docs, currentDoc: activeDoc() })
+  const applied = applyW3C(r.w3cRouted)
   const newDocs = [...r.textDocs, ...r.sessionDocs]
-  if (newDocs.length === 0) {
-    if (r.w3cFiles === 0) {
-      toast(r.skipped > 0 ? `没有可导入的文本文件（跳过 ${r.skipped} 个）` : '没有可导入的文件')
-    }
-    return
+  if (newDocs.length > 0) {
+    state = { docs: [...state.docs, ...newDocs], activeDocId: newDocs[0]!.id }
   }
-  state = { docs: [...state.docs, ...newDocs], activeDocId: newDocs[0]!.id }
-  rerender(false)
-  const parts: string[] = []
-  if (r.textDocs.length > 0) parts.push(`导入 ${r.textDocs.length} 个文档`)
-  if (r.sessionDocs.length > 0) parts.push(`会话已合并（${r.sessionDocs.length} 个文档）`)
-  if (r.skipped > 0) parts.push(`跳过 ${r.skipped}`)
-  if (r.truncated > 0) parts.push(`${r.truncated} 个超大文件已截断`)
-  toast(parts.join('，'))
+  if (applied.merged > 0 || newDocs.length > 0) rerender(false)
+  if (applied.merged > 0 || applied.unmatched > 0) {
+    toast(w3cToast(applied.merged, applied.unmatched, applied.routed))
+  } else if (newDocs.length === 0 && r.w3cFiles === 0) {
+    toast(r.skipped > 0 ? `没有可导入的文本文件（跳过 ${r.skipped} 个）` : '没有可导入的文件')
+  }
+  if (newDocs.length > 0) {
+    const parts: string[] = []
+    if (r.textDocs.length > 0) parts.push(`导入 ${r.textDocs.length} 个文档`)
+    if (r.sessionDocs.length > 0) parts.push(`会话已合并（${r.sessionDocs.length} 个文档）`)
+    if (r.skipped > 0) parts.push(`跳过 ${r.skipped}`)
+    if (r.truncated > 0) parts.push(`${r.truncated} 个超大文件已截断`)
+    toast(parts.join('，'))
+  }
 }
 
-/** 导出弹层的 W3C 导入入口：单文件并入当前文档 */
+/** 导出弹层的 W3C 导入入口：单文件按来源分发 */
 async function importW3CFile(file: File): Promise<void> {
-  const r = await importFileList([file], activeDoc())
-  if (r.w3cAnnotations.length === 0) {
+  const r = await importFileList([file], { docs: state.docs, currentDoc: activeDoc() })
+  const applied = applyW3C(r.w3cRouted)
+  if (r.w3cFiles === 0 || (applied.merged === 0 && applied.unmatched === 0)) {
     toast('不是可导入的 W3C 批注文件')
     return
   }
-  mutateActive((doc) => ({ ...doc, annotations: [...doc.annotations, ...r.w3cAnnotations] }))
-  toast(
-    `导入 ${r.w3cAnnotations.length} 条批注${
-      r.w3cUnmatched > 0 ? `，${r.w3cUnmatched} 条原文中找不到锚点已跳过` : ''
-    }`,
-  )
+  if (applied.merged > 0) rerender(false)
+  toast(w3cToast(applied.merged, applied.unmatched, applied.routed))
+}
+
+/** 把按来源分组的 W3C 批注折叠进工作区（一次不可变更新），返回汇总 */
+function applyW3C(routed: W3CRouted[]): { merged: number; unmatched: number; routed: number } {
+  if (routed.length === 0) return { merged: 0, unmatched: 0, routed: 0 }
+  let merged = 0
+  let unmatched = 0
+  let routedDocs = 0
+  state = {
+    ...state,
+    docs: state.docs.map((d) => {
+      const groups = routed.filter(
+        (g) => g.docId === d.id || (g.docId === null && d.id === state.activeDocId),
+      )
+      if (groups.length === 0) return d
+      const anns = groups.flatMap((g) => g.annotations)
+      unmatched += groups.reduce((a, g) => a + g.unmatched, 0)
+      merged += anns.length
+      routedDocs +=
+        anns.length > 0 && groups.some((g) => g.docId !== null && g.docId !== state.activeDocId) ? 1 : 0
+      return { ...d, annotations: [...d.annotations, ...anns] }
+    }),
+  }
+  return { merged, unmatched, routed: routedDocs }
+}
+
+/** W3C 导入结果提示：分发到多个文档时注明 */
+function w3cToast(merged: number, unmatched: number, routed: number): string {
+  const base = `导入 ${merged} 条批注`
+  const skip = unmatched > 0 ? `，${unmatched} 条原文中找不到锚点已跳过` : ''
+  const dist = routed > 0 ? `（已按来源分发到 ${routed} 份文档）` : ''
+  return `${base}${skip}${dist}`
 }
 
 // ---------------------------------------------------------------- 顶栏动作

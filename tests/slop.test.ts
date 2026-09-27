@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { hitsToAnnotations, maskProtected, scanSlopReport } from '../src/core/slop'
-import type { SlopLexicon } from '../src/core/types'
+import { appendSample, hitsToAnnotations, maskProtected, scanSlopReport } from '../src/core/slop'
+import type { SlopLexicon, SlopSample } from '../src/core/types'
 
 const lex: SlopLexicon = {
   meta: { lang: 'zh', version: 'test' },
@@ -152,5 +152,23 @@ describe('hitsToAnnotations', () => {
     expect(anns[0]!.kind).toBe('slop')
     expect(anns[0]!.source).toBe('slop')
     expect(anns[0]!.meta?.label).toBe('万能开场')
+  })
+})
+
+describe('appendSample（评分历史采样）', () => {
+  const sample = (score: number, units = 100): SlopSample => ({ at: 1, score, band: 'light', units })
+
+  it('分数变化 → 追加', () => {
+    expect(appendSample([sample(3)], sample(5))).toHaveLength(2)
+  })
+  it('分数与单位都未变 → 覆盖末点（重扫仍持平）', () => {
+    const hist = [{ at: 1, score: 3, band: 'light' as const, units: 100 }]
+    const next = appendSample(hist, sample(3))
+    expect(next).toHaveLength(1)
+    expect(next[0]!.at).toBe(1)
+  })
+  it('封顶 20 个', () => {
+    const hist = Array.from({ length: 25 }, (_, i) => sample(i))
+    expect(appendSample(hist, sample(99))).toHaveLength(20)
   })
 })

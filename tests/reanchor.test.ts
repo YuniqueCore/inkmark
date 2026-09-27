@@ -63,6 +63,21 @@ describe('reanchorAnnotations', () => {
     expect(r.annotations[0]!.start).toBeLessThanOrEqual('这行有一个新词替换上了。'.length)
   })
 
+  it('钳到改动处的批注带失锚标记；引文找回时标记清除', () => {
+    const old = '这行有一个旧词要改掉。'
+    const lost = reanchorAnnotations(old, '这行有一个新词替换上了。', [ann('a', 5, 7)])
+    expect(lost.annotations[0]!.anchorLost).toBe(true)
+    // 下一次编辑中钳制处的引文仍然找得到 → 失锚标记清除
+    // （语义：失锚标记只描述「当前引文是否在文本里」，不追溯最初引文）
+    const restored = reanchorAnnotations(
+      '这行有一个新词替换上了。',
+      '这行有一个新词替换上了！追加一句。',
+      lost.annotations,
+    )
+    expect(restored.clamped).toBe(0)
+    expect(restored.annotations[0]!.anchorLost).toBeUndefined()
+  })
+
   it('同段未受影响的批注保持原位（位置校验通过 → moved 0）', () => {
     const old = '第一行稳定。\n第二行也稳定。'
     const anns = [ann('a', 0, 4)]

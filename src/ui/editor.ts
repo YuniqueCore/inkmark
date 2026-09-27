@@ -23,7 +23,13 @@ function renderBlockContent(blockText: string, blockAnns: Annotation[], blockSta
         .map((id) => blockAnns.find((a) => a.id === id)?.kind ?? 'issue')
         .filter((k, i, arr) => arr.indexOf(k) === i)
       const kind = KIND_PRIORITY.find((k) => kinds.includes(k)) ?? 'issue'
-      return `<span class="seg-hl k-${kind}" data-ann-ids="${seg.annIds.join(' ')}">${html}</span>`
+      // 段内全部批注都失锚时才标记：部分失锚的文本仍被健康批注锚定
+      const lost =
+        seg.annIds.length > 0 &&
+        seg.annIds.every((id) => blockAnns.find((a) => a.id === id)?.anchorLost)
+      return `<span class="seg-hl k-${kind}${lost ? ' seg-lost' : ''}" ${
+        lost ? 'title="原引文已不在原文中，批注钉在改动处"' : ''
+      } data-ann-ids="${seg.annIds.join(' ')}">${html}</span>`
     })
     .join('')
 }

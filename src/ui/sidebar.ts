@@ -2,7 +2,7 @@
 
 import { snippet } from '../core/text'
 import { reportCategoryCounts } from '../core/slop'
-import type { SlopBand, SlopReport } from '../core/types'
+import type { SlopBand, SlopReport, SlopSample } from '../core/types'
 import { KIND_LABEL } from '../core/types'
 import type { Annotation, AnnotationKind } from '../core/types'
 import { escapeHtml } from '../core/text'
@@ -24,6 +24,8 @@ export interface SidebarRenderOptions {
   revised?: string
   /** 最近一次 slop 扫描报告（当前文档）：有则展示评分统计卡 */
   slop?: SlopReport | null
+  /** 评分历史采样：≥2 个时统计卡展示趋势线与环比 */
+  slopHistory?: SlopSample[]
 }
 
 /** 分档 → 徽标配色（亮暗主题都够对比） */
@@ -121,7 +123,7 @@ export class SidebarView {
         <h3 class="text-sm font-semibold tracking-tight">批注</h3>
         <span class="text-xs text-muted-foreground">${open} 条待处理</span>
       </div>
-      ${opts.slop ? this.renderSlopCard(opts.slop) : ''}
+      ${opts.slop ? this.renderSlopCard(opts.slop, opts.slopHistory ?? []) : ''}
       <div class="mb-1.5 flex flex-wrap gap-1.5 px-1">${chips}</div>
       <div class="mb-2 flex flex-wrap gap-1 px-1">${kindChips}</div>
       <label class="mb-3 flex cursor-pointer items-center gap-2 px-1 text-xs text-muted-foreground">
@@ -169,8 +171,8 @@ export class SidebarView {
     }
   }
 
-  /** slop 评分统计卡：评分 / 分档 / 单位数 / 类目分布（数据来自最近一次扫描报告） */
-  private renderSlopCard(report: SlopReport): string {
+  /** slop 评分统计卡：评分 / 环比 / 趋势线 / 分档 / 类目分布 */
+  private renderSlopCard(report: SlopReport, history: SlopSample[]): string {
     const cats = reportCategoryCounts(report.hits)
     const top = cats
       .slice(0, 4)
@@ -181,18 +183,50 @@ export class SidebarView {
       report.hits.length === 0
         ? '<div class="mt-1.5 text-xs text-muted-foreground">未发现候选信号</div>'
         : `<div class="mt-1.5 text-xs leading-relaxed text-muted-foreground">候选 ${report.hits.length} 处${top ? `：${top}` : ''}${rest > 0 ? ` 等 ${cats.length} 类` : ''}</div>`
+    const trend = this.renderTrend(history)
     return `
       <div class="card mb-3 p-3">
         <div class="flex items-center justify-between gap-2">
           <span class="text-xs font-medium text-muted-foreground">slop 评分</span>
           <span class="badge border-transparent ${BAND_STYLE[report.band]}">${BAND_LABEL[report.band]}</span>
         </div>
-        <div class="mt-1 flex items-baseline gap-1">
+        <div class="mt-1 flex items-baseline gap-2">
           <span class="text-xl font-semibold tracking-tight">${report.score}</span>
           <span class="text-xs text-muted-foreground">/ 千单位（${report.units} 单位）</span>
+          ${this.renderDelta(report.score, history)}
         </div>
+        ${trend}
         ${catLine}
       </div>`
+  }
+
+  /** 环比：与上一次采样比较（分数越低越好） */
+  private renderDelta(score: number, history: SlopSample[]): string {
+    const prev = history[history.length - 2]
+    if (!prev || prev.score === score) return ''
+    const delta = +(score - prev.score).toFixed(1)
+    return delta > 0
+      ? `<span class="text-xs font-medium text-destructive" title="较上次上升 ${delta}">↑ ${delta}</span>`
+      : `<span class="text-xs font-medium text-emerald-600 dark:text-emerald-400" title="较上次下降 ${Math.abs(delta)}">↓ ${Math.abs(delta)}</span>`
+  }
+
+  /** 评分趋势线：≥2 个采样点时画迷你折线 */
+  private renderTrend(history: SlopSample[]): string {
+    if (history.length < 2) return ''
+    const scores = history.map((h) => h.score)
+    const min = Math.min(...scores)
+    const span = Math.max(Math.max(...scores) - min, 1)
+    const w = 120
+    const h = 24
+    const pad = 2
+    const points = scores
+      .map((s, i) => {
+        const x = pad + (i / (scores.length - 1)) * (w - pad * 2)
+        const y = h - pad - ((s - min) / span) * (h - pad * 2)
+        return `${x.toFixed(1)},${y.toFixed(1)}`
+      })
+      .join(' ')
+    return `<svg viewBox="0 0 ${w} ${h}" class="mt-1.5 h-6 w-full text-muted-foreground" preserveAspectRatio="none" aria-hidden="true"><polyline points="${points}" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`
   }
 
   private renderCard(text: string, a: Annotation): string {
@@ -207,6 +241,7 @@ export class SidebarView {
           <span class="badge border-transparent" style="color:var(--kind-${a.kind});background:var(--kind-${a.kind}-bg)">${KIND_LABEL[a.kind]}</span>
           ${slopInfo}
           ${a.target === 'revised' ? '<span class="badge border-sky-500/40 text-sky-600 dark:text-sky-400">改稿</span>' : ''}
+          ${a.anchorLost ? '<span class="badge border-amber-500/40 text-amber-600 dark:text-amber-400" title="原引文已不在原文中，批注钉在改动处">失锚</span>' : ''}
           ${a.status === 'resolved' ? '<span class="badge bg-secondary text-secondary-foreground">已解决</span>' : ''}
         </div>
         <blockquote class="mb-1.5 cursor-pointer border-l-2 border-border pl-2 text-[13px] text-muted-foreground transition-colors hover:border-ring" data-op="focus">

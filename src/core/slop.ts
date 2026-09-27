@@ -4,7 +4,15 @@
  * 与参考实现的既有差异（有意保留）：未闭合代码围栏额外保护到文末，编辑中的半截围栏不误报。
  */
 
-import type { Annotation, SlopBand, SlopEntry, SlopHit, SlopLexicon, SlopReport } from './types'
+import type {
+  Annotation,
+  SlopBand,
+  SlopEntry,
+  SlopHit,
+  SlopLexicon,
+  SlopReport,
+  SlopSample,
+} from './types'
 
 interface CompiledEntry {
   regex: RegExp
@@ -219,6 +227,21 @@ export function reportCategoryCounts(
     byCat.set(h.categoryId, entry)
   }
   return [...byCat.values()].sort((a, b) => b.count - a.count || a.categoryId.localeCompare(b.categoryId))
+}
+
+/** 评分历史采样：分数与单位都未变时覆盖末点（记录「重扫仍持平」），
+ * 否则追加；历史封顶 cap 个。纯函数——历史持久化在 DocItem 上。 */
+export function appendSample(
+  history: SlopSample[],
+  sample: SlopSample,
+  cap = 20,
+): SlopSample[] {
+  const last = history[history.length - 1]
+  const next =
+    last && last.score === sample.score && last.units === sample.units
+      ? [...history.slice(0, -1), sample]
+      : [...history, sample]
+  return next.slice(-cap)
 }
 
 /** 命中 → slop 候选批注（comment 自动组合类别与建议）。 */

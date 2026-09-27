@@ -14,6 +14,10 @@ export interface PopupCallbacks {
   onCopySnippet: (text: string) => void
 }
 
+/** 失锚徽标：引文已不在原文中的批注（编辑原文后钳在改动处） */
+const LOST_BADGE =
+  '<span class="badge border-amber-500/40 text-amber-600 dark:text-amber-400" title="原引文已不在原文中，批注钉在改动处">失锚</span>'
+
 const KINDS: AnnotationKind[] = ['issue', 'suggestion', 'question', 'highlight', 'praise']
 
 export class AnnotationPopup {
@@ -137,6 +141,7 @@ export class AnnotationPopup {
           <div class="mb-2 flex items-center gap-1.5">
             <span class="badge border-transparent" style="color:var(--kind-${a.kind});background:var(--kind-${a.kind}-bg)">${KIND_LABEL[a.kind]}</span>
             ${meta}
+            ${a.anchorLost ? LOST_BADGE : ''}
           </div>
           <p class="mb-2 line-clamp-2 border-l-2 border-primary/30 pl-2 text-[12.5px] text-muted-foreground">“${escapeHtml(quote)}”</p>
           <div class="mb-2 flex flex-wrap gap-1">${KINDS.map(
@@ -157,6 +162,7 @@ export class AnnotationPopup {
         <div class="mb-1.5 flex items-center gap-1.5">
           <span class="badge border-transparent" style="color:var(--kind-${a.kind});background:var(--kind-${a.kind}-bg)">${KIND_LABEL[a.kind]}</span>
           ${meta}
+          ${a.anchorLost ? LOST_BADGE : ''}
           ${a.status === 'resolved' ? '<span class="badge bg-secondary text-secondary-foreground">已解决</span>' : ''}
           <span class="ml-auto text-[11px] text-muted-foreground">${this.items.length > 1 ? `共 ${this.items.length} 条` : ''}</span>
         </div>

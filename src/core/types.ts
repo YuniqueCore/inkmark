@@ -29,6 +29,8 @@ export interface Annotation {
   target?: 'revised'
   /** slop 命中的词库元数据 */
   meta?: SlopMeta
+  /** 失锚标记：原文编辑后引文已不在原文中，批注被钳到改动处（重锚成功时清除） */
+  anchorLost?: true
   createdAt: number
   updatedAt: number
 }
@@ -63,6 +65,16 @@ export interface DocItem {
   addedAt: number
   /** AI 改稿全文（对照视图）：存在时可在「原文 vs 改稿」diff 视图里复核批注 */
   revised?: string
+  /** slop 评分历史（每次扫描追加，保留最近 20 个采样点），侧栏趋势用 */
+  slopHistory?: SlopSample[]
+}
+
+/** slop 评分历史采样点：同文档跨次扫描的趋势数据 */
+export interface SlopSample {
+  at: number
+  score: number
+  band: SlopBand
+  units: number
 }
 
 /** 工作区会话格式版本：构造与运行时校验共用此常量 */

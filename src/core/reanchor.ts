@@ -39,8 +39,12 @@ export function reanchorAnnotations(
       start: a.start,
       end: a.end,
     })
-    if (found && (found.start !== a.start || found.end !== a.end)) moved++
-    if (found) return { ...a, start: found.start, end: found.end }
+    if (found) {
+      if (found.start !== a.start || found.end !== a.end) moved++
+      // 引文重新找得回来 → 失锚标记清除（引文已被改掉又改回来的场景）
+      const { anchorLost: _lost, ...rest } = a
+      return { ...rest, start: found.start, end: found.end }
+    }
 
     const start = mapOffset(rows, a.start)
     const end = mapOffset(rows, a.end)
@@ -48,7 +52,8 @@ export function reanchorAnnotations(
     // 末行无换行符，diff 行进按 +1 统一计步，这里统一钳回新文本范围
     const s = Math.max(0, Math.min(start, newText.length))
     const e = Math.max(0, Math.min(end, newText.length))
-    return { ...a, start: Math.min(s, e), end: Math.max(s, e) }
+    // 引文已被改掉：标记失锚（编辑器波浪线 + 侧栏徽标），批注仍不丢
+    return { ...a, start: Math.min(s, e), end: Math.max(s, e), anchorLost: true as const }
   })
 
   return { annotations: next, moved, clamped }
