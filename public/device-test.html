@@ -23,18 +23,52 @@
       return ok
     }
 
-    async function testMobileLike(win, doc, device, opts) {
+    async function testMobileLike(win, doc, device, opts = {}) {
       let ok = true
-      const t = (name, fn) => fn().then((r) => { ok = report(device, name, r) && ok })
+      // headless 虚拟时间不推进 CSS transition：抽屉 transform 停在起始帧会让几何断言误判，
+      // 注入过渡禁用样式让几何确定（视觉过渡已由截图另行验证）
+      const kill = doc.createElement('style')
+      kill.textContent = '*,*::before,*::after{transition:none!important;animation-duration:0s!important}'
+      doc.head.appendChild(kill)
+      const t = (name, fn) => fn()
+        .then((r) => { ok = report(device, name, r) && ok })
+        .catch((err) => { ok = report(device, `${name} · 异常 ${err.message}`, false) && ok })
       const vis = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.right > 0 && r.left < win.innerWidth }
-      const flush = () => new Promise((r) => setTimeout(r, 60))
+      // 覆盖抽屉 220ms 过渡动画 + 弹层 pop-in 动画
+      const flush = () => new Promise((r) => setTimeout(r, 300))
 
-      // 1 无横向溢出
-      await t('无横向溢出', async () => doc.documentElement.scrollWidth <= win.innerWidth + 1)
-      // 2 初始抽屉收起
+      // 1 无横向溢出（带数值，便于定位溢出元素）
+      await t('无横向溢出', async () => {
+        const sw = doc.documentElement.scrollWidth
+        if (sw > win.innerWidth + 1) {
+          const off = [...doc.querySelectorAll('body *')]
+            .filter((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && (r.right > win.innerWidth + 1 || r.left < -1) })
+            .slice(0, 3)
+            .map((el) => `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}.${[...el.classList].slice(0, 2).join('.')}`)
+            .join(', ')
+          throw new Error(`scrollWidth=${sw} > ${win.innerWidth}；溢出元素：${off || '（无几何溢出，可能是滚动条宽度）'}`)
+        }
+        return true
+      })
+      // 2 空态引导卡完整落在视口内（仅首设备可测：后续设备共享 localStorage，已带文档）
+      if (opts.first) {
+        await t('空态引导卡在视口内', async () => {
+          const empty = doc.querySelector('#editor > div')
+          if (!empty) return false
+          const r = empty.getBoundingClientRect()
+          if (r.right > win.innerWidth + 1 || r.left < -1)
+            throw new Error(`left=${r.left.toFixed(1)} right=${r.right.toFixed(1)} 视口=${win.innerWidth}`)
+          return true
+        })
+      }
+      // 3 初始抽屉收起
       await t('初始抽屉收起（树在屏外）', async () => doc.querySelector('#filetree').getBoundingClientRect().right <= 0)
-      // 3 顶栏按钮全部可见
-      await t('顶栏按钮无溢出', async () => [...doc.querySelectorAll('header button')].every((b) => b.getBoundingClientRect().width > 0))
+      // 3 顶栏实际渲染的按钮全部可见（display:none 的低频按钮不计）
+      await t('顶栏按钮无溢出', async () =>
+        [...doc.querySelectorAll('header button')]
+          .filter((b) => b.getClientRects().length > 0)
+          .every((b) => { const r = b.getBoundingClientRect(); return r.width > 0 && r.right <= win.innerWidth + 1 && r.left >= -1 }),
+      )
       // 4 抽屉打开
       doc.querySelector('#btn-tree').click(); await flush()
       await t('文档树抽屉可打开', async () => doc.body.classList.contains('tree-open') && vis(doc.querySelector('#filetree')))
@@ -62,7 +96,17 @@
         doc.querySelector('body > button.fixed').click(); await flush()
         const card = doc.querySelector('body > div.popover-panel.z-50')
         const cr = card.getBoundingClientRect()
-        await t('撰写卡在视口内', async () => !card.classList.contains('hidden') && cr.left >= 0 && cr.right <= win.innerWidth)
+        await t('撰写卡在视口内', async () => {
+          if (card.classList.contains('hidden')) return false
+          if (cr.left < -1 || cr.right > win.innerWidth + 1) {
+            const pin = doc.querySelector('body > button.fixed').getBoundingClientRect()
+            throw new Error(
+              `left=${cr.left.toFixed(1)} right=${cr.right.toFixed(1)} 宽=${cr.width.toFixed(1)} 视口=${win.innerWidth}` +
+              `；pin=[${pin.left.toFixed(1)},${pin.right.toFixed(1)}] card.style.left=${card.style.left}`,
+            )
+          }
+          return true
+        })
         // 10 快捷语 chips
         const chip = card.querySelector('.phrase-chip')
         chip.click()
@@ -71,6 +115,46 @@
         card.querySelector('[data-kind="praise"]').click(); await flush()
         card.querySelector('[data-op="submit"]').click(); await flush()
         await t('认可空描述可提交', async () => card.classList.contains('hidden') && doc.querySelectorAll('.seg-hl').length > 0)
+        // 11b 点击批注高亮 → 批注弹层完整在视口内（bottom placement 的纵向钳制）
+        doc.querySelector('#editor .seg-hl').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        await flush()
+        const pop = doc.querySelector('body > div.popover-panel.z-60')
+        const pr2 = pop.getBoundingClientRect()
+        await t('批注弹层在视口内', async () => {
+          if (pop.classList.contains('hidden')) return false
+          if (pr2.top < -1 || pr2.bottom > win.innerHeight + 1 || pr2.left < -1 || pr2.right > win.innerWidth + 1)
+            throw new Error(`top=${pr2.top.toFixed(1)} bottom=${pr2.bottom.toFixed(1)} 视口高=${win.innerHeight}`)
+          return true
+        })
+        ed.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })) // 点外部关弹层
+        await flush()
+        // 11c 右缘划选 → 撰写卡不越界（shift crossAxis 修复的回归样张）
+        const blk0 = doc.querySelector('#editor .editor-blk')
+        const tn3 = [...blk0.childNodes].reverse().find((n) => n.nodeType === 3)
+        const len3 = tn3.textContent.length
+        const range3 = doc.createRange()
+        range3.setStart(tn3, Math.max(0, len3 - 8)); range3.setEnd(tn3, len3)
+        sel.removeAllRanges(); sel.addRange(range3)
+        const r3 = range3.getBoundingClientRect()
+        blk0.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: r3.right, clientY: r3.bottom }))
+        await flush()
+        doc.querySelector('body > button.fixed').click(); await flush()
+        const card2 = doc.querySelector('body > div.popover-panel.z-50')
+        const cr2 = card2.getBoundingClientRect()
+        await t('右缘撰写卡在视口内', async () => {
+          const pin = doc.querySelector('body > button.fixed')
+          const pinR = pin.getBoundingClientRect()
+          if (card2.classList.contains('hidden'))
+            throw new Error(
+              `卡未展开；pin hidden=${pin.classList.contains('hidden')} pin=[${pinR.left.toFixed(0)},${pinR.right.toFixed(0)}]` +
+              ` sel="${sel.toString().slice(0, 14)}" seg数=${doc.querySelectorAll('.seg-hl').length}`,
+            )
+          if (cr2.left < -1 || cr2.right > win.innerWidth + 1)
+            throw new Error(`left=${cr2.left.toFixed(1)} right=${cr2.right.toFixed(1)} 视口=${win.innerWidth}`)
+          return true
+        })
+        card2.querySelector('[data-op="cancel"]')?.click()
+        await flush()
         // 12 批注栏抽屉里看得到批注
         doc.querySelector('#btn-sidebar').click(); await flush()
         const cards = doc.querySelectorAll('#sidebar .ann-card').length
@@ -82,10 +166,26 @@
         const mr = modal.getBoundingClientRect()
         await t('导出弹层在视口内', async () => !modal.classList.contains('hidden') && mr.left >= 0 && mr.right <= win.innerWidth)
         modal.querySelector('[data-op="close"]').click()
+        // 尾声：留下撰写卡展开态（含已选快捷语）供视觉检查
+        const tn2 = doc.querySelector('#editor .seg-hl')?.firstChild ?? ed.firstChild
+        if (tn2) {
+          const r2 = doc.createRange()
+          r2.setStart(tn2, 0)
+          r2.setEnd(tn2, Math.min(6, tn2.textContent.length))
+          sel.removeAllRanges(); sel.addRange(r2)
+          const r = r2.getBoundingClientRect()
+          // 提交批注后编辑器已重渲染，必须用实时节点派发（旧引用已脱离文档）
+          const edNow = tn2.parentElement?.closest('.editor-blk') ?? ed
+          edNow.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: r.right, clientY: r.bottom }))
+          await flush()
+          doc.querySelector('body > button.fixed').click()
+          await flush()
+          card.querySelector('.phrase-chip')?.click()
+          await flush()
+        }
       } else {
         report(device, '示例文档载入', false); ok = false
       }
-      win.localStorage.clear()
     }
 
     async function testDesktop(win, doc, device) {
@@ -99,12 +199,31 @@
       doc.querySelector('#btn-tree').click()
     }
 
+    async function waitApp(iframe, device) {
+      // 纯轮询：只依赖 readyState + 挂载信号，不赌 load 事件时序
+      for (let i = 0; i < 150; i++) {
+        const d = iframe.contentDocument
+        if (d && d.readyState === 'complete' && d.querySelector('#editor') && d.querySelector('#editor').children.length > 0) return
+        await wait(100)
+      }
+      const d = iframe.contentDocument
+      report(device, `应用未挂载（readyState=${d?.readyState ?? '无文档'}，editor 子节点=${d?.querySelector('#editor')?.children.length ?? 'n/a'}）`, false)
+    }
+    // 运行器自身的异常必须可见，否则页面只会静默空白
+    window.addEventListener('error', (e) => report('phone', `运行器异常 ${e.message}`, false))
+    window.addEventListener('unhandledrejection', (e) => {
+      const msg = e.reason?.message ?? String(e.reason)
+      report('phone', `Promise 异常 ${msg}`, false)
+    })
     ;(async () => {
       const phone = document.querySelector('[data-device="phone"] iframe')
-      await testMobileLike(phone.contentWindow, phone.contentDocument, 'phone')
+      await waitApp(phone, 'phone')
+      await testMobileLike(phone.contentWindow, phone.contentDocument, 'phone', {first: true})
       const tablet = document.querySelector('[data-device="tablet"] iframe')
+      await waitApp(tablet, 'tablet')
       await testMobileLike(tablet.contentWindow, tablet.contentDocument, 'tablet')
       const desktop = document.querySelector('[data-device="desktop"] iframe')
+      await waitApp(desktop, 'desktop')
       await testDesktop(desktop.contentWindow, desktop.contentDocument, 'desktop')
     })()
   </script>

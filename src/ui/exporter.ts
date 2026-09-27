@@ -99,21 +99,21 @@ export class ExporterView {
     const content = this.content()
     const tab = TABS.find((t) => t.id === this.format)!
     this.modal.innerHTML = `
-      <div class="flex items-center justify-between border-b px-5 py-3.5">
-        <div class="flex items-center gap-1" role="tablist">
+      <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b px-4 py-3 sm:px-5 sm:py-3.5">
+        <div class="flex flex-wrap items-center gap-1" role="tablist">
           ${TABS.map(
             (t) =>
               `<button role="tab" class="btn btn-ghost btn-sm ${this.format === t.id ? 'bg-secondary text-secondary-foreground' : 'text-muted-foreground'}" data-tab="${t.id}">${t.label}</button>`,
           ).join('')}
         </div>
-        <div class="flex items-center gap-3">
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
           ${isW3C || isMulti
             ? ''
-            : `<label class="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
+            : `<label class="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
           <input type="checkbox" id="inc-file-info" class="size-3.5 accent-[var(--primary)]" ${this.includeFileInfo ? 'checked' : ''}/>
           包含文件信息
         </label>`}
-          <label class="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
+          <label class="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
             <input type="checkbox" id="inc-resolved" class="size-3.5 accent-[var(--primary)]" ${this.includeResolved ? 'checked' : ''}/>
             包含已解决
           </label>
@@ -129,7 +129,7 @@ export class ExporterView {
         }</p>
         <textarea readonly id="export-preview" class="input-base mt-2.5 h-[42vh] resize-none font-mono text-[13px] leading-relaxed"></textarea>
       </div>
-      <div class="flex items-center justify-between border-t bg-muted/40 px-5 py-3">
+      <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t bg-muted/40 px-4 py-3 sm:px-5">
         <span class="text-xs text-muted-foreground">${content.length.toLocaleString()} 字符</span>
         <span class="flex gap-1.5">
           ${isW3C ? `<button class="btn btn-outline btn-sm" data-op="import">导入 W3C JSON…</button>` : ''}

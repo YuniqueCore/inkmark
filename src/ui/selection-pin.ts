@@ -332,7 +332,9 @@ export class SelectionPin {
       strategy: 'fixed',
       middleware: [
         offset(10),
-        shift({padding: 8, limiter: limitShift()}),
+        // crossAxis 必开：left/right placement 下 shift 默认只校正纵轴，
+        // 近全宽的卡片会整块悬出左右视口缘（手机上必现）
+        shift({padding: 8, crossAxis: true, limiter: limitShift()}),
         size({apply: ({availableHeight}) => {
           this.card.style.maxHeight = `${Math.max(220, availableHeight)}px`
         }}),

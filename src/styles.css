@@ -335,6 +335,8 @@ body.select-none {
     bottom: 0;
     width: min(84vw, 360px) !important; /* 覆盖桌面态的内联列宽 */
     z-index: 40;
+    /* 桌面态是 bg-card/40 半透明底（透出应用背景），抽屉叠在深色背板上会透成脏灰 */
+    background-color: var(--card);
     transition: transform 0.22s ease-out;
     box-shadow: 0 12px 32px rgb(0 0 0 / 0.28);
   }
@@ -356,5 +358,12 @@ body.select-none {
   }
   .resize-handle {
     display: none;
+  }
+}
+
+/* 手机顶栏：图标按钮收紧内边距（.btn-sm 的 px-3 在 390px 下放不下全部工具） */
+@media (max-width: 639.98px) {
+  header .btn {
+    padding-inline: 6px;
   }
 }

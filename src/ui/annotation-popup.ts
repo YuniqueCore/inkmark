@@ -312,7 +312,9 @@ export class AnnotationPopup {
         middleware: [
           offset(10),
           flip({fallbackPlacements: ['top']}),
-          shift({padding: 8}),
+          // crossAxis 必开：bottom/top placement 下 shift 默认只校正横轴，
+          // 段落贴近视口底部时弹层下半会被窗口裁掉
+          shift({padding: 8, crossAxis: true}),
           arrow({element: this.arrowEl, padding: 12}),
         ],
       }).then(({x, y, placement, middlewareData}) => {

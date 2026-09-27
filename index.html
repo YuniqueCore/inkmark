@@ -14,52 +14,52 @@
   </head>
   <body class="h-full overflow-hidden">
     <header class="sticky top-0 z-20 border-b bg-card/80 backdrop-blur-md">
-      <div class="flex h-14 items-center justify-between gap-3 px-3 sm:px-4">
+      <div class="flex h-14 items-center justify-between gap-2 px-2 sm:gap-3 sm:px-4">
         <div class="flex items-center gap-1.5">
           <button id="btn-tree" class="btn btn-ghost btn-sm" title="收起/展开文档树">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg>
           </button>
-          <span class="text-[17px] font-semibold tracking-tight">InkMark</span>
-          <span class="hidden text-[12.5px] text-muted-foreground md:inline">划词批注工作台</span>
+          <span class="hidden text-[17px] font-semibold tracking-tight sm:inline">InkMark</span>
+          <span class="hidden text-[12.5px] text-muted-foreground lg:inline">划词批注工作台</span>
         </div>
         <div class="flex items-center gap-1.5">
-          <span id="save-status" class="mr-1 flex items-center gap-1.5 text-xs text-muted-foreground" title="自动保存到本地浏览器">
-            <span id="save-dot" class="size-1.5 rounded-full bg-emerald-500"></span><span id="save-text">已保存</span>
+          <span id="save-status" class="mr-1 flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground" title="自动保存到本地浏览器">
+            <span id="save-dot" class="size-1.5 rounded-full bg-emerald-500"></span><span id="save-text" class="hidden sm:inline">已保存</span>
           </span>
           <button id="btn-import-files" class="btn btn-ghost btn-sm" title="导入一个或多个 .txt / .md / 会话 .json">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
-            <span class="hidden md:inline">打开文件</span>
+            <span class="hidden lg:inline">打开文件</span>
           </button>
-          <button id="btn-import-folder" class="btn btn-ghost btn-sm hidden md:inline-flex" title="导入整个文件夹（.txt / .md）">
+          <button id="btn-import-folder" class="btn btn-ghost btn-sm hidden lg:inline-flex" title="导入整个文件夹（.txt / .md）">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/><path d="M12 10v6M9 13h6"/></svg>
             文件夹
           </button>
-          <span class="mx-1 h-5 w-px bg-border"></span>
-          <button id="btn-sample" class="btn btn-ghost btn-sm hidden md:inline-flex" title="载入一段带 AI 味的示例文档">示例</button>
+          <span class="mx-1 hidden h-5 w-px bg-border sm:block"></span>
+          <button id="btn-sample" class="btn btn-ghost btn-sm hidden lg:inline-flex" title="载入一段带 AI 味的示例文档">示例</button>
           <button id="btn-scan" class="btn btn-outline btn-sm" title="用 anti-slop 词库预扫描套话，生成候选批注">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.34-4.34"/></svg>
-            <span class="hidden md:inline">slop 预扫描</span>
+            <span class="hidden lg:inline">slop 预扫描</span>
           </button>
           <button id="btn-edit" class="btn btn-outline btn-sm" title="编辑原文：直接修改规范文本，完成后批注按引文自动重锚">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
-            <span class="hidden md:inline">编辑原文</span>
+            <span class="hidden lg:inline">编辑原文</span>
           </button>
           <button id="btn-diff" class="btn btn-outline btn-sm" title="对照 AI 改稿：贴入改稿生成原文 vs 改稿 diff，两侧均可划选写批注">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M11 18H8a2 2 0 0 1-2-2V9"/></svg>
-            <span class="hidden md:inline">对照</span>
+            <span class="hidden lg:inline">对照</span>
           </button>
           <span id="diff-stats" class="hidden font-mono text-xs text-muted-foreground" title="改稿新增 / 删除行数"></span>
           <button id="btn-diff-clear" class="btn btn-ghost btn-sm btn-destructive hidden" title="清除 AI 改稿（原文与批注保留）">清除改稿</button>
           <button id="btn-export" class="btn btn-default btn-sm" title="导出批注（⌘S）">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
-            <span class="hidden md:inline">导出</span>
+            <span class="hidden lg:inline">导出</span>
           </button>
-          <span class="mx-1 h-5 w-px bg-border"></span>
+          <span class="mx-1 hidden h-5 w-px bg-border sm:block"></span>
           <button id="btn-theme" class="btn btn-ghost btn-sm" title="切换明暗主题" aria-label="切换主题"></button>
           <button id="btn-sidebar" class="btn btn-ghost btn-sm" title="收起/展开批注栏">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg>
           </button>
-          <button id="btn-clear" class="btn btn-ghost btn-sm btn-destructive hidden md:inline-flex" title="移除当前文档">移除</button>
+          <button id="btn-clear" class="btn btn-ghost btn-sm btn-destructive hidden lg:inline-flex" title="移除当前文档">移除</button>
         </div>
         <input id="file-input" type="file" accept=".txt,.md,.markdown,.json,text/plain" multiple hidden />
         <input id="folder-input" type="file" webkitdirectory hidden />
