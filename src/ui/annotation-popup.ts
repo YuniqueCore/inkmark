@@ -1,9 +1,10 @@
 /** 已有批注的锚定卡片：点击正文高亮（或侧栏编辑）弹出，贴着高亮位置带箭头，支持原位编辑。 */
 
 import { arrow, autoUpdate, computePosition, flip, offset, shift } from '@floating-ui/dom'
-import { escapeHtml, KIND_LABEL } from './editor'
+import { escapeHtml } from './editor'
 import { icon } from './icons'
 import { snippet } from '../core/text'
+import { KIND_LABEL } from '../core/types'
 import type { Annotation, AnnotationKind } from '../core/types'
 
 export interface PopupCallbacks {

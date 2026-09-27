@@ -18,15 +18,6 @@ function annsForSide(anns: Annotation[], revised: boolean): Annotation[] {
   return anns.filter((a) => revised === (a.target === 'revised'))
 }
 
-export const KIND_LABEL: Record<AnnotationKind, string> = {
-  issue: '问题',
-  suggestion: '建议',
-  question: '疑问',
-  highlight: '重点',
-  praise: '认可',
-  slop: 'AI 味',
-}
-
 /** 多类重叠时取优先级最高的底色 */
 const KIND_PRIORITY: AnnotationKind[] = ['slop', 'issue', 'praise', 'suggestion', 'question', 'highlight']
 

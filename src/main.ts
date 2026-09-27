@@ -20,6 +20,7 @@ import { initTheme } from './ui/theme'
 import { toast } from './ui/toast'
 import { rectOfAnnotation, resolveSelection } from './ui/selection-offsets'
 import { SAMPLE_TEXT } from './ui/sample'
+import { SESSION_VERSION } from './core/types'
 import type { Annotation, AnnotationInput, DocItem, SlopLexicon } from './core/types'
 import { loadWorkspace } from './ui/storage'
 import zhLexicon from '../skill/references/anti-slop-kit/scripts/data/zh.json'
@@ -37,10 +38,9 @@ interface AppState {
 let state: AppState = { docs: [], activeDocId: '' }
 /** 筛选透镜：正文高亮与侧栏列表共用 */
 let onlyHighlightFiltered = false
-/** 编辑区视图：批注视图（原文）或对照视图（原文 vs AI 改稿） */
-let viewMode: 'annotate' | 'diff' = 'annotate'
-/** 编辑原文模式：textarea 直改，完成时统一重锚 */
-let editingText = false
+/** 应用模式：批注视图 / 对照视图 / 编辑原文——三者互斥，用联合类型让
+ * 「边编辑边对照」这类非法组合无法表达（替代原 viewMode + editingText 布尔对） */
+let mode: 'annotate' | 'diff' | 'edit' = 'annotate'
 /** 各文档最近一次 slop 扫描报告（侧栏统计卡）：派生数据缓存，文本变化即失效 */
 const slopReports = new Map<string, SlopReport>()
 
@@ -157,10 +157,11 @@ const selectionPin = new SelectionPin({
 const sidebar = new SidebarView(sidebarEl, {
   onFocus: (id) => {
     const doc = activeDoc()
-    // 改稿侧批注只在对照视图里有正文锚点：定位时自动切过去
+    // 改稿侧批注只在对照视图里有正文锚点：批注模式下定位时自动切过去
+    // （编辑模式不打断，避免丢掉正在编辑的文本）
     const ann = doc?.annotations.find((a) => a.id === id)
-    if (ann?.target === 'revised' && doc?.revised && viewMode !== 'diff') {
-      viewMode = 'diff'
+    if (ann?.target === 'revised' && doc?.revised && mode === 'annotate') {
+      mode = 'diff'
     }
     sidebar.setActive(id)
     rerender(false)
@@ -255,6 +256,8 @@ function mutateActive(fn: (doc: DocItem) => DocItem): void {
 function switchDoc(id: string): void {
   if (state.activeDocId === id) return
   state = { ...state, activeDocId: id }
+  // 编辑的是旧文档的文本，切文档即放弃（原实现编辑器滞留旧文档内容）
+  if (mode === 'edit') mode = 'annotate'
   selectionPin.dismiss()
   annotationPopup.close()
   rerender(false)
@@ -314,13 +317,23 @@ async function removeDocsConfirmed(ids: string[]): Promise<void> {
 
 function rerender(syncPopup = true): void {
   const doc = activeDoc()
-  if (editingText) {
+  // 模式归一：切到没有改稿的文档时对照模式无处落脚，回落批注视图
+  if (mode === 'diff' && !doc?.revised) mode = 'annotate'
+  // 顶栏按钮状态始终跟随模式（原实现在编辑分支提前 return，编辑按钮从不高亮）
+  const diffBtn = document.querySelector('#btn-diff')
+  const inDiff = mode === 'diff'
+  diffBtn?.classList.toggle('bg-secondary', inDiff)
+  diffBtn?.classList.toggle('text-secondary-foreground', inDiff)
+  document.querySelector('#btn-diff-clear')?.classList.toggle('hidden', !inDiff)
+  const editBtn = document.querySelector('#btn-edit')
+  editBtn?.classList.toggle('bg-secondary', mode === 'edit')
+  editBtn?.classList.toggle('text-secondary-foreground', mode === 'edit')
+  if (mode === 'edit') {
     // 编辑模式由 renderEditMode 独占渲染区，这里只同步侧栏
     sidebar.render(doc?.text ?? '', doc?.annotations ?? [], { revised: doc?.revised })
     fileTree.render(state.docs, state.activeDocId)
     return
   }
-  const inDiff = viewMode === 'diff' && !!doc?.revised
   let stats = ''
   if (inDiff) {
     const rows = diffLines(doc!.text, doc!.revised!)
@@ -335,13 +348,6 @@ function rerender(syncPopup = true): void {
     diffStatsEl.textContent = stats
     diffStatsEl.classList.toggle('hidden', !inDiff)
   }
-  const diffBtn = document.querySelector('#btn-diff')
-  diffBtn?.classList.toggle('bg-secondary', inDiff)
-  diffBtn?.classList.toggle('text-secondary-foreground', inDiff)
-  document.querySelector('#btn-diff-clear')?.classList.toggle('hidden', !inDiff)
-  const editBtn = document.querySelector('#btn-edit')
-  editBtn?.classList.toggle('bg-secondary', editingText)
-  editBtn?.classList.toggle('text-secondary-foreground', editingText)
   sidebar.render(doc?.text ?? '', doc?.annotations ?? [], {
     revised: doc?.revised,
     slop: doc ? (slopReports.get(doc.id) ?? null) : null,
@@ -355,7 +361,7 @@ function rerender(syncPopup = true): void {
 
 // 数据快照即时取自工作区状态；状态机与计时器归 ui/save-status 所有
 const save = initSaveStatus(() => ({
-  version: 2,
+  version: SESSION_VERSION,
   docs: state.docs,
   activeDocId: state.activeDocId,
   savedAt: Date.now(),
@@ -398,15 +404,14 @@ function toggleEdit(): void {
     toast('先导入或载入一段文本')
     return
   }
-  if (editingText) return
-  editingText = true
-  viewMode = 'annotate'
+  if (mode === 'edit') return
+  mode = 'edit'
   annotationPopup.close()
   selectionPin.dismiss()
   editor.renderEditMode(doc.text, {
     onSave: (newText) => saveTextEdit(newText),
     onCancel: () => {
-      editingText = false
+      mode = 'annotate'
       rerender(false)
     },
   })
@@ -416,14 +421,14 @@ function toggleEdit(): void {
 function saveTextEdit(newText: string): void {
   const doc = activeDoc()
   if (!doc) return
-  editingText = false
+  mode = 'annotate'
   if (newText === doc.text) {
     rerender(false)
     return
   }
   if (newText.trim() === '') {
     toast('文本不能为空')
-    editingText = true
+    mode = 'edit'
     return
   }
   const { annotations, moved, clamped } = reanchorAnnotations(doc.text, newText, doc.annotations)
@@ -443,12 +448,12 @@ async function toggleDiff(): Promise<void> {
     toast('先导入或载入一段文本')
     return
   }
-  if (editingText) {
+  if (mode === 'edit') {
     toast('先完成或取消原文编辑')
     return
   }
-  if (viewMode === 'diff') {
-    viewMode = 'annotate'
+  if (mode === 'diff') {
+    mode = 'annotate'
     rerender(false)
     return
   }
@@ -466,7 +471,7 @@ async function toggleDiff(): Promise<void> {
     }
     mutateActive((d) => ({ ...d, revised: text }))
   }
-  viewMode = 'diff'
+  mode = 'diff'
   rerender(false)
 }
 
@@ -484,7 +489,7 @@ async function clearRevised(): Promise<void> {
     danger: true,
   })
   if (!ok) return
-  viewMode = 'annotate'
+  mode = 'annotate'
   mutateActive((d) => ({
     ...d,
     revised: undefined,

@@ -5,6 +5,7 @@
  * 在同批次里先切换了活动文档，都以此为锚，避免隐式的顺序耦合。
  */
 
+import { SESSION_VERSION } from './types'
 import { fromW3C } from './w3c'
 import type { Annotation, DocItem, Workspace } from './types'
 
@@ -82,7 +83,7 @@ export async function importFileList(
 async function trySessionFile(file: File, outcome: ImportOutcome): Promise<boolean> {
   try {
     const parsed = JSON.parse(await file.text()) as Partial<Workspace>
-    if (parsed.version !== 2 || !Array.isArray(parsed.docs)) return false
+    if (parsed.version !== SESSION_VERSION || !Array.isArray(parsed.docs)) return false
     outcome.sessionDocs.push(...parsed.docs)
     return true
   } catch {

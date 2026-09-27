@@ -10,8 +10,9 @@
  */
 
 import { computePosition, offset, shift, size, limitShift } from '@floating-ui/dom'
-import { escapeHtml, KIND_LABEL } from './editor'
+import { escapeHtml } from './editor'
 import { icon } from './icons'
+import { KIND_LABEL } from '../core/types'
 import type { AnnotationKind } from '../core/types'
 
 export interface SelectionInfo {

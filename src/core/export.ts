@@ -3,6 +3,7 @@
  * 语义一致）：改稿侧批注的偏移相对改稿文本，输出中已注明。 */
 
 import { splitBlocks, snippet } from './text'
+import { KIND_LABEL } from './types'
 import type { Annotation, AnnotationKind } from './types'
 
 export interface ExportOptions {
@@ -17,15 +18,6 @@ export interface ExportOptions {
 }
 
 const CIRCLED = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳'
-
-export const KIND_LABEL: Record<AnnotationKind, string> = {
-  issue: '问题',
-  suggestion: '建议',
-  question: '疑问',
-  highlight: '重点',
-  praise: '认可',
-  slop: 'AI 味',
-}
 
 /** 评审引用块里的前缀符号（纯文本标记，不用 emoji） */
 export const KIND_MARK: Record<AnnotationKind, string> = {

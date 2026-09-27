@@ -1,6 +1,7 @@
 /** 工作区持久化：localStorage 是唯一 IO 边界。v1 旧数据自动迁移。 */
 
 import { parseWorkspace } from '../core/session'
+import { SESSION_VERSION } from '../core/types'
 import type { Workspace } from '../core/types'
 
 const KEY = 'inkmark:session:v1' // 键沿用，内部按 version 字段迁移
@@ -32,5 +33,5 @@ export function clearWorkspaceStorage(): void {
 }
 
 export function emptyWorkspace(): Workspace {
-  return { version: 2, docs: [], activeDocId: '', savedAt: Date.now() }
+  return { version: SESSION_VERSION, docs: [], activeDocId: '', savedAt: Date.now() }
 }

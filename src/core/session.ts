@@ -1,5 +1,6 @@
 /** 会话迁移：v1 单文档 → v2 多文档工作区。纯函数。 */
 
+import { SESSION_VERSION } from './types'
 import type { DocItem, SessionV1, Workspace } from './types'
 
 export function migrateV1(old: SessionV1): Workspace {
@@ -11,14 +12,14 @@ export function migrateV1(old: SessionV1): Workspace {
     annotations: old.annotations,
     addedAt: old.savedAt,
   }
-  return { version: 2, docs: [doc], activeDocId: doc.id, savedAt: old.savedAt }
+  return { version: SESSION_VERSION, docs: [doc], activeDocId: doc.id, savedAt: old.savedAt }
 }
 
 /** 任意存储读数的防御性解析：合法 v2 返回，v1 迁移，其余 null。 */
 export function parseWorkspace(raw: string): Workspace | null {
   try {
     const parsed = JSON.parse(raw) as SessionV1 | Workspace
-    if (parsed.version === 2 && Array.isArray(parsed.docs)) return parsed
+    if (parsed.version === SESSION_VERSION && Array.isArray(parsed.docs)) return parsed
     if (parsed.version === 1 && typeof parsed.text === 'string') return migrateV1(parsed)
     return null
   } catch {

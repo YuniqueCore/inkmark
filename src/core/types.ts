@@ -3,6 +3,16 @@
 /** 批注类型：问题、建议、疑问、重点、认可（写得好 + 原因）、slop 预扫描 */
 export type AnnotationKind = 'issue' | 'suggestion' | 'question' | 'highlight' | 'praise' | 'slop'
 
+/** 各批注类型的规范中文标签。导出（core）与 UI 共用的单一来源 */
+export const KIND_LABEL: Record<AnnotationKind, string> = {
+  issue: '问题',
+  suggestion: '建议',
+  question: '疑问',
+  highlight: '重点',
+  praise: '认可',
+  slop: 'AI 味',
+}
+
 export type AnnotationStatus = 'open' | 'resolved'
 
 export interface Annotation {
@@ -55,9 +65,12 @@ export interface DocItem {
   revised?: string
 }
 
+/** 工作区会话格式版本：构造与运行时校验共用此常量 */
+export const SESSION_VERSION = 2 as const
+
 /** 工作区会话 v2：多文档。localStorage 持久化单元 */
 export interface Workspace {
-  version: 2
+  version: typeof SESSION_VERSION
   docs: DocItem[]
   activeDocId: string
   savedAt: number
