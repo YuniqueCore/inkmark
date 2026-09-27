@@ -41,26 +41,26 @@ describe('双文档锚定的导出', () => {
   it('inline：改稿侧批注单独列在文末，不插入原文', () => {
     const out = exportInline(doc.text, doc.annotations, { revisedText: doc.revised })
     // 原文侧批注以行内标记插入锚点后
-    expect(out.startsWith('原文第一行。【批注①·问题】原文侧批注\n原文第二行。')).toBe(true)
+    expect(out.startsWith('原文第一行。【批注①·问题 @0-6】原文侧批注\n原文第二行。')).toBe(true)
     expect(out).toContain('针对 AI 改稿')
-    expect(out).toContain('【批注②·认可】改稿侧批注')
+    expect(out).toContain('【批注②·认可 @0-6】改稿侧批注')
   })
 
   it('snippets：改稿侧摘录来自改稿文本并带（改稿）标记', () => {
     const out = exportSnippets(doc.text, doc.annotations, { revisedText: doc.revised })
-    expect(out).toContain('【片段①】原文第一行。')
-    expect(out).toContain('【片段②】（改稿）改稿唯一行。')
+    expect(out).toContain('【片段① @0-6】原文第一行。')
+    expect(out).toContain('【片段② @0-6】（改稿）改稿唯一行。')
   })
 
   it('review：改稿侧前缀为「改稿：」', () => {
     const out = exportReview(doc.text, doc.annotations, { revisedText: doc.revised })
-    expect(out).toContain('> 原文：原文第一行。')
-    expect(out).toContain('> 改稿：改稿唯一行。')
+    expect(out).toContain('> 原文 @0-6：原文第一行。')
+    expect(out).toContain('> 改稿 @0-6：改稿唯一行。')
   })
 
   it('无改稿文本兜底：改稿侧批注回退到原文摘录（不崩溃）', () => {
     const out = exportReview(doc.text, doc.annotations)
-    expect(out).toContain('> 改稿：')
+    expect(out).toContain('> 改稿 @')
   })
 })
 

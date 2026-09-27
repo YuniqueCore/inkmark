@@ -1,7 +1,11 @@
-/** 导出弹层：四种格式预览 + 复制 + 下载；W3C 页支持把批注导出为 Web Annotation JSON。 */
+/** 导出弹层：四种格式预览 + 复制 + 下载；W3C 页支持把批注导出为 Web Annotation JSON。
+ * 支持多文档：单文档直接下载对应文件；多文档复制为按文件分节的合并文本，
+ * 下载打包为 zip（每份文档一个文件，来源文件名打头）。 */
 
-import { exportAs } from '../core/export'
+import { exportAs, exportCombined, exportFileName, zipEntryNames } from '../core/export'
 import { toW3C } from '../core/w3c'
+import { escapeHtml } from './editor'
+import { strToU8, zipSync } from 'fflate'
 import type { DocItem } from '../core/types'
 
 export interface ExporterCallbacks {
@@ -30,7 +34,7 @@ export class ExporterView {
   private format: TabId = 'inline'
   private includeResolved = false
   private includeFileInfo = false
-  private doc: DocItem | null = null
+  private docs: DocItem[] = []
 
   constructor(
     modal: HTMLElement,
@@ -45,25 +49,42 @@ export class ExporterView {
       'fixed left-1/2 top-1/2 z-100 hidden w-[min(880px,94vw)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border bg-card text-card-foreground shadow-2xl'
   }
 
-  open(doc: DocItem): void {
-    this.doc = doc
+  open(docs: DocItem[]): void {
+    if (docs.length === 0) return
+    this.docs = docs
     this.render()
     this.overlay.classList.remove('hidden')
     this.modal.classList.remove('hidden')
   }
 
   close(): void {
+    this.docs = []
     this.overlay.classList.add('hidden')
     this.modal.classList.add('hidden')
     this.callbacks.onClose()
   }
 
-  private content(): string {
-    const doc = this.doc
-    if (!doc) return ''
+  /** 单份文档在当前格式下的完整内容（zip 打包用） */
+  private perDocContent(doc: DocItem): string {
     if (this.format === 'w3c') {
       return JSON.stringify(toW3C(doc, { includeResolved: this.includeResolved }), null, 2)
     }
+    return exportAs(this.format, doc.text, doc.annotations, {
+      includeResolved: this.includeResolved,
+      revisedText: doc.revised,
+      fileName: doc.name,
+    })
+  }
+
+  private content(): string {
+    if (this.docs.length === 0) return ''
+    const isMulti = this.docs.length > 1
+    if (this.format === 'w3c') {
+      const items = this.docs.flatMap((d) => toW3C(d, { includeResolved: this.includeResolved }))
+      return JSON.stringify(items, null, 2)
+    }
+    if (isMulti) return exportCombined(this.format, this.docs, { includeResolved: this.includeResolved })
+    const doc = this.docs[0]!
     return exportAs(this.format, doc.text, doc.annotations, {
       includeResolved: this.includeResolved,
       revisedText: doc.revised,
@@ -72,9 +93,9 @@ export class ExporterView {
   }
 
   private render(): void {
-    const doc = this.doc
-    if (!doc) return
+    if (this.docs.length === 0) return
     const isW3C = this.format === 'w3c'
+    const isMulti = this.docs.length > 1
     const content = this.content()
     const tab = TABS.find((t) => t.id === this.format)!
     this.modal.innerHTML = `
@@ -86,7 +107,7 @@ export class ExporterView {
           ).join('')}
         </div>
         <div class="flex items-center gap-3">
-          ${isW3C
+          ${isW3C || isMulti
             ? ''
             : `<label class="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
           <input type="checkbox" id="inc-file-info" class="size-3.5 accent-[var(--primary)]" ${this.includeFileInfo ? 'checked' : ''}/>
@@ -99,7 +120,13 @@ export class ExporterView {
         </div>
       </div>
       <div class="px-5 pt-3">
-        <p class="text-[13px] text-muted-foreground">${tab.hint}</p>
+        <p class="text-[13px] text-muted-foreground">${
+          isMulti
+            ? `已选 ${this.docs.length} 份文档：${escapeHtml(this.docs.map((d) => d.name).join('、'))}。${
+                isW3C ? '输出为合并的 Annotation 数组（target.source 标注来源文档）。' : '输出按文件分节，每节顶部标注来源文件名；下载打包为 zip。'
+              }`
+            : tab.hint
+        }</p>
         <textarea readonly id="export-preview" class="input-base mt-2.5 h-[42vh] resize-none font-mono text-[13px] leading-relaxed"></textarea>
       </div>
       <div class="flex items-center justify-between border-t bg-muted/40 px-5 py-3">
@@ -135,15 +162,27 @@ export class ExporterView {
       this.callbacks.onCopy(preview.value)
     })
     this.modal.querySelector('[data-op="download"]')?.addEventListener('click', () => {
-      const blob = new Blob([preview.value], {
-        type: isW3C ? 'application/json;charset=utf-8' : 'text/markdown;charset=utf-8',
-      })
-      const url = URL.createObjectURL(blob)
+      // 文件名以来源文档名打头（chapter-3-批注-snippets-2026-09-28.md），
+      // 而不是产品名——多份文档的批注文件放在一起才分得清谁是谁；
+      // 多文档下载打包为 zip，每份文档一个文件。
       const a = document.createElement('a')
-      a.href = url
-      a.download = `inkmark-${this.format}-${new Date().toISOString().slice(0, 10)}.${isW3C ? 'json' : 'md'}`
+      if (isMulti) {
+        const files: Record<string, Uint8Array> = {}
+        const names = zipEntryNames(this.docs.map((d) => d.name), this.format)
+        this.docs.forEach((d, i) => {
+          files[names[i]!] = strToU8(this.perDocContent(d))
+        })
+        const zipped = zipSync(files)
+        a.href = URL.createObjectURL(new Blob([zipped], { type: 'application/zip' }))
+        a.download = `批注-${this.format}-${this.docs.length}文档-${new Date().toISOString().slice(0, 10)}.zip`
+      } else {
+        const doc = this.docs[0]!
+        const type = isW3C ? 'application/json;charset=utf-8' : 'text/markdown;charset=utf-8'
+        a.href = URL.createObjectURL(new Blob([preview.value], { type }))
+        a.download = exportFileName(doc.name, this.format, new Date())
+      }
       a.click()
-      URL.revokeObjectURL(url)
+      URL.revokeObjectURL(a.href)
     })
     this.modal.querySelector('[data-op="import"]')?.addEventListener('click', () => {
       const input = document.createElement('input')

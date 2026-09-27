@@ -197,6 +197,26 @@ const sidebar = new SidebarView(sidebarEl, {
 const fileTree = new FileTreeView(treeEl, {
   onOpen: (id) => switchDoc(id),
   onRemove: (id) => void removeDoc(id),
+  onExportDoc: (id) => {
+    const doc = state.docs.find((d) => d.id === id)
+    if (!doc) return
+    if (doc.annotations.length === 0) {
+      toast('该文档还没有批注')
+      return
+    }
+    exporter.open([doc])
+  },
+  onBulkExport: (ids) => {
+    const idSet = new Set(ids)
+    const docs = state.docs.filter((d) => idSet.has(d.id) && d.annotations.length > 0)
+    if (docs.length === 0) {
+      toast('所选文档都没有批注')
+      return
+    }
+    if (docs.length < ids.length) toast(`${ids.length - docs.length} 份没有批注的文档已跳过`)
+    exporter.open(docs)
+  },
+  onBulkDelete: (ids) => void removeDocs(ids),
 })
 
 const exporter = new ExporterView($('#export-modal'), $('#overlay'), {
@@ -346,16 +366,42 @@ async function removeDoc(id: string): Promise<void> {
     danger: true,
   })
   if (!ok) return
-  slopReports.delete(id)
-  const docs = state.docs.filter((d) => d.id !== id)
+  await removeDocsConfirmed([id])
+  toast(`已移除 ${doc.name}`)
+}
+
+/** 多选移除入口：先统一确认，再落盘 */
+async function removeDocs(ids: string[]): Promise<void> {
+  const docs = state.docs.filter((d) => ids.includes(d.id))
+  if (docs.length === 0) return
+  const count = docs.reduce((acc, d) => acc + d.annotations.length, 0)
+  const names = docs.map((d) => d.name).join('、')
+  const ok = await confirmDialog({
+    title: `移除 ${docs.length} 个文档？`,
+    description: `${names}${count > 0 ? `（共 ${count} 条批注）` : ''}——删除后不可恢复。`,
+    confirmText: '移除',
+    danger: true,
+  })
+  if (!ok) return
+  await removeDocsConfirmed(ids)
+  toast(`已移除 ${docs.length} 个文档`)
+}
+
+/** 已确认的删除落盘：清缓存、维护活动文档、重渲染 */
+async function removeDocsConfirmed(ids: string[]): Promise<void> {
+  const idSet = new Set(ids)
+  state.docs.filter((d) => idSet.has(d.id)).forEach((d) => slopReports.delete(d.id))
+  const docs = state.docs.filter((d) => !idSet.has(d.id))
+  const activeRemoved = idSet.has(state.activeDocId)
   state = {
     docs,
-    activeDocId: state.activeDocId === id ? (docs[0]?.id ?? '') : state.activeDocId,
+    activeDocId: activeRemoved ? (docs[0]?.id ?? '') : state.activeDocId,
   }
-  if (state.activeDocId === '') selectionPin.dismiss()
-  annotationPopup.close()
+  if (activeRemoved) {
+    annotationPopup.close()
+    if (state.activeDocId === '') selectionPin.dismiss()
+  }
   rerender(false)
-  toast(`已移除 ${doc.name}`)
 }
 
 // ---------------------------------------------------------------- 渲染
@@ -697,7 +743,7 @@ function maybeExport(): void {
     toast('当前文档还没有批注：划选正文文字，或运行 slop 预扫描')
     return
   }
-  exporter.open(doc)
+  exporter.open([doc])
 }
 
 function clearCurrent(): void {

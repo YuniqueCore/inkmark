@@ -1,4 +1,6 @@
-/** 三种导出格式：原文+批注（行内标记）、片段+批注、评审引用块（贴回给 AI）。全部纯函数。 */
+/** 三种导出格式：原文+批注（行内标记）、片段+批注、评审引用块（贴回给 AI）。全部纯函数。
+ * 每条批注都带 `@start-end` 字符偏移（0-based、右端开区间，与 W3C TextPositionSelector
+ * 语义一致）：改稿侧批注的偏移相对改稿文本，输出中已注明。 */
 
 import { splitBlocks, snippet } from './text'
 import type { Annotation, AnnotationKind } from './types'
@@ -55,7 +57,7 @@ function anchorText(a: Annotation, text: string, opts: ExportOptions): string {
 
 function marker(a: Annotation, num: string): string {
   const label = KIND_LABEL[a.kind]
-  return `【批注${num}·${label}】${a.comment.trim()}`
+  return `【批注${num}·${label} @${a.start}-${a.end}】${a.comment.trim()}`
 }
 
 /**
@@ -95,10 +97,10 @@ export function exportInline(text: string, anns: Annotation[], opts: ExportOptio
   }
     out.push(text.slice(cursor))
   if (revisedAnns.length > 0) {
-    out.push(`\n\n—— 以下 ${revisedAnns.length} 条批注针对 AI 改稿（不在原文中定位）——`)
+    out.push(`\n\n—— 以下 ${revisedAnns.length} 条批注针对 AI 改稿（偏移相对改稿文本，不在原文中定位）——`)
     for (const a of revisedAnns) {
       const num = numbers.get(a.id)!
-      out.push(`\n【批注${num}·${KIND_LABEL[a.kind]}】${a.comment.trim()}`)
+      out.push(`\n${marker(a, num)}`)
     }
   }
   return head + out.join('')
@@ -117,7 +119,7 @@ export function exportSnippets(text: string, anns: Annotation[], opts: ExportOpt
       const num = numbers.get(a.id)!
       const quote = snippet(anchorText(a, text, opts), a.start, a.end, maxLen)
       const sideMark = a.target === 'revised' ? '（改稿）' : ''
-      return `【片段${num}】${sideMark}${quote}\n【批注${num}·${KIND_LABEL[a.kind]}】${a.comment.trim()}`
+      return `【片段${num} @${a.start}-${a.end}】${sideMark}${quote}\n【批注${num}·${KIND_LABEL[a.kind]}】${a.comment.trim()}`
     })
     .join('\n\n')
   return opts.fileName ? `文件：${opts.fileName}\n\n${body}` : body
@@ -136,7 +138,7 @@ export function exportReview(text: string, anns: Annotation[], opts: ExportOptio
     const num = numbers.get(a.id)!
     const quote = snippet(anchorText(a, text, opts), a.start, a.end, maxLen).replace(/\n+/g, ' ')
     const sideLabel = a.target === 'revised' ? '改稿' : '原文'
-    lines.push(`> ${sideLabel}：${quote}`)
+    lines.push(`> ${sideLabel} @${a.start}-${a.end}：${quote}`)
     lines.push(`> ${KIND_MARK[a.kind]} 批注${num}（${KIND_LABEL[a.kind]}）：${a.comment.trim()}`)
     lines.push('')
   }
@@ -160,4 +162,59 @@ export function exportAs(
     case 'review':
       return exportReview(text, anns, opts)
   }
+}
+
+/** 下载文件名：`{原文件名去扩展名}-批注-{format}-{日期}.{md|json}`。
+ * 来源文件名打头，多文档场景一眼分清是哪份文件的批注；
+ * 清洗文件系统非法字符，去扩展名后为空则退回 untitled。 */
+export function exportFileName(
+  docName: string,
+  format: ExportFormat | 'w3c',
+  date = new Date(),
+): string {
+  const base =
+    docName.replace(/\.[a-z0-9]+$/i, '').replace(/[/\\:*?"<>|]/g, '-').trim() || 'untitled'
+  const stamp = date.toISOString().slice(0, 10)
+  return `${base}-批注-${format}-${stamp}.${format === 'w3c' ? 'json' : 'md'}`
+}
+
+/** 多文档 zip 的条目名：同名文档追加 -2、-3 序号，绝不互相覆盖。 */
+export function zipEntryNames(
+  docNames: string[],
+  format: ExportFormat | 'w3c',
+  date = new Date(),
+): string[] {
+  const used = new Map<string, number>()
+  return docNames.map((name) => {
+    const stem = exportFileName(name, format, date)
+    const n = used.get(stem) ?? 1
+    used.set(stem, n + 1)
+    return n === 1 ? stem : stem.replace(/(\.(?:md|json))$/, `-${n}$1`)
+  })
+}
+
+/** 多文档合并导出的最小文档形状 */
+export interface ExportableDoc {
+  name: string
+  text: string
+  annotations: Annotation[]
+  revised?: string
+}
+
+/** 多文档合并导出：每份文档一节，节首强制「文件：{name}」（合并输出里文件信息
+ * 是区分出处的唯一线索，不随开关关闭），节间以水平线分隔。 */
+export function exportCombined(
+  format: ExportFormat,
+  docs: ExportableDoc[],
+  opts: ExportOptions = {},
+): string {
+  return docs
+    .map((d) =>
+      exportAs(format, d.text, d.annotations, {
+        ...opts,
+        fileName: d.name,
+        revisedText: d.revised,
+      }),
+    )
+    .join('\n\n---\n\n')
 }

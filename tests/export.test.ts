@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { exportInline, exportReview, exportSnippets, numberAnnotations } from '../src/core/export'
+import { exportFileName, exportInline, exportReview, exportSnippets, numberAnnotations, zipEntryNames } from '../src/core/export'
 import type { Annotation } from '../src/core/types'
 
 function ann(id: string, start: number, end: number, comment: string, status: 'open' | 'resolved' = 'open'): Annotation {
@@ -22,7 +22,7 @@ describe('numberAnnotations', () => {
 describe('exportInline', () => {
   it('批注标记插在锚点结束处，原文分段保留', () => {
     const out = exportInline(TEXT, [ann('a', 4, 14, '起手壳')])
-    expect(out).toContain('第一段：随着技术的不断发展。【批注①·问题】起手壳')
+    expect(out).toContain('第一段：随着技术的不断发展。【批注①·问题 @4-14】起手壳')
     expect(out).toContain('\n\n')
   })
   it('resolved 默认不导出', () => {
@@ -32,7 +32,7 @@ describe('exportInline', () => {
   })
   it('includeResolved=true 时导出', () => {
     const out = exportInline(TEXT, [ann('a', 4, 14, '已处理', 'resolved')], { includeResolved: true })
-    expect(out).toContain('批注①·问题】已处理')
+    expect(out).toContain('批注①·问题 @4-14】已处理')
   })
   it('无批注时返回原文', () => {
     expect(exportInline(TEXT, [])).toBe(TEXT)
@@ -42,7 +42,7 @@ describe('exportInline', () => {
 describe('exportSnippets', () => {
   it('每条 = 片段 + 批注，编号一致', () => {
     const out = exportSnippets(TEXT, [ann('a', 4, 14, '起手壳')])
-    expect(out).toBe('【片段①】随着技术的不断发展。\n【批注①·问题】起手壳')
+    expect(out).toBe('【片段① @4-14】随着技术的不断发展。\n【批注①·问题】起手壳')
   })
 })
 
@@ -50,7 +50,7 @@ describe('exportReview', () => {
   it('输出 Markdown 引用块，问题带 [!] 文本标记（不用 emoji）', () => {
     const out = exportReview(TEXT, [ann('a', 4, 14, '起手壳')])
     expect(out).toContain('批注反馈（共 1 条）：')
-    expect(out).toContain('> 原文：随着技术的不断发展。')
+    expect(out).toContain('> 原文 @4-14：随着技术的不断发展。')
     expect(out).toContain('> [!] 批注①（问题）：起手壳')
   })
 
@@ -61,7 +61,7 @@ describe('exportReview', () => {
   })
   it('多行锚点在引用里压成单行', () => {
     const out = exportReview('AAA\n\nBBB'.replace('AAA', '行一\n行二'), [ann('a', 0, 6, 'c')])
-    expect(out).toContain('> 原文：行一 行二')
+    expect(out).toContain('> 原文 @0-6：行一 行二')
   })
 })
 
@@ -70,7 +70,7 @@ describe('文件信息（fileName 选项）', () => {
 
   it('三种格式顶部标注「文件：{name}」', () => {
     expect(exportInline(TEXT, [ann('a', 4, 14, '起手壳')], opts).startsWith('文件：chapter-3.md\n\n第一段：')).toBe(true)
-    expect(exportSnippets(TEXT, [ann('a', 4, 14, '起手壳')], opts).startsWith('文件：chapter-3.md\n\n【片段①】')).toBe(true)
+    expect(exportSnippets(TEXT, [ann('a', 4, 14, '起手壳')], opts).startsWith('文件：chapter-3.md\n\n【片段① @4-14】')).toBe(true)
     expect(exportReview(TEXT, [ann('a', 4, 14, '起手壳')], opts).startsWith('文件：chapter-3.md\n\n批注反馈（共 1 条）：')).toBe(true)
   })
 
@@ -84,5 +84,46 @@ describe('文件信息（fileName 选项）', () => {
     expect(exportSnippets(TEXT, [], opts)).toBe('文件：chapter-3.md')
     expect(exportInline(TEXT, [], opts).startsWith('文件：chapter-3.md\n\n第一段：')).toBe(true)
     expect(exportReview(TEXT, [], opts).startsWith('文件：chapter-3.md\n\n批注反馈（共 0 条）：')).toBe(true)
+  })
+})
+
+describe('偏移标注（@start-end，0-based 右端开区间）', () => {
+  it('片段与评审引用都带偏移，改稿侧注明相对改稿', () => {
+    const out = exportSnippets(TEXT, [ann('a', 4, 14, '起手壳')])
+    expect(out).toContain('@4-14')
+    const rev = exportReview(TEXT, [ann('a', 4, 14, '起手壳')])
+    expect(rev).toContain('> 原文 @4-14：')
+  })
+})
+
+describe('exportFileName', () => {
+  it('来源文件名打头，去扩展名，带格式与日期', () => {
+    const d = new Date('2026-09-28T00:00:00Z')
+    expect(exportFileName('chapter-3.md', 'snippets', d)).toBe('chapter-3-批注-snippets-2026-09-28.md')
+    expect(exportFileName('chapter-3.md', 'w3c', d)).toBe('chapter-3-批注-w3c-2026-09-28.json')
+  })
+  it('清洗非法字符；无扩展名原样保留；空名退回 untitled', () => {
+    const d = new Date('2026-09-28T00:00:00Z')
+    expect(exportFileName('a/b:c*.md', 'review', d)).toBe('a-b-c--批注-review-2026-09-28.md')
+    expect(exportFileName('示例：AI 味产品文', 'inline', d)).toBe('示例：AI 味产品文-批注-inline-2026-09-28.md')
+    expect(exportFileName('.md', 'inline', d)).toBe('untitled-批注-inline-2026-09-28.md')
+  })
+})
+
+describe('zipEntryNames（多文档 zip 条目名）', () => {
+  const d = new Date('2026-09-28T00:00:00Z')
+  it('同名文档加 -2/-3 序号，不互相覆盖', () => {
+    expect(zipEntryNames(['a.md', 'a.md', 'a.md', 'b.md'], 'snippets', d)).toEqual([
+      'a-批注-snippets-2026-09-28.md',
+      'a-批注-snippets-2026-09-28-2.md',
+      'a-批注-snippets-2026-09-28-3.md',
+      'b-批注-snippets-2026-09-28.md',
+    ])
+  })
+  it('W3C 格式同样适用，无重名时原样返回', () => {
+    expect(zipEntryNames(['x.md', 'y.md'], 'w3c', d)).toEqual([
+      'x-批注-w3c-2026-09-28.json',
+      'y-批注-w3c-2026-09-28.json',
+    ])
   })
 })
