@@ -307,6 +307,8 @@ async function removeDocsConfirmed(ids: string[]): Promise<void> {
     activeDocId: activeRemoved ? (docs[0]?.id ?? '') : state.activeDocId,
   }
   if (activeRemoved) {
+    // 编辑的是被移除文档的文本，随文档一起终止（与 switchDoc 同规则）
+    if (mode === 'edit') mode = 'annotate'
     annotationPopup.close()
     if (state.activeDocId === '') selectionPin.dismiss()
   }

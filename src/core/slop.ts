@@ -208,11 +208,6 @@ function scoreBand(score: number): SlopBand {
   return 'heavy'
 }
 
-/** 仅需要命中列表时的便捷入口（不计分开销可忽略，直接复用完整报告）。 */
-export function scanSlop(text: string, lexicons: SlopLexicon[]): SlopHit[] {
-  return scanSlopReport(text, lexicons).hits
-}
-
 /** 报告的类目分布：按命中数降序（平局按类目 id），侧栏统计卡用。 */
 export function reportCategoryCounts(
   hits: SlopHit[],

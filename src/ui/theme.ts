@@ -1,5 +1,6 @@
 /** 明暗主题：首屏偏好应用 + 顶栏切换按钮，localStorage 记忆。 */
 
+// 键与 index.html 防闪烁内联脚本镜像——改动必须两处同步
 const THEME_KEY = 'inkmark:theme'
 
 function applyThemeButton(): void {

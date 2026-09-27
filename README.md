@@ -2,7 +2,7 @@
 
 给 AI 改过的文本做**行内批注**的纯网页小工具。划选文字写批注，一键导出三种格式，把"哪里有问题"准确递回给 AI。
 
-UI 按 shadcn/ui 语系构建（Tailwind CSS v4 + 设计 token，灵感来自 rareui）：中性 zinc 底、细边框、subtle 阴影、明暗双主题（顶栏切换，跟随系统偏好，localStorage 记忆）。构建产物 gzip 约 40KB。
+UI 按 shadcn/ui 语系构建（Tailwind CSS v4 + 设计 token，灵感来自 rareui）：中性 zinc 底、细边框、subtle 阴影、明暗双主题（顶栏切换，跟随系统偏好，localStorage 记忆）。构建产物 gzip 约 52KB。
 
 ## 功能
 
