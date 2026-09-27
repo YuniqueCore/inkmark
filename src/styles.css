@@ -323,3 +323,38 @@ body.select-none {
 .confirm-danger {
   @apply bg-destructive text-white shadow-xs hover:bg-destructive/90;
 }
+
+/* ---------------------------------------------------------------- 移动端抽屉
+   <lg 单栏布局：文档树 / 批注栏变为覆盖式抽屉（body 上的 tree-open /
+   sidebar-open 类驱动），背板点击关闭；桌面布局不受影响。 */
+@media (max-width: 1023.98px) {
+  #filetree,
+  #sidebar {
+    position: fixed;
+    top: 57px;
+    bottom: 0;
+    width: min(84vw, 360px) !important; /* 覆盖桌面态的内联列宽 */
+    z-index: 40;
+    transition: transform 0.22s ease-out;
+    box-shadow: 0 12px 32px rgb(0 0 0 / 0.28);
+  }
+  #filetree {
+    left: 0;
+    transform: translateX(-105%);
+  }
+  #sidebar {
+    right: 0;
+    transform: translateX(105%);
+  }
+  body.tree-open #filetree,
+  body.sidebar-open #sidebar {
+    transform: none;
+  }
+  body.tree-open #drawer-backdrop,
+  body.sidebar-open #drawer-backdrop {
+    display: block; /* 默认 .hidden，抽屉打开时显示 */
+  }
+  .resize-handle {
+    display: none;
+  }
+}

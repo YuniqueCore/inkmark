@@ -36,7 +36,7 @@ export class AnnotationPopup {
 
   constructor(private callbacks: PopupCallbacks) {
     this.el = document.createElement('div')
-    this.el.className = 'popover-panel fixed z-60 hidden w-[420px]'
+    this.el.className = 'popover-panel fixed z-60 hidden w-[min(420px,calc(100vw-16px))]'
     this.arrowEl = document.createElement('div')
     this.arrowEl.className = 'popup-arrow absolute size-2.5 rotate-45 bg-popover'
     document.body.append(this.el)

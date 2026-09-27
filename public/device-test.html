@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>InkMark · 设备尺寸测试壳</title>
+  <style>
+    body { margin: 0; padding: 16px; background: #555; display: flex; gap: 24px; flex-wrap: wrap; }
+    .device { text-align: center; color: #fff; font: 12px/1.6 system-ui; }
+    iframe { border: 2px solid #222; border-radius: 20px; background: #fff; display: block; }
+    .results { margin-top: 6px; text-align: left; max-width: 380px; font-family: ui-monospace, monospace; }
+    .pass { color: #6ee7b7; } .fail { color: #fca5a5; }
+  </style>
+</head>
+<body>
+  <div class="device" data-device="phone">手机 390×844<iframe src="/" style="width:390px;height:844px"></iframe><div class="results"></div></div>
+  <div class="device" data-device="tablet">平板 768×1024<iframe src="/" style="width:768px;height:1024px"></iframe><div class="results"></div></div>
+  <div class="device" data-device="desktop">桌面 1280×860<iframe src="/" style="width:1280px;height:860px"></iframe><div class="results"></div></div>
+  <script>
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms))
+    const report = (device, name, ok) => {
+      const box = document.querySelector(`[data-device="${device}"] .results`)
+      box.insertAdjacentHTML('beforeend', `<div class="${ok ? 'pass' : 'fail'}">${ok ? 'PASS' : 'FAIL'} · ${name}</div>`)
+      return ok
+    }
+
+    async function testMobileLike(win, doc, device, opts) {
+      let ok = true
+      const t = (name, fn) => fn().then((r) => { ok = report(device, name, r) && ok })
+      const vis = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.right > 0 && r.left < win.innerWidth }
+      const flush = () => new Promise((r) => setTimeout(r, 60))
+
+      // 1 无横向溢出
+      await t('无横向溢出', async () => doc.documentElement.scrollWidth <= win.innerWidth + 1)
+      // 2 初始抽屉收起
+      await t('初始抽屉收起（树在屏外）', async () => doc.querySelector('#filetree').getBoundingClientRect().right <= 0)
+      // 3 顶栏按钮全部可见
+      await t('顶栏按钮无溢出', async () => [...doc.querySelectorAll('header button')].every((b) => b.getBoundingClientRect().width > 0))
+      // 4 抽屉打开
+      doc.querySelector('#btn-tree').click(); await flush()
+      await t('文档树抽屉可打开', async () => doc.body.classList.contains('tree-open') && vis(doc.querySelector('#filetree')))
+      // 5 背板显示
+      await t('背板显示', async () => vis(doc.querySelector('#drawer-backdrop')))
+      // 6 互斥：开批注栏关文档树
+      doc.querySelector('#btn-sidebar').click(); await flush()
+      await t('批注栏与文档树互斥', async () => !doc.body.classList.contains('tree-open') && doc.body.classList.contains('sidebar-open'))
+      // 7 关闭抽屉
+      doc.querySelector('#drawer-backdrop').click(); await flush()
+      await t('背板点击关闭', async () => !doc.body.classList.contains('sidebar-open'))
+      // 8 载入示例 + 划选 → 小点
+      doc.querySelector('#btn-sample').click(); await flush()
+      const ed = doc.querySelector('#editor .editor-blk')
+      if (ed) {
+        const range = doc.createRange()
+        const tn = ed.firstChild
+        range.setStart(tn, 0); range.setEnd(tn, Math.min(10, tn.textContent.length))
+        const sel = win.getSelection(); sel.removeAllRanges(); sel.addRange(range)
+        const r = range.getBoundingClientRect()
+        ed.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: r.right, clientY: r.bottom }))
+        await flush()
+        await t('划选唤起标注小点', async () => !doc.querySelector('body > button.fixed')?.classList.contains('hidden'))
+        // 9 小点点击展开撰写卡（触屏路径）
+        doc.querySelector('body > button.fixed').click(); await flush()
+        const card = doc.querySelector('body > div.popover-panel.z-50')
+        const cr = card.getBoundingClientRect()
+        await t('撰写卡在视口内', async () => !card.classList.contains('hidden') && cr.left >= 0 && cr.right <= win.innerWidth)
+        // 10 快捷语 chips
+        const chip = card.querySelector('.phrase-chip')
+        chip.click()
+        await t('快捷语点击进批注语', async () => card.querySelector('#pin-composer-input').value.length > 0)
+        // 11 认可空描述提交
+        card.querySelector('[data-kind="praise"]').click(); await flush()
+        card.querySelector('[data-op="submit"]').click(); await flush()
+        await t('认可空描述可提交', async () => card.classList.contains('hidden') && doc.querySelectorAll('.seg-hl').length > 0)
+        // 12 批注栏抽屉里看得到批注
+        doc.querySelector('#btn-sidebar').click(); await flush()
+        const cards = doc.querySelectorAll('#sidebar .ann-card').length
+        doc.querySelector('#drawer-backdrop').click(); await flush()
+        await t('批注栏可查看批注', async () => cards > 0 && !doc.body.classList.contains('sidebar-open'))
+        // 13 导出弹层不溢出
+        doc.querySelector('#btn-export').click(); await flush()
+        const modal = doc.querySelector('#export-modal')
+        const mr = modal.getBoundingClientRect()
+        await t('导出弹层在视口内', async () => !modal.classList.contains('hidden') && mr.left >= 0 && mr.right <= win.innerWidth)
+        modal.querySelector('[data-op="close"]').click()
+      } else {
+        report(device, '示例文档载入', false); ok = false
+      }
+      win.localStorage.clear()
+    }
+
+    async function testDesktop(win, doc, device) {
+      let ok = true
+      await new Promise((r) => setTimeout(r, 100))
+      const ft = doc.querySelector('#filetree')
+      const visibleBefore = ft.getBoundingClientRect().width > 0
+      doc.querySelector('#btn-tree').click(); await new Promise((r) => setTimeout(r, 60))
+      const hiddenAfter = ft.classList.contains('hidden')
+      ok = report(device, '三栏布局 + 树切换', visibleBefore && hiddenAfter) && ok
+      doc.querySelector('#btn-tree').click()
+    }
+
+    ;(async () => {
+      const phone = document.querySelector('[data-device="phone"] iframe')
+      await testMobileLike(phone.contentWindow, phone.contentDocument, 'phone')
+      const tablet = document.querySelector('[data-device="tablet"] iframe')
+      await testMobileLike(tablet.contentWindow, tablet.contentDocument, 'tablet')
+      const desktop = document.querySelector('[data-device="desktop"] iframe')
+      await testDesktop(desktop.contentWindow, desktop.contentDocument, 'desktop')
+    })()
+  </script>
+</body>
+</html>

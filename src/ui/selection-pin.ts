@@ -64,7 +64,7 @@ export class SelectionPin {
     this.pin.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" class="size-3.5"><path d="M12 5v14M5 12h14"/></svg>`
 
     this.card = document.createElement('div')
-    this.card.className = 'popover-panel fixed z-50 hidden w-[400px]'
+    this.card.className = 'popover-panel fixed z-50 hidden w-[min(400px,calc(100vw-16px))]'
 
     document.body.append(this.pin, this.card)
 

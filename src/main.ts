@@ -157,6 +157,7 @@ const selectionPin = new SelectionPin({
 
 const sidebar = new SidebarView(sidebarEl, {
   onFocus: (id) => {
+    if (isMobileViewport()) closeDrawers()
     const doc = activeDoc()
     // 改稿侧批注只在对照视图里有正文锚点：批注模式下定位时自动切过去
     // （编辑模式不打断，避免丢掉正在编辑的文本）
@@ -169,6 +170,7 @@ const sidebar = new SidebarView(sidebarEl, {
     editor.focusAnnotation(id)
   },
   onEdit: (a) => {
+    if (isMobileViewport()) closeDrawers()
     editor.focusAnnotation(a.id)
     openAnnotationEditor(a.id)
     sidebar.setActive(a.id)
@@ -191,7 +193,10 @@ const sidebar = new SidebarView(sidebarEl, {
 })
 
 const fileTree = new FileTreeView(treeEl, {
-  onOpen: (id) => switchDoc(id),
+  onOpen: (id) => {
+    if (isMobileViewport()) closeDrawers()
+    switchDoc(id)
+  },
   onRemove: (id) => void removeDoc(id),
   onExportDoc: (id) => {
     const doc = state.docs.find((d) => d.id === id)
@@ -609,9 +614,22 @@ function clearCurrent(): void {
   removeDoc(doc.id)
 }
 
-// 侧栏 / 文档树收起：flex 布局下隐藏元素自然退出，flex-1 的中区自动占满，
-// 不需要任何列模板映射（此前 grid 自动放置会把中区挤进 6px 分隔列）
+// 侧栏 / 文档树收起。桌面（≥lg）：flex 布局下隐藏元素自然退出，flex-1 的
+// 中区自动占满；移动（<lg）：两者是覆盖式抽屉，body 上的 tree-open /
+// sidebar-open 类驱动滑入滑出（样式在 styles.css 移动端媒体查询），互斥展开。
+const isMobileViewport = (): boolean => window.matchMedia('(max-width: 1023.98px)').matches
+
+function closeDrawers(): void {
+  document.body.classList.remove('tree-open', 'sidebar-open')
+}
+
 function togglePanel(which: 'tree' | 'sidebar'): void {
+  if (isMobileViewport()) {
+    const other = which === 'tree' ? 'sidebar-open' : 'tree-open'
+    document.body.classList.remove(other)
+    document.body.classList.toggle(`${which}-open`)
+    return
+  }
   if (which === 'tree') {
     const off = $('#filetree').classList.toggle('hidden')
     $('#handle-left').classList.toggle('hidden', off)
@@ -655,6 +673,12 @@ document.addEventListener('keydown', (e) => {
 function bootstrap(): void {
   state = loadWorkspace()
   rerender(false)
+  // 移动端抽屉：背板点击与 Esc 关闭；跨断点时清掉抽屉状态
+  $('#drawer-backdrop').addEventListener('click', closeDrawers)
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !e.isComposing) closeDrawers()
+  })
+  window.matchMedia('(max-width: 1023.98px)').addEventListener('change', closeDrawers)
   initResizers({
     layout: $('#layout'),
     leftHandle: $('#handle-left'),
