@@ -1,19 +1,26 @@
 /** 快捷批注语：词表完整性 + 切换纯函数的行为。 */
 
 import { describe, expect, it } from 'vitest'
-import { hasQuickPhrase, QUICK_PHRASES, toggleQuickPhrase } from '../src/core/types'
+import { hasQuickPhrase, MANUAL_KINDS, QUICK_PHRASES, toggleQuickPhrase } from '../src/core/types'
 import type { AnnotationKind } from '../src/core/types'
 
 describe('QUICK_PHRASES 词表', () => {
-  it('覆盖全部批注类型，每类 3-8 条，且短语互不重复', () => {
+  it('只覆盖人工可写的四类；每类 4-16 条，短语互不重复', () => {
     const kinds = Object.keys(QUICK_PHRASES) as AnnotationKind[]
-    for (const k of kinds) {
+    expect([...kinds].sort()).toEqual([...MANUAL_KINDS].sort())
+    for (const k of MANUAL_KINDS) {
       const phrases = QUICK_PHRASES[k]!
-      expect(phrases.length).toBeGreaterThanOrEqual(3)
-      expect(phrases.length).toBeLessThanOrEqual(8)
+      expect(phrases.length).toBeGreaterThanOrEqual(4)
+      expect(phrases.length).toBeLessThanOrEqual(16)
       expect(new Set(phrases).size).toBe(phrases.length)
       for (const p of phrases) expect(p.trim()).toBe(p)
     }
+  })
+
+  it('原「问题 / AI 味」词表并入建议类，代表短语不丢失', () => {
+    const s = QUICK_PHRASES.suggestion!
+    for (const p of ['表述含糊，建议给出明确结论', '逻辑跳跃，缺少过渡', '用词过于华丽', '句式空洞', '套话空话'])
+      expect(s).toContain(p)
   })
 })
 

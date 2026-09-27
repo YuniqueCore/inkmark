@@ -42,21 +42,27 @@ const openEdit = (a: Annotation): void => {
 }
 
 describe('弹层编辑态快捷语', () => {
-  it('编辑态渲染当前类型的快捷语 chips；点击切换进输入框', () => {
+  it('非人工类型（slop）编辑：静态徽标保持当前类型可见；切到建议后出现快捷语', () => {
     openEdit(ann({kind: 'slop', comment: ''}))
+    // 四类人工 chips；当前类型不在清单内 → 前置静态徽标（无 data-kind，不可切换）
+    expect(el.querySelectorAll('.kind-chip').length).toBe(4)
+    const badge = el.querySelector('.chip-toggle.on:not(.kind-chip)')
+    expect(badge?.textContent).toContain('AI 味')
+    expect(el.querySelectorAll('.phrase-chip').length).toBe(0)
+    ;(el.querySelector('[data-kind="suggestion"]') as HTMLElement).click()
     const chips = [...el.querySelectorAll('.phrase-chip')] as HTMLElement[]
     expect(chips.length).toBeGreaterThanOrEqual(5)
-    expect(chips[0]!.dataset.phrase).toBe('用词过于华丽')
+    expect(chips[0]!.dataset.phrase).toBe('表述含糊，建议给出明确结论')
     chips[0]!.click()
     const input = el.querySelector('.popup-edit-input') as HTMLTextAreaElement
-    expect(input.value).toBe('用词过于华丽')
+    expect(input.value).toBe('表述含糊，建议给出明确结论')
     expect(chips[0]!.classList.contains('on')).toBe(true)
   })
 
-  it('切换类型后快捷语随之更换（认可 → 问题）', () => {
+  it('切换类型后快捷语随之更换（认可 → 疑问）', () => {
     openEdit(ann({kind: 'praise', comment: ''}))
-    ;(el.querySelector('[data-kind="issue"]') as HTMLElement).click()
-    expect((el.querySelector('.phrase-chip') as HTMLElement).dataset.phrase).toBe('表述含糊，建议给出明确结论')
+    ;(el.querySelector('[data-kind="question"]') as HTMLElement).click()
+    expect((el.querySelector('.phrase-chip') as HTMLElement).dataset.phrase).toBe('依据是什么？')
   })
 
   it('认可类型空批注语可保存；问题类型空语被拦截', () => {

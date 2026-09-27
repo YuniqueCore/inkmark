@@ -12,7 +12,7 @@
 import { computePosition, offset, shift, size, limitShift } from '@floating-ui/dom'
 import { escapeHtml } from '../core/text'
 import { icon } from './icons'
-import { hasQuickPhrase, KIND_LABEL, QUICK_PHRASES, toggleQuickPhrase } from '../core/types'
+import { hasQuickPhrase, KIND_LABEL, MANUAL_KINDS, QUICK_PHRASES, toggleQuickPhrase } from '../core/types'
 import type { AnnotationKind } from '../core/types'
 
 export interface SelectionInfo {
@@ -39,7 +39,7 @@ export interface PinCallbacks {
   onDismiss: () => void
 }
 
-const KINDS: AnnotationKind[] = ['issue', 'suggestion', 'question', 'highlight', 'praise', 'slop']
+const KINDS = MANUAL_KINDS
 
 export class SelectionPin {
   private pin: HTMLElement
@@ -48,7 +48,7 @@ export class SelectionPin {
   /** 小点在鼠标停点的哪一侧，以及纵向延伸方向 */
   private pinSide: PinSide = 'right'
   private pinVertical: 'up' | 'down' = 'down'
-  private kind: AnnotationKind = 'issue'
+  private kind: AnnotationKind = 'suggestion'
   private closeTimer: ReturnType<typeof setTimeout> | undefined
   /** card 已展开（hover 进入过） */
   private expanded = false
@@ -174,7 +174,9 @@ export class SelectionPin {
     this.expanded = true
     this.cancelCollapse()
     const draft = this.drafts.get(this.draftKey)
-    this.kind = draft?.kind ?? 'issue'
+    // 历史草稿可能存着已下架的类型（issue/slop）：回退到默认，避免 chips 无选中态
+    const dk = draft?.kind ?? 'suggestion'
+    this.kind = MANUAL_KINDS.includes(dk) ? dk : 'suggestion'
     const quoted = this.info.quoted
     this.card.innerHTML = `
       <div class="p-3">
@@ -184,7 +186,7 @@ export class SelectionPin {
         <div class="mb-2.5 flex flex-wrap gap-1">${KINDS.map(
           (k) => `<button class="chip-toggle kind-chip" data-kind="${k}">${icon(k)} ${KIND_LABEL[k]}</button>`,
         ).join('')}</div>
-        <div id="pin-phrases" class="mb-2.5 flex flex-wrap gap-1"></div>
+        <div id="pin-phrases" class="chip-scroll mb-2.5"></div>
         <textarea id="pin-composer-input" class="input-base min-h-20 resize-y" placeholder="批注内容：点选快捷语或直接输入；认可类型可不写描述……"></textarea>
         <div class="mt-2.5 flex items-center justify-between">
           <span class="flex items-center gap-1 text-xs text-muted-foreground">

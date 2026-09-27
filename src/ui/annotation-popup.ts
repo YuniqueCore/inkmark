@@ -4,7 +4,7 @@ import { arrow, autoUpdate, computePosition, flip, offset, shift } from '@floati
 import { escapeHtml } from '../core/text'
 import { icon } from './icons'
 import { snippet } from '../core/text'
-import { hasQuickPhrase, KIND_LABEL, QUICK_PHRASES, toggleQuickPhrase } from '../core/types'
+import { hasQuickPhrase, KIND_LABEL, MANUAL_KINDS, QUICK_PHRASES, toggleQuickPhrase } from '../core/types'
 import type { Annotation, AnnotationKind } from '../core/types'
 
 export interface PopupCallbacks {
@@ -18,7 +18,8 @@ export interface PopupCallbacks {
 const LOST_BADGE =
   '<span class="badge border-amber-500/40 text-amber-600 dark:text-amber-400" title="原引文已不在原文中，批注钉在改动处">失锚</span>'
 
-const KINDS: AnnotationKind[] = ['issue', 'suggestion', 'question', 'highlight', 'praise', 'slop']
+// 编辑弹层可切换的类型 = 人工可写四类；历史 issue / 扫描 slop 由静态徽标呈现
+const KINDS = MANUAL_KINDS
 
 export class AnnotationPopup {
   private el: HTMLElement
@@ -26,7 +27,7 @@ export class AnnotationPopup {
   /** 当前正在原位编辑的批注 */
   private editingId: string | null = null
   /** 编辑态的类型选择（进入编辑时从批注自身初始化） */
-  private editKind: AnnotationKind = 'issue'
+  private editKind: AnnotationKind = 'suggestion'
   private anchorRect: DOMRect | null = null
   private arrowEl: HTMLElement
   private stopAutoUpdate: (() => void) | null = null
@@ -40,6 +41,20 @@ export class AnnotationPopup {
     this.arrowEl = document.createElement('div')
     this.arrowEl.className = 'popup-arrow absolute size-2.5 rotate-45 bg-popover'
     document.body.append(this.el)
+
+    // 快捷语 chips 用容器级委托：切换类型会整体重绘 chips（innerHTML），
+    // 逐 chip 绑定会让新 chip 变成「点了没反应」的死按钮
+    this.el.addEventListener('click', (e) => {
+      const chip = (e.target as HTMLElement).closest('.phrase-chip') as HTMLElement | null
+      if (!chip) return
+      const item = chip.closest('.popup-item') as HTMLElement | null
+      const input = item?.querySelector('.popup-edit-input') as HTMLTextAreaElement | null
+      if (!input) return
+      input.value = toggleQuickPhrase(input.value, chip.dataset.phrase ?? '')
+      item!.querySelectorAll('.phrase-chip').forEach((c) =>
+        c.classList.toggle('on', hasQuickPhrase(input.value, (c as HTMLElement).dataset.phrase ?? '')),
+      )
+    })
 
     document.addEventListener('mousedown', (e) => {
       const t = e.target as HTMLElement
@@ -156,10 +171,10 @@ export class AnnotationPopup {
             ${a.anchorLost ? LOST_BADGE : ''}
           </div>
           <p class="mb-2 line-clamp-2 border-l-2 border-primary/30 pl-2 text-[12.5px] text-muted-foreground">“${escapeHtml(quote)}”</p>
-          <div class="mb-2 flex flex-wrap gap-1">${KINDS.map(
-            (k) => `<button class="chip-toggle kind-chip ${a.kind === k ? 'on' : ''}" data-kind="${k}" data-role="edit-kind">${icon(k)} ${KIND_LABEL[k]}</button>`,
+          <div class="mb-2 flex flex-wrap gap-1">${MANUAL_KINDS.includes(this.editKind) ? '' : `<span class="chip-toggle on" style="color:var(--kind-${this.editKind});background:var(--kind-${this.editKind}-bg)">${KIND_LABEL[this.editKind]}</span>`}${KINDS.map(
+            (k) => `<button class="chip-toggle kind-chip ${this.editKind === k ? 'on' : ''}" data-kind="${k}" data-role="edit-kind">${icon(k)} ${KIND_LABEL[k]}</button>`,
           ).join('')}</div>
-          <div data-role="phrases" class="mb-2 flex flex-wrap gap-1">${this.editPhraseChips(a.comment)}</div>
+          <div data-role="phrases" class="chip-scroll mb-2">${this.editPhraseChips(a.comment)}</div>
           <textarea class="input-base popup-edit-input min-h-16 resize-y text-sm" placeholder="批注内容：点选快捷语或直接输入；认可类型可不写描述……">${escapeHtml(a.comment)}</textarea>
           <div class="mt-2 flex items-center justify-between">
             <span class="flex items-center gap-1 text-xs text-muted-foreground"><span class="kbd">⌘</span><span class="kbd">↵</span> 保存</span>
@@ -199,21 +214,10 @@ export class AnnotationPopup {
         item.querySelectorAll('.kind-chip').forEach((c) =>
           c.classList.toggle('on', (c as HTMLElement).dataset.kind === this.editKind),
         )
-        // 快捷语随类型切换
+        // 快捷语随类型切换（点击行为由容器级委托处理）
         const host = item.querySelector('[data-role="phrases"]')
         const input = item.querySelector('.popup-edit-input') as HTMLTextAreaElement | null
         if (host && input) host.innerHTML = this.editPhraseChips(input.value)
-      })
-    })
-    this.el.querySelectorAll('.phrase-chip').forEach((chip) => {
-      chip.addEventListener('click', () => {
-        const item = chip.closest('.popup-item') as HTMLElement
-        const input = item.querySelector('.popup-edit-input') as HTMLTextAreaElement | null
-        if (!input) return
-        input.value = toggleQuickPhrase(input.value, (chip as HTMLElement).dataset.phrase ?? '')
-        item.querySelectorAll('.phrase-chip').forEach((c) =>
-          c.classList.toggle('on', hasQuickPhrase(input.value, (c as HTMLElement).dataset.phrase ?? '')),
-        )
       })
     })
     // 编辑态键盘：Cmd+Enter 保存；Esc 退出编辑态回到展示（输入法组合中的

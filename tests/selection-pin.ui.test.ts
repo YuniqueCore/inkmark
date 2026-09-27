@@ -126,7 +126,7 @@ describe('SelectionPin 草稿保护', () => {
     await showPin({start: 100, end: 112})
     input = await openCard()
     expect(input.value).toBe('')
-    expect(card.querySelector('.kind-chip.on')?.getAttribute('data-kind')).toBe('issue')
+    expect(card.querySelector('.kind-chip.on')?.getAttribute('data-kind')).toBe('suggestion')
 
     // 划回原段：草稿与类型恢复
     await showPin({start: 10, end: 22})
@@ -191,19 +191,22 @@ describe('SelectionPin 草稿保护', () => {
     expect(chip().classList.contains('on')).toBe(false)
   })
 
-  it('切换类型后快捷语 chips 随之更换', async () => {
+  it('撰写卡只提供四类人工类型；切换类型后快捷语 chips 随之更换', async () => {
     await showPin()
     await openCard()
     const labels = () =>
       [...card.querySelectorAll('.phrase-chip')].map((c) => (c as HTMLElement).dataset.phrase)
-    const issueFirst = labels()[0]
-    expect(issueFirst).toBeDefined()
-    const slopChip = card.querySelector('[data-kind="slop"]') as HTMLElement | null
-    expect(slopChip).toBeTruthy()
-    slopChip!.dispatchEvent(new MouseEvent('click', {bubbles: true}))
+    // 已下架的 issue / slop 不再出现在撰写卡
+    expect(card.querySelector('[data-kind="issue"]')).toBeNull()
+    expect(card.querySelector('[data-kind="slop"]')).toBeNull()
+    const suggestionFirst = labels()[0]
+    expect(suggestionFirst).toBeDefined()
+    const hlChip = card.querySelector('[data-kind="highlight"]') as HTMLElement | null
+    expect(hlChip).toBeTruthy()
+    hlChip!.dispatchEvent(new MouseEvent('click', {bubbles: true}))
     await Promise.resolve()
-    expect(labels()).toContain('用词过于华丽')
-    expect(labels()).not.toContain(issueFirst)
+    expect(labels()).toContain('核心论点')
+    expect(labels()).not.toContain(suggestionFirst)
   })
 
   it('空范围 / 纯空白选区不唤起小点', async () => {
