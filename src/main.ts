@@ -2,28 +2,30 @@
 
 import { numberAnnotations } from './core/export'
 import { diffLines, diffStats } from './core/diff'
+import { importFileList, newDocId } from './core/import'
 import { reanchorAnnotations } from './core/reanchor'
 import { splitBlocks } from './core/text'
 import { hitsToAnnotations, scanSlopReport } from './core/slop'
 import type { SlopReport } from './core/types'
-import { fromW3C } from './core/w3c'
 import { EditorView } from './ui/editor'
 import { ExporterView } from './ui/exporter'
 import { FileTreeView } from './ui/filetree'
 import { AnnotationPopup } from './ui/annotation-popup'
-import { SelectionPin, type SelectionInfo } from './ui/selection-pin'
+import { SelectionPin } from './ui/selection-pin'
 import { confirmDialog, textDialog } from './ui/confirm'
 import { SidebarView } from './ui/sidebar'
 import { initResizers } from './ui/resizer'
+import { initSaveStatus } from './ui/save-status'
+import { initTheme } from './ui/theme'
+import { toast } from './ui/toast'
+import { rectOfAnnotation, resolveSelection } from './ui/selection-offsets'
 import { SAMPLE_TEXT } from './ui/sample'
-import type { Annotation, AnnotationInput, DocItem, SlopLexicon, Workspace } from './core/types'
-import { loadWorkspace, saveWorkspace } from './ui/storage'
+import type { Annotation, AnnotationInput, DocItem, SlopLexicon } from './core/types'
+import { loadWorkspace } from './ui/storage'
 import zhLexicon from '../skill/references/anti-slop-kit/scripts/data/zh.json'
 import enLexicon from '../skill/references/anti-slop-kit/scripts/data/en.json'
 
 const LEXICONS = [zhLexicon, enLexicon] as unknown as SlopLexicon[]
-const TEXT_SUFFIX = /\.(txt|md|markdown)$/i
-const MAX_DOC_CHARS = 400_000 // 单文档上限，超出截断并提示
 
 // ---------------------------------------------------------------- 状态
 
@@ -66,23 +68,57 @@ const treeEl = $('#filetree')
 
 const editor = new EditorView(editorEl, {
   onSelectionChange: (e) => {
-    const info = resolveSelection(e)
+    const doc = activeDoc()
+    const info = doc ? resolveSelection(e, editorEl, doc) : null
     if (info) selectionPin.showFor(info)
     else selectionPin.dismiss()
   },
   onAnnotationClick: (id, rect) => {
-    const doc = activeDoc()
-    if (!doc) return
-    const ann = doc.annotations.find((a) => a.id === id)
-    // 批注分原文/改稿两侧，摘录与弹出内容按锚定侧取文本
-    const text = ann?.target === 'revised' ? (doc.revised ?? doc.text) : doc.text
-    annotationPopup.setAnchorRect(rect)
-    // 点击高亮直接进入编辑态
-    annotationPopup.openFor(id, text, doc.annotations, true)
+    openAnnotationEditor(id, rect)
     sidebar.setActive(id)
     rerender(false)
   },
 })
+
+// ---------------------------------------------------------------- 批注命令
+
+/** 删除批注（二次确认）。弹层与侧栏共用同一命令，不各持一份副本 */
+const deleteAnnotation = (id: string): void => {
+  void (async () => {
+    const ok = await confirmDialog({
+      title: '删除这条批注？',
+      description: '删除后不可恢复。',
+      confirmText: '删除',
+      danger: true,
+    })
+    if (!ok) return
+    mutateActive((doc) => ({ ...doc, annotations: doc.annotations.filter((a) => a.id !== id) }))
+  })()
+}
+
+/** 解决 / 重开批注。弹层与侧栏共用 */
+const toggleAnnotationStatus = (id: string): void => {
+  mutateActive((doc) => ({
+    ...doc,
+    annotations: doc.annotations.map((a) =>
+      a.id === id ? { ...a, status: a.status === 'open' ? 'resolved' : 'open', updatedAt: Date.now() } : a,
+    ),
+  }))
+}
+
+/** 打开批注编辑弹层：摘录与弹出内容按锚定侧取文本。
+ * rect 缺省时从高亮元素实时查询（侧栏编辑入口；高亮可能刚被重渲染）。 */
+const openAnnotationEditor = (id: string, rect?: DOMRect): void => {
+  const doc = activeDoc()
+  if (!doc) return
+  const anchorRect = rect ?? rectOfAnnotation(editorEl, id)
+  if (!anchorRect) return
+  const ann = doc.annotations.find((a) => a.id === id)
+  const text = ann?.target === 'revised' ? (doc.revised ?? doc.text) : doc.text
+  annotationPopup.setAnchorRect(anchorRect)
+  // 点击 / 编辑入口直接进入编辑态
+  annotationPopup.openFor(id, text, doc.annotations, true)
+}
 
 const annotationPopup = new AnnotationPopup({
   onUpdate: (id, kind, comment) => {
@@ -93,26 +129,8 @@ const annotationPopup = new AnnotationPopup({
       ),
     }))
   },
-  onDelete: (id) => {
-    void (async () => {
-      const ok = await confirmDialog({
-        title: '删除这条批注？',
-        description: '删除后不可恢复。',
-        confirmText: '删除',
-        danger: true,
-      })
-      if (!ok) return
-      mutateActive((doc) => ({ ...doc, annotations: doc.annotations.filter((a) => a.id !== id) }))
-    })()
-  },
-  onToggleStatus: (id) => {
-    mutateActive((doc) => ({
-      ...doc,
-      annotations: doc.annotations.map((a) =>
-        a.id === id ? { ...a, status: a.status === 'open' ? 'resolved' : 'open', updatedAt: Date.now() } : a,
-      ),
-    }))
-  },
+  onDelete: deleteAnnotation,
+  onToggleStatus: toggleAnnotationStatus,
   onCopySnippet: (text) => {
     void navigator.clipboard.writeText(text).then(() => toast('已复制片段'))
   },
@@ -149,36 +167,12 @@ const sidebar = new SidebarView(sidebarEl, {
     editor.focusAnnotation(id)
   },
   onEdit: (a) => {
-    const doc = activeDoc()
-    if (!doc) return
     editor.focusAnnotation(a.id)
-    const rect = rectOfAnnotation(a.id)
-    if (!rect) return
-    const text = a.target === 'revised' ? (doc.revised ?? doc.text) : doc.text
-    annotationPopup.setAnchorRect(rect)
-    annotationPopup.openFor(a.id, text, doc.annotations, true)
+    openAnnotationEditor(a.id)
     sidebar.setActive(a.id)
   },
-  onDelete: (id) => {
-    void (async () => {
-      const ok = await confirmDialog({
-        title: '删除这条批注？',
-        description: '删除后不可恢复。',
-        confirmText: '删除',
-        danger: true,
-      })
-      if (!ok) return
-      mutateActive((doc) => ({ ...doc, annotations: doc.annotations.filter((a) => a.id !== id) }))
-    })()
-  },
-  onToggleStatus: (id) => {
-    mutateActive((doc) => ({
-      ...doc,
-      annotations: doc.annotations.map((a) =>
-        a.id === id ? { ...a, status: a.status === 'open' ? 'resolved' : 'open', updatedAt: Date.now() } : a,
-      ),
-    }))
-  },
+  onDelete: deleteAnnotation,
+  onToggleStatus: toggleAnnotationStatus,
   onFilterChange: (f) => {
     sidebar.setFilter(f)
     rerender(false)
@@ -226,94 +220,6 @@ const exporter = new ExporterView($('#export-modal'), $('#overlay'), {
   onClose: () => {},
   onImportW3C: (file) => void importW3CFile(file),
 })
-
-// ---------------------------------------------------------------- 选区 → 偏移
-
-/** 把 DOM 选区换算成文本偏移。选区不在编辑区内返回 null；
- * 对照视图的 add 行（data-side="b"）返回改稿侧偏移并带 side='b'。 */
-function resolveSelection(e: MouseEvent): SelectionInfo | null {
-  const sel = window.getSelection()
-  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null
-  const range = sel.getRangeAt(0)
-  if (!editorEl.contains(range.commonAncestorContainer)) return null
-
-  const start = domPointToOffset(range.startContainer, range.startOffset)
-  const end = domPointToOffset(range.endContainer, range.endOffset)
-  if (start === null || end === null || end <= start) return null
-  const doc = activeDoc()
-  if (!doc) return null
-  const blk = (range.startContainer.nodeType === Node.TEXT_NODE
-    ? range.startContainer.parentElement
-    : (range.startContainer as HTMLElement))?.closest('.editor-blk') as HTMLElement | null
-  const side = blk?.dataset.side === 'b' ? ('b' as const) : undefined
-  const text = side === 'b' ? (doc.revised ?? '') : doc.text
-  const quoted = text.slice(start, end)
-  if (quoted.trim() === '') return null
-  // 拖拽方向：anchor（按下点）在 range 起点即正向选
-  const forward =
-    sel.anchorNode === range.startContainer && sel.anchorOffset === range.startOffset
-  return {
-    start,
-    end,
-    rect: range.getBoundingClientRect(),
-    quoted,
-    mouse: { x: e.clientX, y: e.clientY },
-    forward,
-    docId: doc.id,
-    ...(side ? { side } : {}),
-  }
-}
-
-/** DOM 位置 → 规范文本偏移。 */
-function domPointToOffset(node: Node, offset: number): number | null {
-  const blk = (node.nodeType === Node.TEXT_NODE ? node.parentElement : node as HTMLElement)?.closest('.editor-blk') as HTMLElement | null
-  if (!blk) return null
-  const blockStart = Number(blk.dataset.start ?? 0)
-  const innerPrefix = (): number => {
-    if (node.nodeType === Node.TEXT_NODE) return offset
-    return Array.from(node.childNodes)
-      .slice(0, offset)
-      .reduce((acc, child) => acc + textLengthOf(child), 0)
-  }
-  if (node === blk) {
-    const acc = Array.from(blk.childNodes)
-      .slice(0, offset)
-      .reduce((a, c) => a + textLengthOf(c), 0)
-    return blockStart + acc
-  }
-  let acc = 0
-  let found = false
-  const visit = (n: Node): void => {
-    if (found) return
-    for (const child of Array.from(n.childNodes)) {
-      if (found) return
-      if (child === node) {
-        acc += innerPrefix()
-        found = true
-        return
-      }
-      if (child.contains(node)) {
-        visit(child)
-      } else {
-        acc += textLengthOf(child)
-      }
-    }
-  }
-  visit(blk)
-  return found ? blockStart + acc : null
-}
-
-function textLengthOf(node: Node): number {
-  if (node.nodeType === Node.TEXT_NODE) return node.textContent?.length ?? 0
-  // <br> 计 1 个字符（与规范文本里的 \n 对应）
-  if ((node as HTMLElement).tagName === 'BR') return 1
-  return Array.from(node.childNodes).reduce((a, c) => a + textLengthOf(c), 0)
-}
-
-function rectOfAnnotation(id: string): DOMRect | null {
-  const el = editorEl.querySelector(`.seg-hl[data-ann-ids~="${id}"]`) as HTMLElement | null
-  return el?.getBoundingClientRect() ?? null
-}
 
 // ---------------------------------------------------------------- 工作区操作
 
@@ -442,57 +348,18 @@ function rerender(syncPopup = true): void {
   })
   fileTree.render(state.docs, state.activeDocId)
   if (syncPopup && doc) annotationPopup.sync(doc.text, doc.annotations, doc.revised)
-  markDirty()
+  save.markDirty()
 }
 
-// ---------------------------------------------------------------- 保存状态
+// ---------------------------------------------------------------- 保存
 
-type SaveStatus = 'saved' | 'dirty' | 'saving'
-let saveStatus: SaveStatus = 'saved'
-let saveTimer: ReturnType<typeof setTimeout> | undefined
-
-function markDirty(): void {
-  saveStatus = 'dirty'
-  renderSaveStatus()
-  clearTimeout(saveTimer)
-  saveTimer = setTimeout(flushSave, 500)
-}
-
-function flushSave(): void {
-  clearTimeout(saveTimer)
-  saveStatus = 'saving'
-  renderSaveStatus()
-  saveWorkspace({
-    version: 2,
-    docs: state.docs,
-    activeDocId: state.activeDocId,
-    savedAt: Date.now(),
-  })
-  setTimeout(() => {
-    saveStatus = 'saved'
-    renderSaveStatus()
-  }, 150)
-}
-
-function renderSaveStatus(): void {
-  const dot = $('#save-dot')
-  const label = $('#save-text')
-  const map: Record<SaveStatus, {cls: string; text: string}> = {
-    saved: {cls: 'bg-emerald-500', text: '已保存'},
-    dirty: {cls: 'bg-amber-500', text: '有未保存改动'},
-    saving: {cls: 'bg-sky-400 animate-pulse', text: '保存中…'},
-  }
-  const s = map[saveStatus]
-  dot.className = `size-1.5 rounded-full ${s.cls}`
-  label.textContent = s.text
-}
-
-window.addEventListener('beforeunload', (e) => {
-  if (saveStatus === 'dirty') {
-    flushSave()
-    e.preventDefault()
-  }
-})
+// 数据快照即时取自工作区状态；状态机与计时器归 ui/save-status 所有
+const save = initSaveStatus(() => ({
+  version: 2,
+  docs: state.docs,
+  activeDocId: state.activeDocId,
+  savedAt: Date.now(),
+}))
 
 // ---------------------------------------------------------------- slop 预扫描
 
@@ -626,107 +493,56 @@ async function clearRevised(): Promise<void> {
   toast('已清除改稿')
 }
 
-// ---------------------------------------------------------------- W3C Web Annotation 导入
+// ---------------------------------------------------------------- 导入
 
-/** 把 W3C Web Annotation JSON 合并进当前文档。不是 W3C 格式返回 false（交给下一处理链）。 */
-async function importW3CFile(file: File): Promise<boolean> {
-  const doc = activeDoc()
-  if (!doc) return false
-  try {
-    const parsed = JSON.parse(await file.text()) as unknown
-    const result = fromW3C(parsed, doc.text)
-    if (result.total === 0) return false
-    mutateActive((d) => ({ ...d, annotations: [...d.annotations, ...result.annotations] }))
-    toast(
-      result.unmatched > 0
-        ? `导入 ${result.annotations.length} 条批注，${result.unmatched} 条原文中找不到锚点已跳过`
-        : `导入 ${result.annotations.length} 条批注`,
-    )
-    return true
-  } catch {
-    return false
-  }
-}
-
-// ---------------------------------------------------------------- 文档导入
-
+/** 文件导入编排：管线（分类/解析）在 core/import.ts，这里只做状态应用与提示 */
 async function importFiles(files: FileList | File[]): Promise<void> {
-  const list = Array.from(files)
-  const newDocs: DocItem[] = []
-  let truncated = 0
-  let skipped = 0
-  let sideImported = 0 // 会话 / W3C JSON 走各自的处理链，有自己的成功提示
-  for (const file of list) {
-    const rel = (file as File & {webkitRelativePath?: string}).webkitRelativePath ?? ''
-    if (file.name.endsWith('.json')) {
-      if (await importSessionFile(file)) {
-        sideImported++
-        continue
-      }
-      if (await importW3CFile(file)) {
-        sideImported++
-        continue
-      }
-      skipped++
-      continue
-    }
-    if (!TEXT_SUFFIX.test(file.name)) {
-      skipped++
-      continue
-    }
-    let text = await file.text()
-    if (text.length > MAX_DOC_CHARS) {
-      text = text.slice(0, MAX_DOC_CHARS)
-      truncated++
-    }
-    if (text.trim() === '') {
-      skipped++
-      continue
-    }
-    newDocs.push({
-      id: `doc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
-      name: file.name,
-      path: rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '',
-      text,
-      annotations: [],
-      addedAt: Date.now(),
-    })
+  const r = await importFileList(files, activeDoc())
+  if (r.w3cFiles > 0) {
+    mutateActive((doc) => ({ ...doc, annotations: [...doc.annotations, ...r.w3cAnnotations] }))
+    toast(
+      `导入 ${r.w3cAnnotations.length} 条批注${
+        r.w3cUnmatched > 0 ? `，${r.w3cUnmatched} 条原文中找不到锚点已跳过` : ''
+      }`,
+    )
   }
+  const newDocs = [...r.textDocs, ...r.sessionDocs]
   if (newDocs.length === 0) {
-    if (sideImported === 0) {
-      toast(skipped > 0 ? `没有可导入的文本文件（跳过 ${skipped} 个）` : '没有可导入的文件')
+    if (r.w3cFiles === 0) {
+      toast(r.skipped > 0 ? `没有可导入的文本文件（跳过 ${r.skipped} 个）` : '没有可导入的文件')
     }
     return
   }
-  state = {
-    docs: [...state.docs, ...newDocs],
-    activeDocId: newDocs[0]!.id,
-  }
+  state = { docs: [...state.docs, ...newDocs], activeDocId: newDocs[0]!.id }
   rerender(false)
-  const parts = [`导入 ${newDocs.length} 个文档`]
-  if (skipped > 0) parts.push(`跳过 ${skipped}`)
-  if (truncated > 0) parts.push(`${truncated} 个超大文件已截断`)
+  const parts: string[] = []
+  if (r.textDocs.length > 0) parts.push(`导入 ${r.textDocs.length} 个文档`)
+  if (r.sessionDocs.length > 0) parts.push(`会话已合并（${r.sessionDocs.length} 个文档）`)
+  if (r.skipped > 0) parts.push(`跳过 ${r.skipped}`)
+  if (r.truncated > 0) parts.push(`${r.truncated} 个超大文件已截断`)
   toast(parts.join('，'))
 }
 
-async function importSessionFile(file: File): Promise<boolean> {
-  try {
-    const parsed = JSON.parse(await file.text()) as Partial<Workspace>
-    if (parsed.version !== 2 || !Array.isArray(parsed.docs)) return false
-    state = {docs: [...state.docs, ...parsed.docs], activeDocId: parsed.docs[0]?.id ?? state.activeDocId}
-    rerender(false)
-    toast(`会话已合并（${parsed.docs.length} 个文档）`)
-    return true
-  } catch {
-    return false
+/** 导出弹层的 W3C 导入入口：单文件并入当前文档 */
+async function importW3CFile(file: File): Promise<void> {
+  const r = await importFileList([file], activeDoc())
+  if (r.w3cAnnotations.length === 0) {
+    toast('不是可导入的 W3C 批注文件')
+    return
   }
+  mutateActive((doc) => ({ ...doc, annotations: [...doc.annotations, ...r.w3cAnnotations] }))
+  toast(
+    `导入 ${r.w3cAnnotations.length} 条批注${
+      r.w3cUnmatched > 0 ? `，${r.w3cUnmatched} 条原文中找不到锚点已跳过` : ''
+    }`,
+  )
 }
 
 // ---------------------------------------------------------------- 顶栏动作
 
 function loadSample(): void {
   const doc: DocItem = {
-    id: `doc-${Date.now().toString(36)}`,
+    id: newDocId(),
     name: '示例：AI 味产品文',
     path: '',
     text: SAMPLE_TEXT,
@@ -793,45 +609,11 @@ document.addEventListener('keydown', (e) => {
   }
 })
 
-// ---------------------------------------------------------------- toast
-
-let toastTimer: ReturnType<typeof setTimeout> | undefined
-function toast(message: string): void {
-  let el = document.querySelector('.toast') as HTMLElement | null
-  if (!el) {
-    el = document.createElement('div')
-    el.className =
-      'toast pointer-events-none fixed bottom-6 left-1/2 z-200 -translate-x-1/2 rounded-md border bg-primary px-3.5 py-2 text-sm text-primary-foreground shadow-lg opacity-0 transition-opacity duration-200'
-    document.body.append(el)
-  }
-  el.textContent = message
-  el.classList.add('opacity-95')
-  clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => el!.classList.remove('opacity-95'), 1800)
-}
-
-// ---------------------------------------------------------------- 主题
-
-const THEME_KEY = 'inkmark:theme'
-function applyThemeButton(): void {
-  const dark = document.documentElement.classList.contains('dark')
-  $('#btn-theme').innerHTML = dark
-    ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>`
-    : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>`
-}
-$('#btn-theme').addEventListener('click', () => {
-  const dark = document.documentElement.classList.toggle('dark')
-  localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light')
-  applyThemeButton()
-})
-applyThemeButton()
-
 // ---------------------------------------------------------------- 启动
 
 function bootstrap(): void {
   state = loadWorkspace()
   rerender(false)
-  renderSaveStatus()
   initResizers({
     layout: $('#layout'),
     leftHandle: $('#handle-left'),
@@ -839,6 +621,7 @@ function bootstrap(): void {
     treeEl,
     sidebarEl,
   })
+  initTheme()
 }
 
 bootstrap()
