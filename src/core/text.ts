@@ -73,6 +73,17 @@ export function blockAt(blocks: Block[], offset: number): Block | undefined {
   return found
 }
 
+/** HTML 转义：渲染层把任意文本插入 innerHTML 模板的唯一出口（含属性值，
+ * 引号转义防止属性逃逸）。此前 editor / confirm / filetree 各持一份且行为
+ * 漂移（两份不转引号），已收敛为此处单源。 */
+export function escapeHtml(text: string): string {
+  return text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+}
+
 /** 摘录：把 [start, end) 截到 maxLen，两端加省略号（只在截断时）。 */
 export function snippet(text: string, start: number, end: number, maxLen = 120): string {
   const raw = text.slice(Math.max(0, start), Math.min(text.length, end)).trim()

@@ -1,5 +1,6 @@
 /** 左侧文档树：目录层级展示 + 打开/移除 + 多选批量操作（导出 / 删除）。多文档工作区入口。 */
 
+import { escapeHtml } from '../core/text'
 import { icon } from './icons'
 import type { DocItem } from '../core/types'
 
@@ -89,10 +90,10 @@ export class FileTreeView {
           const chevron = icon('chevron', `size-3.5 transition-transform ${isCollapsed ? '' : 'rotate-90'}`)
           return `
             <div>
-              <button class="tree-row group" data-dir="${key}">
+              <button class="tree-row group" data-dir="${escapeHtml(key)}">
                 <span class="text-muted-foreground">${chevron}</span>
                 ${icon('folder', 'size-3.5 text-muted-foreground/80')}
-                <span class="truncate">${escape(n.name)}</span>
+                <span class="truncate">${escapeHtml(n.name)}</span>
               </button>
               ${isCollapsed ? '' : `<div class="ml-3 border-l pl-1">${this.renderNodes(n.children, key, activeDocId)}</div>`}
             </div>`
@@ -104,7 +105,7 @@ export class FileTreeView {
           <div class="tree-row group ${active ? 'bg-secondary text-secondary-foreground' : ''}" data-doc="${doc.id}" role="button" tabindex="0">
             <input type="checkbox" data-select="${doc.id}" class="size-3 shrink-0 accent-[var(--primary)]" ${this.selected.has(doc.id) ? 'checked' : ''}/>
             ${icon('file', 'size-3.5 shrink-0 text-muted-foreground/80')}
-            <span class="truncate flex-1">${escape(n.name)}</span>
+            <span class="truncate flex-1">${escapeHtml(n.name)}</span>
             ${count > 0 ? `<span class="badge h-4 bg-secondary px-1 text-[10px] text-secondary-foreground">${count}</span>` : ''}
             <button class="tree-export opacity-0 transition-opacity group-hover:opacity-100" data-export="${doc.id}" title="导出该文档批注">${icon('download', 'size-3')}</button>
             <button class="tree-remove opacity-0 transition-opacity group-hover:opacity-100" data-remove="${doc.id}" title="移除文档">${icon('x', 'size-3')}</button>
@@ -192,6 +193,4 @@ function buildTree(docs: DocItem[]): TreeNode {
   return root
 }
 
-function escape(text: string): string {
-  return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
-}
+

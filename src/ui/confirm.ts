@@ -5,6 +5,7 @@
  * 键盘监听走捕获阶段并阻断传播，避免同时触发底层组件的 Esc 逻辑。
  */
 
+import { escapeHtml } from '../core/text'
 import { icon } from './icons'
 
 export interface ConfirmOptions {
@@ -28,8 +29,8 @@ export function confirmDialog(opts: ConfirmOptions): Promise<boolean> {
       <div class="flex items-start gap-3">
         ${opts.danger ? `<div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive">${icon('trash', 'size-4')}</div>` : ''}
         <div class="min-w-0">
-          <h2 class="text-[15px] font-semibold leading-snug tracking-tight">${escapeText(opts.title)}</h2>
-          ${opts.description ? `<p class="mt-1.5 text-sm leading-relaxed text-muted-foreground">${escapeText(opts.description)}</p>` : ''}
+          <h2 class="text-[15px] font-semibold leading-snug tracking-tight">${escapeHtml(opts.title)}</h2>
+          ${opts.description ? `<p class="mt-1.5 text-sm leading-relaxed text-muted-foreground">${escapeHtml(opts.description)}</p>` : ''}
         </div>
       </div>
       <div class="mt-5 flex justify-end gap-2">
@@ -63,10 +64,6 @@ export function confirmDialog(opts: ConfirmOptions): Promise<boolean> {
   })
 }
 
-function escapeText(text: string): string {
-  return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
-}
-
 export interface TextDialogOptions {
   title: string
   description?: string
@@ -87,10 +84,10 @@ export function textDialog(opts: TextDialogOptions): Promise<string | null> {
       'fixed left-1/2 top-1/2 z-101 flex w-[min(720px,94vw)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border bg-card p-5 text-card-foreground shadow-2xl'
     panel.style.animation = 'pop-in 0.14s ease-out'
     panel.innerHTML = `
-      <h2 class="text-[15px] font-semibold leading-snug tracking-tight">${escapeText(opts.title)}</h2>
-      ${opts.description ? `<p class="mt-1.5 text-sm leading-relaxed text-muted-foreground">${escapeText(opts.description)}</p>` : ''}
-      <textarea id="text-dialog-input" rows="12" placeholder="${escapeText(opts.placeholder ?? '')}"
-        class="input-base mt-3 flex-1 resize-none font-mono text-[13px] leading-relaxed">${escapeText(opts.value ?? '')}</textarea>
+      <h2 class="text-[15px] font-semibold leading-snug tracking-tight">${escapeHtml(opts.title)}</h2>
+      ${opts.description ? `<p class="mt-1.5 text-sm leading-relaxed text-muted-foreground">${escapeHtml(opts.description)}</p>` : ''}
+      <textarea id="text-dialog-input" rows="12" placeholder="${escapeHtml(opts.placeholder ?? '')}"
+        class="input-base mt-3 flex-1 resize-none font-mono text-[13px] leading-relaxed">${escapeHtml(opts.value ?? '')}</textarea>
       <div class="mt-4 flex items-center justify-between">
         <span class="text-xs text-muted-foreground">⌘/Ctrl + Enter 确认</span>
         <span class="flex gap-2">

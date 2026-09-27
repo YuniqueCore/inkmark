@@ -43,6 +43,32 @@ const check = (id: string): void => {
   box.dispatchEvent(new Event('change'))
 }
 
+describe('FileTreeView 特殊字符转义', () => {
+  it('文件名/目录名含引号：属性转义渲染，目录折叠正常（回归：data-dir 曾未转义）', () => {
+    const quoted: DocItem = {
+      id: 'q1',
+      name: '含"引号"的文档.txt',
+      path: '目录"A"',
+      text: '内容。',
+      annotations: [],
+      addedAt: 1,
+    }
+    tree.render([quoted], 'q1')
+    const dirBtn = root.querySelector('[data-dir]') as HTMLElement
+    // 属性值里的引号必须已转义，否则 DOM 解析会截断/破坏属性
+    expect(dirBtn.getAttribute('data-dir')).toBe('/目录"A"')
+    const raw = root.querySelector('[data-dir]')!.outerHTML
+    expect(raw).toContain('&quot;')
+    // 折叠/展开正常工作
+    dirBtn.click()
+    expect(root.querySelector('[data-doc]')).toBeNull() // 折叠后子项隐藏
+    ;(root.querySelector('[data-dir]') as HTMLElement).click()
+    expect(root.querySelector('[data-doc="q1"]')).toBeTruthy()
+    // 文件名引号同样转义渲染
+    expect((root.querySelector('[data-doc="q1"] .truncate') as HTMLElement).textContent).toBe('含"引号"的文档.txt')
+  })
+})
+
 describe('FileTreeView 多选', () => {
   it('勾选出现批量栏并显示计数，取消勾选恢复', () => {
     tree.render([doc('a', '一.md'), doc('b', '二.md')], 'a')

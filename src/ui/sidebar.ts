@@ -5,7 +5,7 @@ import { reportCategoryCounts } from '../core/slop'
 import type { SlopBand, SlopReport } from '../core/types'
 import { KIND_LABEL } from '../core/types'
 import type { Annotation, AnnotationKind } from '../core/types'
-import { escapeHtml } from './editor'
+import { escapeHtml } from '../core/text'
 
 export type StatusFilter = 'all' | 'open' | 'resolved'
 

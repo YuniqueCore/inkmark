@@ -10,7 +10,7 @@
  */
 
 import { computePosition, offset, shift, size, limitShift } from '@floating-ui/dom'
-import { escapeHtml } from './editor'
+import { escapeHtml } from '../core/text'
 import { icon } from './icons'
 import { KIND_LABEL } from '../core/types'
 import type { AnnotationKind } from '../core/types'

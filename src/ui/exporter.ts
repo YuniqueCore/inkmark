@@ -4,7 +4,7 @@
 
 import { exportAs, exportCombined, exportFileName, zipEntryNames } from '../core/export'
 import { toW3C } from '../core/w3c'
-import { escapeHtml } from './editor'
+import { escapeHtml } from '../core/text'
 import { strToU8, zipSync } from 'fflate'
 import type { DocItem } from '../core/types'
 

@@ -2,16 +2,8 @@
 
 import { buildSegments } from '../core/anchors'
 import type { DiffRow } from '../core/diff'
-import { splitBlocks } from '../core/text'
+import { escapeHtml, splitBlocks } from '../core/text'
 import type { Annotation, AnnotationKind } from '../core/types'
-
-export function escapeHtml(text: string): string {
-  return text
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-}
 
 /** 编辑原文模式下的选段过滤：批注只与同侧的行相交 */
 function annsForSide(anns: Annotation[], revised: boolean): Annotation[] {
