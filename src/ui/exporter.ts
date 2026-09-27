@@ -29,6 +29,7 @@ export class ExporterView {
   private overlay: HTMLElement
   private format: TabId = 'inline'
   private includeResolved = false
+  private includeFileInfo = false
   private doc: DocItem | null = null
 
   constructor(
@@ -66,6 +67,7 @@ export class ExporterView {
     return exportAs(this.format, doc.text, doc.annotations, {
       includeResolved: this.includeResolved,
       revisedText: doc.revised,
+      fileName: this.includeFileInfo ? doc.name : undefined,
     })
   }
 
@@ -83,10 +85,18 @@ export class ExporterView {
               `<button role="tab" class="btn btn-ghost btn-sm ${this.format === t.id ? 'bg-secondary text-secondary-foreground' : 'text-muted-foreground'}" data-tab="${t.id}">${t.label}</button>`,
           ).join('')}
         </div>
-        <label class="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
-          <input type="checkbox" id="inc-resolved" class="size-3.5 accent-[var(--primary)]" ${this.includeResolved ? 'checked' : ''}/>
-          包含已解决
-        </label>
+        <div class="flex items-center gap-3">
+          ${isW3C
+            ? ''
+            : `<label class="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
+          <input type="checkbox" id="inc-file-info" class="size-3.5 accent-[var(--primary)]" ${this.includeFileInfo ? 'checked' : ''}/>
+          包含文件信息
+        </label>`}
+          <label class="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
+            <input type="checkbox" id="inc-resolved" class="size-3.5 accent-[var(--primary)]" ${this.includeResolved ? 'checked' : ''}/>
+            包含已解决
+          </label>
+        </div>
       </div>
       <div class="px-5 pt-3">
         <p class="text-[13px] text-muted-foreground">${tab.hint}</p>
@@ -115,6 +125,10 @@ export class ExporterView {
     )
     this.modal.querySelector('#inc-resolved')?.addEventListener('change', (e) => {
       this.includeResolved = (e.target as HTMLInputElement).checked
+      this.render()
+    })
+    this.modal.querySelector('#inc-file-info')?.addEventListener('change', (e) => {
+      this.includeFileInfo = (e.target as HTMLInputElement).checked
       this.render()
     })
     this.modal.querySelector('[data-op="copy"]')?.addEventListener('click', () => {

@@ -10,6 +10,8 @@ export interface ExportOptions {
   maxSnippetLen?: number
   /** AI 改稿全文：存在时，改稿侧批注（target === 'revised'）参与导出 */
   revisedText?: string
+  /** 文件信息：提供时在导出顶部标注来源「文件：{name}」，多文档场景区分出处 */
+  fileName?: string
 }
 
 const CIRCLED = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳'
@@ -65,7 +67,8 @@ export function exportInline(text: string, anns: Annotation[], opts: ExportOptio
   const picked = visible(anns, opts)
   const inlineAnns = picked.filter((a) => a.target !== 'revised')
   const revisedAnns = picked.filter((a) => a.target === 'revised')
-  if (picked.length === 0) return text
+  const head = opts.fileName ? `文件：${opts.fileName}\n\n` : ''
+  if (picked.length === 0) return head + text
   const numbers = numberAnnotations(picked)
   const blocks = splitBlocks(text)
   const out: string[] = []
@@ -90,7 +93,7 @@ export function exportInline(text: string, anns: Annotation[], opts: ExportOptio
     out.push(text.slice(pos, blockEnd))
     cursor = blockEnd
   }
-  out.push(text.slice(cursor))
+    out.push(text.slice(cursor))
   if (revisedAnns.length > 0) {
     out.push(`\n\n—— 以下 ${revisedAnns.length} 条批注针对 AI 改稿（不在原文中定位）——`)
     for (const a of revisedAnns) {
@@ -98,7 +101,7 @@ export function exportInline(text: string, anns: Annotation[], opts: ExportOptio
       out.push(`\n【批注${num}·${KIND_LABEL[a.kind]}】${a.comment.trim()}`)
     }
   }
-  return out.join('')
+  return head + out.join('')
 }
 
 /**
@@ -108,7 +111,8 @@ export function exportSnippets(text: string, anns: Annotation[], opts: ExportOpt
   const picked = visible(anns, opts)
   const numbers = numberAnnotations(picked)
   const maxLen = opts.maxSnippetLen ?? 200
-  return picked
+  if (picked.length === 0) return opts.fileName ? `文件：${opts.fileName}` : ''
+  const body = picked
     .map((a) => {
       const num = numbers.get(a.id)!
       const quote = snippet(anchorText(a, text, opts), a.start, a.end, maxLen)
@@ -116,6 +120,7 @@ export function exportSnippets(text: string, anns: Annotation[], opts: ExportOpt
       return `【片段${num}】${sideMark}${quote}\n【批注${num}·${KIND_LABEL[a.kind]}】${a.comment.trim()}`
     })
     .join('\n\n')
+  return opts.fileName ? `文件：${opts.fileName}\n\n${body}` : body
 }
 
 /**
@@ -135,7 +140,8 @@ export function exportReview(text: string, anns: Annotation[], opts: ExportOptio
     lines.push(`> ${KIND_MARK[a.kind]} 批注${num}（${KIND_LABEL[a.kind]}）：${a.comment.trim()}`)
     lines.push('')
   }
-  return lines.join('\n').trimEnd()
+  const head = opts.fileName ? `文件：${opts.fileName}\n\n` : ''
+  return head + lines.join('\n').trimEnd()
 }
 
 export type ExportFormat = 'inline' | 'snippets' | 'review'

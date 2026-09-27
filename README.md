@@ -13,7 +13,7 @@ UI 按 shadcn/ui 语系构建（Tailwind CSS v4 + 设计 token，灵感来自 ra
   1. **原文 + 批注**：完整原文，批注以 `【批注①·问题】……` 行内标记插在锚点后；
   2. **片段 + 批注**：逐条列出被批注的片段和对应批注；
   3. **评审引用块**：Markdown 引用格式，直接贴回聊天窗口给 AI agent。
-  支持复制与下载 .md；默认不含已解决批注（可勾选包含）。
+  支持复制与下载 .md；默认不含已解决批注（可勾选包含）；「包含文件信息」开关在导出顶部标注来源文件名，多文档场景区分出处（W3C JSON 保持标准格式不受影响）。
 - **W3C Web Annotation 导入 / 导出**：批注可导出为标准 Annotation JSON（TextQuoteSelector + TextPositionSelector 双选择器）；导入时自动按 quote 在目标文本里重锚（位置失配 → 全文搜索 → prefix/suffix 消歧），锚不上的明确跳过、绝不错锚。打开 .json 文件即可导入。
 - **slop 预扫描**：内置 [anti-slop-kit](https://github.com/YuniqueCore/natural-talk) 的中英文词库（zh 169 条 / en 212 条），一键把套话候选标成红色波浪线预填批注，人工复核后解决或删除。扫描管线与 `slop_check.py` 完全对齐：代码围栏 / 行内代码 / URL / 邮箱保护、正则 flags、重叠去重先于 cluster/density 阈值升级；**评分分档同源**（w / cluster_w / density_w 权重，score = 证据权重 / 千单位，clean / light / noticeable / heavy）。
 - **批注管理**：侧栏列表，按类型与状态筛选，定位 / 编辑 / 解决 / 删除，全部破坏性操作二次确认。扫描后侧栏顶部展示 **slop 评分统计卡**：分档徽标（干净 / 轻微 / 明显 / 严重）+ 每千单位评分 + 类目分布，文本编辑即失效重扫。

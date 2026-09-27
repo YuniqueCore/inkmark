@@ -64,3 +64,25 @@ describe('exportReview', () => {
     expect(out).toContain('> 原文：行一 行二')
   })
 })
+
+describe('文件信息（fileName 选项）', () => {
+  const opts = { fileName: 'chapter-3.md' }
+
+  it('三种格式顶部标注「文件：{name}」', () => {
+    expect(exportInline(TEXT, [ann('a', 4, 14, '起手壳')], opts).startsWith('文件：chapter-3.md\n\n第一段：')).toBe(true)
+    expect(exportSnippets(TEXT, [ann('a', 4, 14, '起手壳')], opts).startsWith('文件：chapter-3.md\n\n【片段①】')).toBe(true)
+    expect(exportReview(TEXT, [ann('a', 4, 14, '起手壳')], opts).startsWith('文件：chapter-3.md\n\n批注反馈（共 1 条）：')).toBe(true)
+  })
+
+  it('缺省不输出文件行，现有导出不受影响', () => {
+    expect(exportSnippets(TEXT, [ann('a', 4, 14, '起手壳')])).not.toContain('文件：')
+    expect(exportReview(TEXT, [ann('a', 4, 14, '起手壳')])).not.toContain('文件：')
+    expect(exportInline(TEXT, [])).toBe(TEXT)
+  })
+
+  it('无批注时同样标注文件信息', () => {
+    expect(exportSnippets(TEXT, [], opts)).toBe('文件：chapter-3.md')
+    expect(exportInline(TEXT, [], opts).startsWith('文件：chapter-3.md\n\n第一段：')).toBe(true)
+    expect(exportReview(TEXT, [], opts).startsWith('文件：chapter-3.md\n\n批注反馈（共 0 条）：')).toBe(true)
+  })
+})

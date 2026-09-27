@@ -89,6 +89,23 @@ describe('ExporterView 可见性生命周期', () => {
     expect(after.length).toBeGreaterThan(before.length) // 已解决批注被纳入
   })
 
+  it('「包含文件信息」开关：勾选后预览顶部标注文件名，取消后消失；W3C 页不提供该开关', () => {
+    exporter.open(doc())
+    const preview = () => (modal.querySelector('#export-preview') as HTMLTextAreaElement).value
+    expect(modal.querySelector('#inc-file-info')).toBeTruthy()
+    expect(preview()).not.toContain('文件：')
+    ;(modal.querySelector('#inc-file-info') as HTMLInputElement).click()
+    ;(modal.querySelector('#inc-file-info') as HTMLInputElement).dispatchEvent(new Event('change'))
+    expect(preview().startsWith('文件：UI 测试文档')).toBe(true)
+    ;(modal.querySelector('#inc-file-info') as HTMLInputElement).click()
+    ;(modal.querySelector('#inc-file-info') as HTMLInputElement).dispatchEvent(new Event('change'))
+    expect(preview()).not.toContain('文件：')
+    // 切到 W3C 页：交换格式不带自定义字段，开关隐藏
+    ;(modal.querySelector('[data-tab="w3c"]') as HTMLButtonElement).click()
+    expect(modal.querySelector('#inc-file-info')).toBeNull()
+    expect(modal.querySelector('#inc-resolved')).toBeTruthy()
+  })
+
   it('W3C 页存在导入入口与下载按钮，内容为合法 JSON', () => {
     exporter.open(doc())
     ;(modal.querySelector('[data-tab="w3c"]') as HTMLButtonElement).click()
