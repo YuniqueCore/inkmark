@@ -4,7 +4,7 @@ import { arrow, autoUpdate, computePosition, flip, offset, shift } from '@floati
 import { escapeHtml } from '../core/text'
 import { icon } from './icons'
 import { snippet } from '../core/text'
-import { KIND_LABEL } from '../core/types'
+import { hasQuickPhrase, KIND_LABEL, QUICK_PHRASES, toggleQuickPhrase } from '../core/types'
 import type { Annotation, AnnotationKind } from '../core/types'
 
 export interface PopupCallbacks {
@@ -18,7 +18,7 @@ export interface PopupCallbacks {
 const LOST_BADGE =
   '<span class="badge border-amber-500/40 text-amber-600 dark:text-amber-400" title="原引文已不在原文中，批注钉在改动处">失锚</span>'
 
-const KINDS: AnnotationKind[] = ['issue', 'suggestion', 'question', 'highlight', 'praise']
+const KINDS: AnnotationKind[] = ['issue', 'suggestion', 'question', 'highlight', 'praise', 'slop']
 
 export class AnnotationPopup {
   private el: HTMLElement
@@ -132,6 +132,16 @@ export class AnnotationPopup {
     this.bindItemEvents()
   }
 
+  /** 编辑态的快捷语 chips；on 态 = 短语已包含在批注语里 */
+  private editPhraseChips(comment: string): string {
+    return (QUICK_PHRASES[this.editKind] ?? [])
+      .map(
+        (p) =>
+          `<button class="chip-toggle phrase-chip ${hasQuickPhrase(comment, p) ? 'on' : ''}" data-phrase="${escapeHtml(p)}">${escapeHtml(p)}</button>`,
+      )
+      .join('')
+  }
+
   private renderItem(a: Annotation): string {
     const quote = snippet(this.sourceText, a.start, a.end, 90)
     const meta = a.meta
@@ -149,7 +159,8 @@ export class AnnotationPopup {
           <div class="mb-2 flex flex-wrap gap-1">${KINDS.map(
             (k) => `<button class="chip-toggle kind-chip ${a.kind === k ? 'on' : ''}" data-kind="${k}" data-role="edit-kind">${icon(k)} ${KIND_LABEL[k]}</button>`,
           ).join('')}</div>
-          <textarea class="input-base popup-edit-input min-h-16 resize-y text-sm" placeholder="批注内容：问题给改法；认可写原因……">${escapeHtml(a.comment)}</textarea>
+          <div data-role="phrases" class="mb-2 flex flex-wrap gap-1">${this.editPhraseChips(a.comment)}</div>
+          <textarea class="input-base popup-edit-input min-h-16 resize-y text-sm" placeholder="批注内容：点选快捷语或直接输入；认可类型可不写描述……">${escapeHtml(a.comment)}</textarea>
           <div class="mt-2 flex items-center justify-between">
             <span class="flex items-center gap-1 text-xs text-muted-foreground"><span class="kbd">⌘</span><span class="kbd">↵</span> 保存</span>
             <span class="flex gap-1.5">
@@ -169,7 +180,7 @@ export class AnnotationPopup {
           <span class="ml-auto text-[11px] text-muted-foreground">${this.items.length > 1 ? `共 ${this.items.length} 条` : ''}</span>
         </div>
         <blockquote class="mb-1.5 border-l-2 border-border pl-2 text-[12.5px] text-muted-foreground">“${escapeHtml(quote)}”</blockquote>
-        <div class="whitespace-pre-wrap text-sm leading-relaxed">${escapeHtml(a.comment)}</div>
+        ${a.comment ? `<div class="whitespace-pre-wrap text-sm leading-relaxed">${escapeHtml(a.comment)}</div>` : ''}
         <div class="mt-2 flex gap-0.5">
           <button class="btn btn-ghost btn-sm h-7 px-2 text-xs" data-op="edit">编辑</button>
           <button class="btn btn-ghost btn-sm h-7 px-2 text-xs" data-op="toggle">${a.status === 'open' ? '解决' : '重开'}</button>
@@ -187,6 +198,21 @@ export class AnnotationPopup {
         this.editKind = (chip as HTMLElement).dataset.kind as AnnotationKind
         item.querySelectorAll('.kind-chip').forEach((c) =>
           c.classList.toggle('on', (c as HTMLElement).dataset.kind === this.editKind),
+        )
+        // 快捷语随类型切换
+        const host = item.querySelector('[data-role="phrases"]')
+        const input = item.querySelector('.popup-edit-input') as HTMLTextAreaElement | null
+        if (host && input) host.innerHTML = this.editPhraseChips(input.value)
+      })
+    })
+    this.el.querySelectorAll('.phrase-chip').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        const item = chip.closest('.popup-item') as HTMLElement
+        const input = item.querySelector('.popup-edit-input') as HTMLTextAreaElement | null
+        if (!input) return
+        input.value = toggleQuickPhrase(input.value, (chip as HTMLElement).dataset.phrase ?? '')
+        item.querySelectorAll('.phrase-chip').forEach((c) =>
+          c.classList.toggle('on', hasQuickPhrase(input.value, (c as HTMLElement).dataset.phrase ?? '')),
         )
       })
     })
@@ -244,7 +270,8 @@ export class AnnotationPopup {
     const input = this.el.querySelector('.popup-edit-input') as HTMLTextAreaElement | null
     if (!input) return
     const comment = input.value.trim()
-    if (comment === '') {
+    // 认可类允许只划不写；其余类型仍需描述
+    if (comment === '' && this.editKind !== 'praise') {
       input.focus()
       return
     }

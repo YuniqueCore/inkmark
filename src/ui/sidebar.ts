@@ -247,7 +247,7 @@ export class SidebarView {
         <blockquote class="mb-1.5 cursor-pointer border-l-2 border-border pl-2 text-[13px] text-muted-foreground transition-colors hover:border-ring" data-op="focus">
           “${escapeHtml(quote)}”
         </blockquote>
-        <div class="whitespace-pre-wrap text-sm leading-relaxed">${escapeHtml(a.comment)}</div>
+        ${a.comment ? `<div class="whitespace-pre-wrap text-sm leading-relaxed">${escapeHtml(a.comment)}</div>` : ''}
         <div class="mt-2 flex gap-0.5">
           <button class="btn btn-ghost btn-sm h-7 px-2 text-xs" data-op="focus">定位</button>
           <button class="btn btn-ghost btn-sm h-7 px-2 text-xs" data-op="edit">编辑</button>

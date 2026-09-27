@@ -3,6 +3,36 @@
 /** 批注类型：问题、建议、疑问、重点、认可（写得好 + 原因）、slop 预扫描 */
 export type AnnotationKind = 'issue' | 'suggestion' | 'question' | 'highlight' | 'praise' | 'slop'
 
+/** 各批注类型的快捷批注语：撰写卡与编辑弹层的可点选 chips（与 KIND_LABEL 同源）。
+ * 点击 = 切换（已含则移除，否则以「；」追加），支持组合多条。 */
+export const QUICK_PHRASES: Record<AnnotationKind, readonly string[]> = {
+  issue: ['表述含糊，建议给出明确结论', '逻辑跳跃，缺少过渡', '论点缺少依据', '与上下文重复', '因果关系不成立'],
+  suggestion: ['建议直接给结论', '建议拆分长句', '建议补充示例', '建议删减铺垫', '建议换更具体的表述'],
+  question: ['依据是什么？', '是否与上文重复？', '指代对象不明确', '这个结论必然成立吗？'],
+  highlight: ['核心论点', '关键数据', '值得展开', '需要记住'],
+  praise: ['论证有力', '表达清晰', '结构严谨', '例证恰当', '有启发性'],
+  slop: ['用词过于华丽', '辞藻过于丰富', '句式空洞', '省略过多，语义不完整', '语句结构有问题', '套话空话'],
+}
+
+const PHRASE_SEP = '；'
+
+/** 批注语里是否已含该快捷短语（chips 的 on 态） */
+export function hasQuickPhrase(comment: string, phrase: string): boolean {
+  return comment.split(PHRASE_SEP).some((p) => p.trim() === phrase)
+}
+
+/** 切换快捷短语：已含则移除，否则追加到末尾。纯函数。 */
+export function toggleQuickPhrase(comment: string, phrase: string): string {
+  const parts = comment
+    .split(PHRASE_SEP)
+    .map((p) => p.trim())
+    .filter(Boolean)
+  const i = parts.indexOf(phrase)
+  if (i >= 0) parts.splice(i, 1)
+  else parts.push(phrase)
+  return parts.join(PHRASE_SEP)
+}
+
 /** 各批注类型的规范中文标签。导出（core）与 UI 共用的单一来源 */
 export const KIND_LABEL: Record<AnnotationKind, string> = {
   issue: '问题',

@@ -12,7 +12,7 @@
 import { computePosition, offset, shift, size, limitShift } from '@floating-ui/dom'
 import { escapeHtml } from '../core/text'
 import { icon } from './icons'
-import { KIND_LABEL } from '../core/types'
+import { hasQuickPhrase, KIND_LABEL, QUICK_PHRASES, toggleQuickPhrase } from '../core/types'
 import type { AnnotationKind } from '../core/types'
 
 export interface SelectionInfo {
@@ -39,7 +39,7 @@ export interface PinCallbacks {
   onDismiss: () => void
 }
 
-const KINDS: AnnotationKind[] = ['issue', 'suggestion', 'question', 'highlight', 'praise']
+const KINDS: AnnotationKind[] = ['issue', 'suggestion', 'question', 'highlight', 'praise', 'slop']
 
 export class SelectionPin {
   private pin: HTMLElement
@@ -75,10 +75,21 @@ export class SelectionPin {
 
     this.card.addEventListener('input', () => this.saveDraft())
     this.card.addEventListener('click', (e) => {
+      const phraseChip = (e.target as HTMLElement).closest('.phrase-chip') as HTMLElement | null
+      if (phraseChip) {
+        const input = this.card.querySelector('#pin-composer-input') as HTMLTextAreaElement | null
+        if (input) {
+          input.value = toggleQuickPhrase(input.value, phraseChip.dataset.phrase ?? '')
+          input.dispatchEvent(new Event('input', { bubbles: true })) // 同步草稿
+          this.refreshPhraseChips()
+        }
+        return
+      }
       const chip = (e.target as HTMLElement).closest('.kind-chip') as HTMLElement | null
       if (chip) {
         this.kind = chip.dataset.kind as AnnotationKind
         this.refreshChips()
+        this.refreshPhraseChips() // 快捷语随类型切换
         this.saveDraft()
       }
     })
@@ -173,7 +184,8 @@ export class SelectionPin {
         <div class="mb-2.5 flex flex-wrap gap-1">${KINDS.map(
           (k) => `<button class="chip-toggle kind-chip" data-kind="${k}">${icon(k)} ${KIND_LABEL[k]}</button>`,
         ).join('')}</div>
-        <textarea id="pin-composer-input" class="input-base min-h-20 resize-y" placeholder="批注内容：问题给改法；认可写原因……"></textarea>
+        <div id="pin-phrases" class="mb-2.5 flex flex-wrap gap-1"></div>
+        <textarea id="pin-composer-input" class="input-base min-h-20 resize-y" placeholder="批注内容：点选快捷语或直接输入；认可类型可不写描述……"></textarea>
         <div class="mt-2.5 flex items-center justify-between">
           <span class="flex items-center gap-1 text-xs text-muted-foreground">
             <span class="kbd">⌘</span><span class="kbd">↵</span> 提交
@@ -187,6 +199,7 @@ export class SelectionPin {
     this.refreshChips()
     const input = this.card.querySelector('#pin-composer-input') as HTMLTextAreaElement | null
     if (input && draft) input.value = draft.text
+    this.refreshPhraseChips()
     // 以 visibility:hidden 参与定位测量：display:none 会被 floating-ui 量成 0×0，
     // shift 无法感知真实宽度，靠视口右缘时卡片按零宽度定位、整块撑出屏幕外。
     // pop-in 动画的初始关键帧（scale 0.98）也会让测量矩形偏差几像素，一并停掉；
@@ -228,11 +241,29 @@ export class SelectionPin {
     })
   }
 
+  /** 当前类型的快捷语 chips；on 态 = 短语已包含在批注语里 */
+  private phraseChips(): string {
+    const input = this.card.querySelector('#pin-composer-input') as HTMLTextAreaElement | null
+    const value = input?.value ?? ''
+    return (QUICK_PHRASES[this.kind] ?? [])
+      .map(
+        (p) =>
+          `<button class="chip-toggle phrase-chip ${hasQuickPhrase(value, p) ? 'on' : ''}" data-phrase="${escapeHtml(p)}">${escapeHtml(p)}</button>`,
+      )
+      .join('')
+  }
+
+  private refreshPhraseChips(): void {
+    const host = this.card.querySelector('#pin-phrases')
+    if (host) host.innerHTML = this.phraseChips()
+  }
+
   private submit(): void {
     const input = this.card.querySelector('#pin-composer-input') as HTMLTextAreaElement | null
     if (!input || !this.info) return
     const comment = input.value.trim()
-    if (comment === '') {
+    // 认可类允许只划不写：标记本身就是反馈；其余类型仍需描述
+    if (comment === '' && this.kind !== 'praise') {
       input.focus()
       return
     }

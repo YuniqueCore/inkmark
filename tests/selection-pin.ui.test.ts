@@ -158,6 +158,54 @@ describe('SelectionPin 草稿保护', () => {
     expect(again.value).toBe('')
   })
 
+  it('认可类型：空批注语可直接提交；其它类型空语被拦截', async () => {
+    await showPin()
+    await openCard()
+    card.querySelector('[data-kind="praise"]')!.dispatchEvent(new MouseEvent('click', {bubbles: true}))
+    card.querySelector('[data-op="submit"]')!.dispatchEvent(new MouseEvent('click', {bubbles: true}))
+    await Promise.resolve()
+    expect(created).not.toBeNull()
+    expect(created!.comment).toBe('')
+    expect(card.classList.contains('hidden')).toBe(true)
+
+    // 其它类型：空批注语不提交、卡片保留
+    await showPin({start: 40, end: 52})
+    await openCard()
+    card.querySelector('[data-op="submit"]')!.dispatchEvent(new MouseEvent('click', {bubbles: true}))
+    expect(created!.comment).toBe('') // created 未被覆盖：仍是上一条
+    expect(card.classList.contains('hidden')).toBe(false)
+  })
+
+  it('快捷语 chips：点击追加进批注语（on 态），再点移除', async () => {
+    await showPin()
+    await openCard()
+    const chip = () => card.querySelector('.phrase-chip') as HTMLElement
+    const label = chip().dataset.phrase!
+    chip().dispatchEvent(new MouseEvent('click', {bubbles: true}))
+    await Promise.resolve()
+    const input = card.querySelector('#pin-composer-input') as HTMLTextAreaElement
+    expect(input.value).toBe(label)
+    expect(chip().classList.contains('on')).toBe(true)
+    chip().dispatchEvent(new MouseEvent('click', {bubbles: true}))
+    expect(input.value).toBe('')
+    expect(chip().classList.contains('on')).toBe(false)
+  })
+
+  it('切换类型后快捷语 chips 随之更换', async () => {
+    await showPin()
+    await openCard()
+    const labels = () =>
+      [...card.querySelectorAll('.phrase-chip')].map((c) => (c as HTMLElement).dataset.phrase)
+    const issueFirst = labels()[0]
+    expect(issueFirst).toBeDefined()
+    const slopChip = card.querySelector('[data-kind="slop"]') as HTMLElement | null
+    expect(slopChip).toBeTruthy()
+    slopChip!.dispatchEvent(new MouseEvent('click', {bubbles: true}))
+    await Promise.resolve()
+    expect(labels()).toContain('用词过于华丽')
+    expect(labels()).not.toContain(issueFirst)
+  })
+
   it('空范围 / 纯空白选区不唤起小点', async () => {
     await showPin({start: 5, end: 5})
     expect(pinEl.classList.contains('hidden')).toBe(true)
