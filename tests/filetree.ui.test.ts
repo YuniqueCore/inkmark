@@ -121,6 +121,20 @@ describe('FileTreeView 多选', () => {
     expect(events).toEqual([{op: 'export-doc', ids: ['a']}])
   })
 
+  it('反选：勾选未选中的、取消已选中的', () => {
+    tree.render([doc('a', '一.md'), doc('b', '二.md'), doc('c', '三.md')], 'a')
+    check('a')
+    ;(root.querySelector('[data-select-invert]') as HTMLButtonElement).click()
+    expect(bulkBar()).toContain('已选 2')
+    expect(checkbox('a')!.checked).toBe(false)
+    expect(checkbox('b')!.checked).toBe(true)
+    expect(checkbox('c')!.checked).toBe(true)
+    // 再反选回到仅 a
+    ;(root.querySelector('[data-select-invert]') as HTMLButtonElement).click()
+    expect(bulkBar()).toContain('已选 1')
+    expect(checkbox('a')!.checked).toBe(true)
+  })
+
   it('重渲染剪除已删除文档的选择；全选框状态同步', () => {
     tree.render([doc('a', '一.md'), doc('b', '二.md')], 'a')
     check('a')

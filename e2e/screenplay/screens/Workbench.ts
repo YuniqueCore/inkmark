@@ -43,6 +43,13 @@ export const Workbench = {
   panelSubmit: (page: Page): Locator => page.locator('#sp-submit'),
   /** 导入冲突诊断树 */
   conflictDialog: (page: Page): Locator => page.locator('[role="dialog"][aria-label="导入冲突诊断"]'),
+  /** 右下悬浮阅读设置（1/4 圆环）与设置弹层 */
+  fab: (page: Page): Locator => page.locator('#reading-fab'),
+  fabToggle: (page: Page): Locator => page.locator('#reading-fab .fab-btn'),
+  fabItem: (page: Page, id: string): Locator => page.locator(`#reading-fab [data-fab-item="${id}"]`),
+  fabFlyout: (page: Page): Locator => page.locator('#reading-fab .fab-flyout'),
+  settingsDialog: (page: Page): Locator => page.locator('[role="dialog"][aria-label="设置"]'),
+  treeInvert: (page: Page): Locator => page.locator('#filetree [data-select-invert]'),
   /** 侧栏批注卡 */
   sidebarCards: (page: Page): Locator => page.locator('#sidebar .ann-card'),
   /** 文档树 */

@@ -25,6 +25,80 @@
   --input: #e4e4e7;
   --ring: #a1a1aa;
   --radius: 0.625rem;
+  /* 阅读偏好：边栏底色（亮/暗为半透明卡片，分面主题给实色）与纹理线条色（随中区极性自适应） */
+  --sidebar-bg: color-mix(in oklab, var(--card) 40%, transparent);
+  --texture-line: color-mix(in oklab, var(--foreground) 8%, transparent);
+  /* 正文字体族：[data-font] 应用与设置里的字体样例共用单一来源 */
+  --font-doc-serif: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', SimSun, Georgia, serif;
+  --font-doc-kai: 'Kaiti SC', 'STKaiti', KaiTi, 'Noto Serif SC', serif;
+  --font-doc-mono: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, 'Noto Sans Mono CJK SC', monospace;
+}
+
+/* 纸黄（阅读器暖纸底）：整面浅色主题，token 集与 zinc 语系对齐 */
+[data-theme='sepia'] {
+  --background: #f6f1e7;
+  --foreground: #3d3a34;
+  --card: #fbf8f1;
+  --card-foreground: #3d3a34;
+  --popover: #fbf8f1;
+  --popover-foreground: #3d3a34;
+  --primary: #44403c;
+  --primary-foreground: #faf6ee;
+  --secondary: #efe8d8;
+  --secondary-foreground: #44403c;
+  --muted: #ece4d2;
+  --muted-foreground: #7d7668;
+  --accent: #ece4d2;
+  --accent-foreground: #44403c;
+  --destructive: #b91c1c;
+  --border: #ddd2ba;
+  --input: #ddd2ba;
+  --ring: #a8a29e;
+}
+
+/* 分面主题：边栏与中区明暗相反。.theme-side 同时挂在真实侧栏与
+   设置里的主题缩略图上，作用域内覆盖 token 即可整体换装 */
+[data-theme='panda'] {
+  --sidebar-bg: #131316;
+}
+[data-theme='panda'] .theme-side {
+  --background: #131316;
+  --card: #1b1b1f;
+  --card-foreground: #f4f4f5;
+  --popover: #1b1b1f;
+  --popover-foreground: #f4f4f5;
+  --primary: #f4f4f5;
+  --primary-foreground: #18181b;
+  --foreground: #f4f4f5;
+  --muted-foreground: #a1a1aa;
+  --secondary: #26262b;
+  --secondary-foreground: #f4f4f5;
+  --muted: #1f1f23;
+  --accent: #26262b;
+  --accent-foreground: #f4f4f5;
+  --border: #2e2e33;
+  --input: #2e2e33;
+}
+[data-theme='panda-inverse'] {
+  --sidebar-bg: #ffffff;
+}
+[data-theme='panda-inverse'] .theme-side {
+  --background: #fafafa;
+  --card: #ffffff;
+  --card-foreground: #09090b;
+  --popover: #ffffff;
+  --popover-foreground: #09090b;
+  --primary: #18181b;
+  --primary-foreground: #fafafa;
+  --foreground: #09090b;
+  --muted-foreground: #71717a;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #18181b;
+  --muted: #f4f4f5;
+  --accent: #f4f4f5;
+  --accent-foreground: #18181b;
+  --border: #e4e4e7;
+  --input: #e4e4e7;
 }
 
 .dark {
@@ -133,6 +207,14 @@
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-family: -apple-system, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
+  }
+  /* 侧栏底色由主题 token 给出：亮/暗半透明卡片，panda 系实色（原 bg-card/40 上移至此）。
+     color 必须在此重声明：body 解析过的 color 是计算值，子元素继承后不会随
+     .theme-side 作用域的 token 覆盖重新解析（熊猫·反色下标题曾白字白底） */
+  #filetree,
+  #sidebar {
+    background-color: var(--sidebar-bg);
+    color: var(--foreground);
   }
   ::selection {
     background: color-mix(in oklab, var(--primary) 18%, transparent);
@@ -243,7 +325,8 @@
 /* ---------------------------------------------------------------- 编辑器高亮 */
 
 .editor-blk {
-  @apply mb-5 text-[16.5px] leading-[2.05] tracking-[0.01em];
+  @apply mb-5 leading-[2.05] tracking-[0.01em];
+  font-size: var(--doc-font-size, 16.5px);
 }
 .seg-hl {
   @apply rounded-[4px] cursor-pointer transition-shadow duration-300;
@@ -297,7 +380,8 @@
 .dark .diff-row.diff-del { background: color-mix(in oklab, var(--destructive) 16%, transparent); }
 .dark .diff-row.diff-add { background: color-mix(in oklab, #10b981 14%, transparent); }
 .diff-blk {
-  @apply mb-0 min-w-0 flex-1 text-[16.5px] leading-[2.05] tracking-[0.01em];
+  @apply mb-0 min-w-0 flex-1 leading-[2.05] tracking-[0.01em];
+  font-size: var(--doc-font-size, 16.5px);
 }
 .diff-blk.editor-blk { margin: 0; }
 
@@ -396,4 +480,165 @@ body.select-none {
   background: color-mix(in oklab, #f59e0b 16%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in oklab, #f59e0b 45%, transparent);
   border-radius: 2px;
+}
+
+/* ---------------------------------------------------------------- 阅读纹理
+   元素级 data-texture：#editor 与设置里的纹理样块共用同一规则源；
+   线条色走 --texture-line（随中区极性自适应），纸纹用 SVG 噪声（深浅各一） */
+
+[data-texture='paper'] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.dark [data-texture='paper'] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.06 0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+[data-texture='grid'] {
+  background-image:
+    linear-gradient(to right, var(--texture-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--texture-line) 1px, transparent 1px);
+  background-size: 26px 26px;
+}
+[data-texture='ruled'] {
+  background-image: linear-gradient(to bottom, var(--texture-line) 1px, transparent 1px);
+  background-size: 100% 32px;
+}
+[data-texture='linen'] {
+  background-image:
+    repeating-linear-gradient(45deg, var(--texture-line) 0, var(--texture-line) 1px, transparent 1px, transparent 6px),
+    repeating-linear-gradient(-45deg, var(--texture-line) 0, var(--texture-line) 1px, transparent 1px, transparent 6px);
+}
+
+/* 正文字体：[data-font] 挂在 #editor 上生效，同时供字体样例复用同一族定义 */
+[data-font='serif'] { font-family: var(--font-doc-serif); }
+[data-font='kai'] { font-family: var(--font-doc-kai); }
+[data-font='mono'] { font-family: var(--font-doc-mono); }
+
+/* ---------------------------------------------------------------- 设置控件（设置弹层与悬浮球共用） */
+
+.theme-card {
+  @apply rounded-lg border border-transparent p-2 text-left transition-colors hover:bg-accent/50;
+}
+.texture-card,
+.font-card {
+  @apply rounded-lg border border-transparent p-1.5 text-center transition-colors hover:bg-accent/50;
+}
+.theme-card.on,
+.texture-card.on,
+.font-card.on {
+  @apply border-ring ring-2 ring-ring/30;
+}
+
+/* 主题缩略示意：迷你界面（头部 / 侧栏 / 正文行）直接用真实 token 上色，
+   根节点带 data-theme（+ 深色主题补 .dark），token 级联即可换装 */
+.theme-preview {
+  @apply flex flex-col overflow-hidden rounded-md border;
+  border-color: var(--border);
+  height: 44px;
+  background: var(--background);
+}
+.tp-head {
+  @apply w-full shrink-0;
+  height: 7px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+.tp-body {
+  @apply flex min-h-0 flex-1;
+}
+.tp-side {
+  @apply h-full shrink-0;
+  width: 27%;
+  background: var(--sidebar-bg);
+}
+.tp-main {
+  @apply min-w-0 flex-1 px-2 py-1.5;
+}
+.tp-line {
+  display: block;
+  height: 3px;
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--foreground) 24%, transparent);
+}
+.tp-line + .tp-line {
+  margin-top: 5px;
+}
+.tp-line.short {
+  width: 62%;
+}
+
+.texture-swatch {
+  @apply block h-9 w-full rounded-md border bg-card;
+  border-color: var(--border);
+}
+.font-sample {
+  @apply block text-[15px] leading-6;
+}
+
+/* ---------------------------------------------------------------- 右下悬浮阅读设置
+   闲置 40% 透明、hover/展开不透明；展开后子项沿左上 1/4 圆弧铺开
+   （三角函数定位 + 交错过渡），悬停子项再展开二级选项/滑杆。触摸点按等效。 */
+
+#reading-fab {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  z-index: 30;
+}
+.fab-bridge {
+  /* 展开期间的悬停桥：指针从主钮移向弧上子项途中不离开容器（否则中途收起） */
+  position: absolute;
+  inset: -130px;
+  pointer-events: none;
+}
+#reading-fab.open .fab-bridge {
+  pointer-events: auto;
+}
+.fab-btn {
+  @apply flex size-11 items-center justify-center rounded-full border bg-card text-card-foreground shadow-lg;
+  border-color: var(--border);
+  opacity: 0.4;
+  transition: opacity 0.2s ease-out, transform 0.2s ease-out;
+}
+.fab-btn svg {
+  transition: transform 0.25s ease-out;
+}
+#reading-fab:hover .fab-btn,
+#reading-fab.open .fab-btn {
+  opacity: 1;
+}
+#reading-fab.open .fab-btn svg {
+  transform: rotate(30deg);
+}
+.fab-item {
+  @apply absolute flex size-9 items-center justify-center rounded-full border bg-card text-card-foreground shadow-md;
+  border-color: var(--border);
+  opacity: 0;
+  transform: scale(0.6);
+  pointer-events: none;
+  transition: opacity 0.16s ease-out, transform 0.16s ease-out, background-color 0.12s;
+}
+#reading-fab.open .fab-item {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+.fab-item:hover,
+.fab-item.on {
+  @apply bg-secondary text-secondary-foreground;
+}
+.fab-flyout {
+  @apply absolute rounded-lg border bg-popover p-2 text-popover-foreground shadow-lg;
+  border-color: var(--border);
+  animation: pop-in 0.12s ease-out;
+}
+.fab-flyout[hidden] {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fab-btn,
+  .fab-item,
+  .fab-flyout {
+    transition: none !important;
+    animation: none !important;
+  }
 }

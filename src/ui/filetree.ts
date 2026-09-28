@@ -62,6 +62,7 @@ export class FileTreeView {
             <input type="checkbox" data-select-all class="size-3 accent-[var(--primary)]" ${this.selected.size === docs.length ? 'checked' : ''} title="全选"/>
             <span class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">文档 ${docs.length}</span>
           </label>
+          <button type="button" data-select-invert class="text-[11px] text-muted-foreground transition-colors hover:text-foreground" title="反选：勾选未选中的，取消已选中的">反选</button>
         </div>
         ${this.selected.size > 0 ? this.renderBulkBar() : ''}
         ${this.renderNodes(tree.children, '', activeDocId)}
@@ -132,6 +133,12 @@ export class FileTreeView {
       box.addEventListener('change', () => {
         const all = (box as HTMLInputElement).checked
         this.selected = new Set(all ? this.lastDocs.map((d) => d.id) : [])
+        this.render(this.lastDocs, this.lastActiveId)
+      })
+    })
+    this.root.querySelectorAll('[data-select-invert]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.selected = new Set(this.lastDocs.filter((d) => !this.selected.has(d.id)).map((d) => d.id))
         this.render(this.lastDocs, this.lastActiveId)
       })
     })

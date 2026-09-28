@@ -20,10 +20,14 @@ import { AnnotationPopup } from './ui/annotation-popup'
 import { SelectionPin } from './ui/selection-pin'
 import { SearchPanelView } from './ui/search-panel'
 import { confirmDialog, textDialog } from './ui/confirm'
+import { flipPolarity } from './core/prefs'
+import type { ReadingPrefs } from './core/prefs'
+import { applyPrefs, loadPrefs, savePrefs } from './ui/prefs'
+import { ReadingFab } from './ui/reading-fab'
+import { settingsDialog } from './ui/settings-dialog'
 import { SidebarView } from './ui/sidebar'
 import { initResizers } from './ui/resizer'
 import { initSaveStatus } from './ui/save-status'
-import { initTheme } from './ui/theme'
 import { toast } from './ui/toast'
 import { rectOfAnnotation, resolveSelection } from './ui/selection-offsets'
 import { SAMPLE_TEXT } from './ui/sample'
@@ -49,6 +53,14 @@ let onlyHighlightFiltered = false
 let mode: 'annotate' | 'diff' | 'edit' = 'annotate'
 /** 各文档最近一次 slop 扫描报告（侧栏统计卡）：派生数据缓存，文本变化即失效 */
 const slopReports = new Map<string, SlopReport>()
+
+/** 阅读偏好（主题/纹理/字体/字号）：独立于工作区的第二状态域，改动即应用并持久化 */
+let prefs: ReadingPrefs = loadPrefs()
+const setPrefs = (next: ReadingPrefs): void => {
+  prefs = next
+  applyPrefs(prefs)
+  savePrefs(prefs)
+}
 
 /** 编辑器实际渲染的批注：关闭"仅高亮筛选"时显示全部 */
 function editorAnnotations(): Annotation[] {
@@ -735,6 +747,11 @@ function clearCurrent(): void {
   removeDoc(doc.id)
 }
 
+/** 完整设置弹层：改动经 setPrefs 即时生效并持久化，弹层背后实时预览 */
+async function openSettings(): Promise<void> {
+  await settingsDialog(prefs, setPrefs)
+}
+
 // 侧栏 / 文档树收起。桌面（≥lg）：flex 布局下隐藏元素自然退出，flex-1 的
 // 中区自动占满；移动（<lg）：两者是覆盖式抽屉，body 上的 tree-open /
 // sidebar-open 类驱动滑入滑出（样式在 styles.css 移动端媒体查询），互斥展开。
@@ -781,6 +798,7 @@ $('#btn-export').addEventListener('click', maybeExport)
 $('#btn-clear').addEventListener('click', () => void clearCurrent())
 $('#btn-tree').addEventListener('click', () => togglePanel('tree'))
 $('#btn-sidebar').addEventListener('click', () => togglePanel('sidebar'))
+$('#btn-theme').addEventListener('click', () => setPrefs({...prefs, theme: flipPolarity(prefs.theme)}))
 $('#overlay').addEventListener('click', () => exporter.close())
 document.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === 's') {
@@ -839,6 +857,7 @@ function openSearch(): void {
 // ---------------------------------------------------------------- 启动
 
 function bootstrap(): void {
+  applyPrefs(prefs) // 首渲染前应用阅读偏好（防闪烁脚本已先行设置主题，这里补齐其余维度）
   state = loadWorkspace()
   rerender(false)
   // header 版本号（构建期由 vite define 注入 package.json version）
@@ -870,7 +889,11 @@ function bootstrap(): void {
     treeEl,
     sidebarEl,
   })
-  initTheme()
+  new ReadingFab($('#reading-fab'), {
+    getPrefs: () => prefs,
+    onChange: (patch) => setPrefs({...prefs, ...patch}),
+    onOpenSettings: () => void openSettings(),
+  })
 }
 
 bootstrap()
