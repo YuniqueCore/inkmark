@@ -1,8 +1,10 @@
 <div align="center">
 
+[English](README.en.md) · 简体中文
+
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://signature4u.vercel.app/api/sign?text=InkMark&font=great-vibes&bg=transparent&fontSize=190&fill=gradient&f1=e2e8f0&f2=7dd3fc" />
-  <img src="https://signature4u.vercel.app/api/sign?text=InkMark&font=great-vibes&bg=transparent&fontSize=190&fill=gradient&f1=0f172a&f2=0284c7" alt="InkMark" width="380" />
+  <source media="(prefers-color-scheme: dark)" srcset="https://signature4u.vercel.app/api/sign?text=InkMark&font=great-vibes&bg=transparent&fontSize=190&speed=1.4&fill=gradient&f1=e2e8f0&f2=7dd3fc" />
+  <img src="https://signature4u.vercel.app/api/sign?text=InkMark&font=great-vibes&bg=transparent&fontSize=190&speed=1.4&fill=gradient&f1=0f172a&f2=0284c7" alt="InkMark" width="380" />
 </picture>
 
 **划词批注工作台** —— 给 AI 改过的文本做**行内批注**，把「哪里有问题」准确递回给 AI。
