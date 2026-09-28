@@ -88,6 +88,9 @@ export interface Annotation {
   meta?: SlopMeta
   /** 失锚标记：原文编辑后引文已不在原文中，批注被钳到改动处（重锚成功时清除） */
   anchorLost?: true
+  /** 批量批注组：同一 groupId 的批注在侧栏聚合为一张卡（统计 + 展开跳转）。
+   * 每条批注仍是独立的一阶 [start,end)，导出 / W3C / 重锚不受分组影响 */
+  groupId?: string
   createdAt: number
   updatedAt: number
 }

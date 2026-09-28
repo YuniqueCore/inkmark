@@ -1,9 +1,14 @@
-/** 侧栏：批注列表、筛选、单条操作。 */
+/** 侧栏：批注列表、筛选、单条/分组操作、搜索批量批注。
 
+ * 批量批注模型：N 条共享 groupId 的一阶批注在列表里聚合为一张卡
+ * （统计 + 展开跳转）；聚合是派生状态，不复制可变状态。
+ */
+
+import { findMatches, type MatchRange } from '../core/batch'
 import { snippet } from '../core/text'
 import { reportCategoryCounts } from '../core/slop'
 import type { SlopBand, SlopReport, SlopSample } from '../core/types'
-import { KIND_LABEL } from '../core/types'
+import { KIND_LABEL, MANUAL_KINDS, QUICK_PHRASES, hasQuickPhrase, toggleQuickPhrase } from '../core/types'
 import type { Annotation, AnnotationKind } from '../core/types'
 import { escapeHtml } from '../core/text'
 
@@ -12,8 +17,9 @@ export type StatusFilter = 'all' | 'open' | 'resolved'
 export interface SidebarCallbacks {
   onFocus: (id: string) => void
   onEdit: (a: Annotation) => void
-  onDelete: (id: string) => void
-  onToggleStatus: (id: string) => void
+  onDelete: (ids: string[]) => void
+  onToggleStatus: (ids: string[]) => void
+  onBatchAnnotate: (matches: MatchRange[], kind: AnnotationKind, comment: string) => void
   onFilterChange: (filter: StatusFilter) => void
   onKindFilterChange: (kinds: Set<AnnotationKind>) => void
   onHighlightModeChange: (only: boolean) => void
@@ -45,6 +51,9 @@ const BAND_LABEL: Record<SlopBand, string> = {
 
 const ALL_KINDS: AnnotationKind[] = ['issue', 'suggestion', 'question', 'highlight', 'praise', 'slop']
 
+/** 列表项：单条批注，或同 groupId 的批量批注聚合 */
+type ListItem = { kind: 'single'; ann: Annotation } | { kind: 'group'; members: Annotation[] }
+
 export class SidebarView {
   private root: HTMLElement
   private filter: StatusFilter = 'all'
@@ -52,6 +61,17 @@ export class SidebarView {
   private kindFilter: Set<AnnotationKind> = new Set()
   private onlyHighlightFiltered = false
   private activeId: string | null = null
+  /** 搜索批量批注：查询词 / 类型 / 批注语（输入态保存在视图内，重渲染后回填） */
+  private searchQuery = ''
+  private searchKind: AnnotationKind = 'suggestion'
+  private searchComment = ''
+  /** 展开的批量批注组 */
+  private expandedGroups = new Set<string>()
+  private lastArgs: { text: string; annotations: Annotation[]; opts: SidebarRenderOptions } = {
+    text: '',
+    annotations: [],
+    opts: {},
+  }
 
   constructor(root: HTMLElement, private callbacks: SidebarCallbacks) {
     this.root = root
@@ -91,6 +111,7 @@ export class SidebarView {
   }
 
   render(text: string, annotations: Annotation[], opts: SidebarRenderOptions = {}): void {
+    this.lastArgs = { text, annotations, opts }
     const open = annotations.filter((a) => a.status === 'open').length
     const shown = this.visibleOf(annotations)
 
@@ -116,13 +137,21 @@ export class SidebarView {
          </button>`,
     ).join('')
 
-    const cards = shown.map((a) => this.renderCard(a.target === 'revised' ? (opts.revised ?? '') : text, a)).join('')
+    const items = buildListItems(shown)
+    const cards = items
+      .map((item) =>
+        item.kind === 'single'
+          ? this.renderCard(sourceTextFor(item.ann, text, opts), item.ann)
+          : this.renderGroupCard(item.members, text, opts),
+      )
+      .join('')
 
     this.root.innerHTML = `
       <div class="mb-3 flex items-baseline justify-between px-1">
         <h3 class="text-sm font-semibold tracking-tight">批注</h3>
         <span class="text-xs text-muted-foreground">${open} 条待处理</span>
       </div>
+      ${this.renderSearch(text)}
       ${opts.slop ? this.renderSlopCard(opts.slop, opts.slopHistory ?? []) : ''}
       <div class="mb-1.5 flex flex-wrap gap-1.5 px-1">${chips}</div>
       <div class="mb-2 flex flex-wrap gap-1 px-1">${kindChips}</div>
@@ -130,13 +159,109 @@ export class SidebarView {
         <input type="checkbox" id="only-hl" class="size-3.5 accent-[var(--primary)]" ${this.onlyHighlightFiltered ? 'checked' : ''}/>
         正文只高亮当前筛选结果
       </label>
-      ${shown.length === 0
+      ${items.length === 0
         ? `<div class="mt-16 rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-             划选正文文字写批注，<br>或点顶栏「slop 预扫描」
+             划选正文写批注、点顶栏「slop 预扫描」，<br>或在上方搜索后一键批量批注
            </div>`
         : `<div class="flex flex-col gap-2.5">${cards}</div>`}
     `
 
+    this.wireFilters()
+    this.wireSearch(text)
+    this.wireCards(items)
+  }
+
+  // ---------------------------------------------------------------- 搜索批量批注
+
+  private renderSearch(text: string): string {
+    const matches = findMatches(text, this.searchQuery)
+    const canSubmit = matches.length > 0 && (this.searchComment.trim() !== '' || this.searchKind === 'praise')
+    const composer =
+      this.searchQuery.trim() === ''
+        ? ''
+        : `
+        <div class="mt-2 text-xs text-muted-foreground">
+          正文命中 <span class="font-medium text-foreground">${matches.length}</span> 处
+        </div>
+        <div class="mt-1.5 flex flex-wrap gap-1">${MANUAL_KINDS.map(
+          (k) =>
+            `<button class="chip-toggle ${this.searchKind === k ? 'on' : ''}" data-batch-kind="${k}">${KIND_LABEL[k]}</button>`,
+        ).join('')}</div>
+        <div class="chip-scroll mt-1.5">${(QUICK_PHRASES[this.searchKind] ?? [])
+          .map(
+            (p) =>
+              `<button class="chip-toggle ${hasQuickPhrase(this.searchComment, p) ? 'on' : ''}" data-batch-phrase="${escapeHtml(p)}">${escapeHtml(p)}</button>`,
+          )
+          .join('')}</div>
+        <textarea id="batch-comment" class="input-base mt-1.5 min-h-12 resize-y text-[13px]" placeholder="批注内容：点选快捷语或直接输入；认可类型可不写描述……">${escapeHtml(this.searchComment)}</textarea>
+        <button id="batch-submit" class="btn btn-default btn-sm mt-2 w-full" ${canSubmit ? '' : 'disabled'}>批量批注 ${matches.length} 处</button>`
+    return `
+      <div class="card mb-3 p-3">
+        <input id="batch-search" class="input-base h-8 text-[13px]" placeholder="搜索正文，一键批量批注…" value="${escapeHtml(this.searchQuery)}" />
+        ${composer}
+      </div>`
+  }
+
+  private wireSearch(text: string): void {
+    const input = this.root.querySelector('#batch-search') as HTMLInputElement | null
+    if (!input) return
+    // 输入即重渲染（命中数与撰写块随查询变化），重渲染后夺回焦点
+    input.addEventListener('input', () => {
+      this.searchQuery = input.value
+      this.rerender()
+      const fresh = this.root.querySelector('#batch-search') as HTMLInputElement | null
+      fresh?.focus()
+      fresh?.setSelectionRange(fresh.value.length, fresh.value.length)
+    })
+    this.root.querySelectorAll('[data-batch-kind]').forEach((chip) =>
+      chip.addEventListener('click', () => {
+        this.searchKind = (chip as HTMLElement).dataset.batchKind as AnnotationKind
+        this.rerender()
+      }),
+    )
+    this.root.querySelectorAll('[data-batch-phrase]').forEach((chip) =>
+      chip.addEventListener('click', () => {
+        this.searchComment = toggleQuickPhrase(this.searchComment, (chip as HTMLElement).dataset.batchPhrase ?? '')
+        this.rerender()
+        const comment = this.root.querySelector('#batch-comment') as HTMLTextAreaElement | null
+        comment?.focus()
+      }),
+    )
+    this.root.querySelector('#batch-comment')?.addEventListener('input', (e) => {
+      // 只同步状态与 chips on 态，不整体重渲染（保住输入焦点）
+      this.searchComment = (e.target as HTMLTextAreaElement).value
+      const value = this.searchComment
+      this.root.querySelectorAll('[data-batch-phrase]').forEach((c) =>
+        c.classList.toggle('on', hasQuickPhrase(value, (c as HTMLElement).dataset.batchPhrase ?? '')),
+      )
+      this.refreshSubmitState(text)
+    })
+    this.root.querySelector('#batch-submit')?.addEventListener('click', () => {
+      const matches = findMatches(text, this.searchQuery)
+      if (matches.length === 0) return
+      this.callbacks.onBatchAnnotate(matches, this.searchKind, this.searchComment.trim())
+      this.searchQuery = ''
+      this.searchComment = ''
+      this.rerender()
+    })
+  }
+
+  /** 批注语变化后只更新提交按钮的可用态 */
+  private refreshSubmitState(text: string): void {
+    const btn = this.root.querySelector('#batch-submit') as HTMLButtonElement | null
+    if (!btn) return
+    const matches = findMatches(text, this.searchQuery)
+    btn.disabled = !(matches.length > 0 && (this.searchComment.trim() !== '' || this.searchKind === 'praise'))
+  }
+
+  private rerender(): void {
+    const { text, annotations, opts } = this.lastArgs
+    this.render(text, annotations, opts)
+  }
+
+  // ---------------------------------------------------------------- 列表
+
+  private wireFilters(): void {
     this.root.querySelectorAll('[data-filter]').forEach((btn) =>
       btn.addEventListener('click', () =>
         this.callbacks.onFilterChange((btn as HTMLElement).dataset.filter as StatusFilter),
@@ -154,21 +279,56 @@ export class SidebarView {
     this.root.querySelector('#only-hl')?.addEventListener('change', (e) => {
       this.callbacks.onHighlightModeChange((e.target as HTMLInputElement).checked)
     })
-    for (const card of Array.from(this.root.querySelectorAll('.ann-card'))) {
-      const id = (card as HTMLElement).dataset.id!
-      const ann = annotations.find((x) => x.id === id)
-      for (const btn of Array.from(card.querySelectorAll('[data-op]'))) {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation()
-          const op = (e.target as HTMLElement).dataset.op
-          if (op === 'focus') this.callbacks.onFocus(id)
-          if (op === 'edit' && ann) this.callbacks.onEdit(ann)
-          if (op === 'toggle') this.callbacks.onToggleStatus(id)
-          if (op === 'delete') this.callbacks.onDelete(id)
-        })
+  }
+
+  private wireCards(items: ListItem[]): void {
+    for (const item of items) {
+      if (item.kind === 'single') {
+        this.wireSingleCard(item.ann)
+      } else {
+        this.wireGroupCard(item.members)
       }
-      card.addEventListener('click', () => this.callbacks.onFocus(id))
     }
+  }
+
+  private wireSingleCard(a: Annotation): void {
+    const card = this.root.querySelector(`.ann-card[data-id="${a.id}"]`)
+    if (!card) return
+    for (const btn of Array.from(card.querySelectorAll('[data-op]'))) {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const op = (e.target as HTMLElement).dataset.op
+        if (op === 'focus') this.callbacks.onFocus(a.id)
+        if (op === 'edit') this.callbacks.onEdit(a)
+        if (op === 'toggle') this.callbacks.onToggleStatus([a.id])
+        if (op === 'delete') this.callbacks.onDelete([a.id])
+      })
+    }
+    card.addEventListener('click', () => this.callbacks.onFocus(a.id))
+  }
+
+  private wireGroupCard(members: Annotation[]): void {
+    const groupId = members[0]!.groupId!
+    const card = this.root.querySelector(`.ann-card[data-group="${groupId}"]`)
+    if (!card) return
+    const ids = members.map((m) => m.id)
+    card.querySelectorAll('[data-op="focus"]').forEach((btn) =>
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        this.callbacks.onFocus((btn as HTMLElement).dataset.id!)
+      }),
+    )
+    card.querySelector('[data-group-op="expand"]')?.addEventListener('click', () => {
+      if (this.expandedGroups.has(groupId)) this.expandedGroups.delete(groupId)
+      else this.expandedGroups.add(groupId)
+      this.rerender()
+    })
+    card.querySelector('[data-group-op="toggle"]')?.addEventListener('click', () => {
+      this.callbacks.onToggleStatus(ids)
+    })
+    card.querySelector('[data-group-op="delete"]')?.addEventListener('click', () => {
+      this.callbacks.onDelete(ids)
+    })
   }
 
   /** slop 评分统计卡：评分 / 环比 / 趋势线 / 分档 / 类目分布 */
@@ -252,8 +412,80 @@ export class SidebarView {
           <button class="btn btn-ghost btn-sm h-7 px-2 text-xs" data-op="focus">定位</button>
           <button class="btn btn-ghost btn-sm h-7 px-2 text-xs" data-op="edit">编辑</button>
           <button class="btn btn-ghost btn-sm h-7 px-2 text-xs" data-op="toggle">${a.status === 'open' ? '解决' : '重开'}</button>
-          <button class="btn btn-ghost btn-sm btn-destructive h-7 px-2 text-xs" data-op="delete">删除</button>
+          <button class="btn btn-ghost btn-sm h-7 px-2 text-xs" data-op="delete">删除</button>
         </div>
       </div>`
   }
+
+  /** 批量批注组卡：kind + N 处统计 + 批注语，展开逐条跳转 */
+  private renderGroupCard(members: Annotation[], text: string, opts: SidebarRenderOptions): string {
+    const first = members[0]!
+    const groupId = first.groupId!
+    const resolved = members.filter((m) => m.status === 'resolved').length
+    const allResolved = resolved === members.length
+    const anyOpen = resolved < members.length
+    const expanded = this.expandedGroups.has(groupId)
+    const active = members.some((m) => m.id === this.activeId)
+    const rows = expanded
+      ? `<div class="mt-2 flex flex-col gap-1">${members
+          .map((m) => {
+            const quote = snippet(sourceTextFor(m, text, opts), m.start, m.end, 60)
+            return `<div class="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[13px] hover:bg-secondary/60">
+              <button class="min-w-0 flex-1 truncate text-left text-muted-foreground transition-colors hover:text-foreground" data-op="focus" data-id="${m.id}" title="${escapeHtml(quote)}">“${escapeHtml(quote)}”</button>
+              ${m.anchorLost ? '<span class="badge border-amber-500/40 text-amber-600 dark:text-amber-400">失锚</span>' : ''}
+              ${m.status === 'resolved' ? '<span class="badge bg-secondary text-secondary-foreground">已解决</span>' : ''}
+            </div>`
+          })
+          .join('')}</div>`
+      : ''
+    return `
+      <div class="card ann-card p-3 transition-shadow ${allResolved ? 'opacity-60' : ''} ${active ? 'ring-2 ring-ring/40' : 'hover:shadow-md'}" data-group="${groupId}">
+        <button class="flex w-full items-center gap-1.5 text-left" data-group-op="expand">
+          <span class="badge border-transparent" style="color:var(--kind-${first.kind});background:var(--kind-${first.kind}-bg)">${KIND_LABEL[first.kind]}</span>
+          <span class="badge border-border bg-secondary text-secondary-foreground" title="一次搜索批量批注">${members.length} 处</span>
+          ${resolved > 0 && !allResolved ? `<span class="text-xs text-muted-foreground">${resolved} 已解决</span>` : ''}
+          ${allResolved ? '<span class="badge bg-secondary text-secondary-foreground">已解决</span>' : ''}
+          <span class="ml-auto text-muted-foreground transition-transform ${expanded ? 'rotate-90' : ''}">›</span>
+        </button>
+        ${first.comment ? `<div class="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed">${escapeHtml(first.comment)}</div>` : ''}
+        ${rows}
+        <div class="mt-2 flex gap-0.5">
+          <button class="btn btn-ghost btn-sm h-7 px-2 text-xs" data-group-op="toggle">${anyOpen ? '全部解决' : '重开'}</button>
+          <button class="btn btn-ghost btn-sm h-7 px-2 text-xs btn-destructive" data-group-op="delete">删除</button>
+        </div>
+      </div>`
+  }
+}
+
+// ---------------------------------------------------------------- 纯辅助
+
+/** 批注锚定侧对应的摘录来源文本 */
+function sourceTextFor(a: Annotation, text: string, opts: SidebarRenderOptions): string {
+  return a.target === 'revised' ? (opts.revised ?? '') : text
+}
+
+/** 可见批注 → 列表项：无 groupId 的单条 + 同 groupId 聚合，按位置排序 */
+function buildListItems(shown: Annotation[]): ListItem[] {
+  const items: ListItem[] = []
+  const groupIndex = new Map<string, Annotation[]>()
+  for (const a of shown) {
+    if (a.groupId === undefined) {
+      items.push({ kind: 'single', ann: a })
+      continue
+    }
+    const members = groupIndex.get(a.groupId) ?? []
+    members.push(a)
+    groupIndex.set(a.groupId, members)
+  }
+  const groupItems: ListItem[] = [...groupIndex.values()].map((members) => ({
+    kind: 'group' as const,
+    members: [...members].sort((x, y) => x.start - y.start),
+  }))
+  return [...items, ...groupItems].sort(
+    (x, y) => firstStart(x) - firstStart(y),
+  )
+}
+
+function firstStart(item: ListItem): number {
+  return item.kind === 'single' ? item.ann.start : item.members[0]!.start
 }

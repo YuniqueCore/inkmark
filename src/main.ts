@@ -5,9 +5,11 @@ import { diffLines, diffStats } from './core/diff'
 import { importFileList, newDocId } from './core/import'
 import type { W3CRouted } from './core/import'
 import { reanchorAnnotations } from './core/reanchor'
+import { buildBatchAnnotations, type MatchRange } from './core/batch'
 import { splitBlocks } from './core/text'
 import { appendSample, hitsToAnnotations, scanSlopReport } from './core/slop'
 import type { SlopReport } from './core/types'
+import type { Annotation, AnnotationInput, AnnotationKind, DocItem, SlopLexicon } from './core/types'
 import { EditorView } from './ui/editor'
 import { ExporterView } from './ui/exporter'
 import { FileTreeView } from './ui/filetree'
@@ -22,7 +24,6 @@ import { toast } from './ui/toast'
 import { rectOfAnnotation, resolveSelection } from './ui/selection-offsets'
 import { SAMPLE_TEXT } from './ui/sample'
 import { SESSION_VERSION } from './core/types'
-import type { Annotation, AnnotationInput, DocItem, SlopLexicon } from './core/types'
 import { loadWorkspace } from './ui/storage'
 import zhLexicon from '../skill/references/anti-slop-kit/scripts/data/zh.json'
 import enLexicon from '../skill/references/anti-slop-kit/scripts/data/en.json'
@@ -83,28 +84,41 @@ const editor = new EditorView(editorEl, {
 
 // ---------------------------------------------------------------- 批注命令
 
-/** 删除批注（二次确认）。弹层与侧栏共用同一命令，不各持一份副本 */
-const deleteAnnotation = (id: string): void => {
+/** 删除批注（二次确认，支持批量——分组卡一次删全组）。弹层与侧栏共用同一命令 */
+const deleteAnnotation = (ids: string[]): void => {
   void (async () => {
     const ok = await confirmDialog({
-      title: '删除这条批注？',
+      title: ids.length > 1 ? `删除这 ${ids.length} 条批注？` : '删除这条批注？',
       description: '删除后不可恢复。',
       confirmText: '删除',
       danger: true,
     })
     if (!ok) return
-    mutateActive((doc) => ({ ...doc, annotations: doc.annotations.filter((a) => a.id !== id) }))
+    const idSet = new Set(ids)
+    mutateActive((doc) => ({ ...doc, annotations: doc.annotations.filter((a) => !idSet.has(a.id)) }))
   })()
 }
 
-/** 解决 / 重开批注。弹层与侧栏共用 */
-const toggleAnnotationStatus = (id: string): void => {
+/** 解决 / 重开批注（支持批量）：组内有未解决就全部解决，否则全部重开 */
+const toggleAnnotationStatus = (ids: string[]): void => {
+  const idSet = new Set(ids)
+  const anyOpen = activeDoc()?.annotations.some((a) => idSet.has(a.id) && a.status === 'open') ?? false
   mutateActive((doc) => ({
     ...doc,
     annotations: doc.annotations.map((a) =>
-      a.id === id ? { ...a, status: a.status === 'open' ? 'resolved' : 'open', updatedAt: Date.now() } : a,
+      idSet.has(a.id) ? { ...a, status: anyOpen ? 'resolved' : 'open', updatedAt: Date.now() } : a,
     ),
   }))
+}
+
+/** 搜索批量批注：N 个匹配区间 → 一组共享 groupId 的批注 */
+const batchAnnotate = (matches: MatchRange[], kind: AnnotationKind, comment: string): void => {
+  const anns = buildBatchAnnotations(matches, { kind, comment })
+  if (anns.length === 0) return
+  mutateActive((doc) => ({ ...doc, annotations: [...doc.annotations, ...anns] }))
+  sidebar.includeKind(kind) // 类型筛选开着时让新卡可见
+  rerender(false)
+  toast(`已批量批注 ${anns.length} 处`)
 }
 
 /** 打开批注编辑弹层：摘录与弹出内容按锚定侧取文本。
@@ -130,8 +144,8 @@ const annotationPopup = new AnnotationPopup({
       ),
     }))
   },
-  onDelete: deleteAnnotation,
-  onToggleStatus: toggleAnnotationStatus,
+  onDelete: (id) => deleteAnnotation([id]),
+  onToggleStatus: (id) => toggleAnnotationStatus([id]),
   onCopySnippet: (text) => {
     void navigator.clipboard.writeText(text).then(() => toast('已复制片段'))
   },
@@ -177,6 +191,7 @@ const sidebar = new SidebarView(sidebarEl, {
   },
   onDelete: deleteAnnotation,
   onToggleStatus: toggleAnnotationStatus,
+  onBatchAnnotate: batchAnnotate,
   onFilterChange: (f) => {
     sidebar.setFilter(f)
     rerender(false)

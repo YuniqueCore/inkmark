@@ -19,6 +19,7 @@ beforeEach(() => {
     onEdit: () => {},
     onDelete: () => {},
     onToggleStatus: () => {},
+    onBatchAnnotate: () => {},
     onFilterChange: () => {},
     onKindFilterChange: () => {},
     onHighlightModeChange: () => {},
@@ -56,6 +57,24 @@ describe('侧栏失锚徽标', () => {
       (c) => c.querySelector('.badge.border-amber-500\\/40')?.textContent ?? null,
     )
     expect(badges).toEqual(['失锚', null])
+  })
+})
+
+describe('批量批注分组卡', () => {
+  it('同 groupId 聚合为一张卡：N 处统计，展开逐条摘录，不同组各成卡', () => {
+    const a1 = ann({ id: 'g1', start: 0, end: 3, groupId: 'batch-1' })
+    const a2 = ann({ id: 'g2', start: 4, end: 6, groupId: 'batch-1' })
+    const a3 = ann({ id: 'g3', start: 7, end: 9, groupId: 'batch-2' })
+    sidebar.render(doc([a1, a2, a3]).text, [a1, a2, a3], {})
+    expect(root.querySelectorAll('.ann-card').length).toBe(2)
+    const groupCard = root.querySelector('.ann-card[data-group="batch-1"]')!
+    expect(groupCard.textContent).toContain('2 处')
+    // 折叠态没有逐条跳转行
+    expect(groupCard.querySelectorAll('[data-op="focus"]').length).toBe(0)
+
+    ;(groupCard.querySelector('[data-group-op="expand"]') as HTMLElement).click()
+    const expanded = root.querySelector('.ann-card[data-group="batch-1"]')!
+    expect(expanded.querySelectorAll('[data-op="focus"]').length).toBe(2)
   })
 })
 
