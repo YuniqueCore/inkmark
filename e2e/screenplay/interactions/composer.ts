@@ -4,27 +4,57 @@ import { BrowseTheWorkbench } from '../abilities/BrowseTheWorkbench'
 import { Workbench } from '../screens/Workbench'
 import { Interaction } from '../support/kernel'
 
-/** 在正文首块划选 [from, to) 字符并派发 mouseup（应用据此唤起小点）。
- * 文本区间选择没有高层 API，这里是唯一的技术性 evaluate 路径。 */
-export const SelectFirstBlockText = (from: number, to: number): Interaction =>
-  Interaction.where(`划选正文首块第 ${from}–${to} 字`, async (actor) => {
+/** 在正文第 blockIndex 段（0 起）划选拼接文本的 [from, to) 字符并派发 mouseup。
+ * 用 TreeWalker 跨文本节点换算偏移：批注高亮会把段落文本切成多个节点，
+ * 直接 firstChild + 偏移在同段二划选时会 IndexSizeError（曾经只敢每段划一次）。 */
+export const SelectBlockText = (blockIndex: number, from: number, to: number): Interaction =>
+  Interaction.where(`划选正文第 ${blockIndex + 1} 段第 ${from}–${to} 字`, async (actor) => {
     const page = BrowseTheWorkbench.as(actor).page
     await page.evaluate(
-      ([start, end]) => {
-        const blk = document.querySelector('#editor .editor-blk')!
-        const tn = blk.firstChild as Text
+      ([bi, start, end]) => {
+        const blk = document.querySelectorAll('#editor .editor-blk')[bi!]!
+        const walker = document.createTreeWalker(blk, NodeFilter.SHOW_TEXT)
+        const nodes: Text[] = []
+        for (let n = walker.nextNode(); n; n = walker.nextNode()) nodes.push(n as Text)
+        const total = nodes.reduce((acc, t) => acc + (t.textContent ?? '').length, 0)
+        // end 超长钳制到段长（旧行为：短文档默认选区自动收缩）
+        const s = Math.min(start!, total)
+        const e = Math.min(end!, total)
+        if (s >= total) throw new Error(`选区起点 ${start} 超出段落长度 ${total}`)
+        let acc = 0
+        let startNode: Text | null = null
+        let startOff = 0
+        let endNode: Text | null = null
+        let endOff = 0
+        for (const t of nodes) {
+          const len = (t.textContent ?? '').length
+          if (!startNode && acc + len > s) {
+            startNode = t
+            startOff = s - acc
+          }
+          if (!endNode && acc + len >= e) {
+            endNode = t
+            endOff = e - acc
+          }
+          acc += len
+        }
+        if (!startNode || !endNode) throw new Error(`选区 [${start}, ${end}) 无法在段内定位`)
         const range = document.createRange()
-        range.setStart(tn, start!)
-        range.setEnd(tn, Math.min(end!, (tn.textContent ?? '').length))
+        range.setStart(startNode, startOff)
+        range.setEnd(endNode, endOff)
         const sel = getSelection()!
         sel.removeAllRanges()
         sel.addRange(range)
         const r = range.getBoundingClientRect()
         blk.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: r.right, clientY: r.bottom }))
       },
-      [from, to],
+      [blockIndex, from, to],
     )
   })
+
+/** 在正文首块划选 [from, to) 字符（历史入口，委托通用段落选区） */
+export const SelectFirstBlockText = (from: number, to: number): Interaction =>
+  SelectBlockText(0, from, to)
 
 /** 点击标注小点展开撰写卡（触屏等价路径） */
 export const ClickPinDot = (): Interaction =>

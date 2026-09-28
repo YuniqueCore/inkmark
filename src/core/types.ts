@@ -7,6 +7,11 @@ export type AnnotationKind = 'issue' | 'suggestion' | 'question' | 'highlight' |
 /** 人工撰写批注时可选的类型：撰写卡与编辑弹层 chips 的单一来源 */
 export const MANUAL_KINDS: readonly AnnotationKind[] = ['suggestion', 'question', 'highlight', 'praise']
 
+/** 全部批注类型的规范顺序：人工四类在前，扫描产物（slop）与历史遗留（issue）在后。
+ * 一切按类型枚举的 UI（侧栏筛选 chips、统计、导出标签）必须从这里取清单与顺序，
+ * 禁止各自硬编码——历史上侧栏自列一份曾与卡片实际类型漂移。 */
+export const ALL_KINDS: readonly AnnotationKind[] = [...MANUAL_KINDS, 'issue', 'slop']
+
 /** 各批注类型的快捷批注语：撰写卡与编辑弹层的可点选 chips（与 MANUAL_KINDS 同源）。
  * 点击 = 切换（已含则移除，否则以「；」追加），支持组合多条。
  * 仅人工类型有词表；原「问题 / AI 味」词表已并入建议类。 */

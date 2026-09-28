@@ -52,6 +52,15 @@ export const Workbench = {
   treeInvert: (page: Page): Locator => page.locator('#filetree [data-select-invert]'),
   /** 侧栏批注卡 */
   sidebarCards: (page: Page): Locator => page.locator('#sidebar .ann-card'),
+  /** 侧栏卡片多选与批量操作 */
+  sidebarBulkStrip: (page: Page): Locator => page.locator('#sidebar [data-bulk-strip]'),
+  sidebarBulkActions: (page: Page): Locator => page.locator('#sidebar [data-bulk-actions]'),
+  sidebarCardChecks: (page: Page): Locator => page.locator('#sidebar .ann-card [data-select]'),
+  sidebarSelectAll: (page: Page): Locator => page.locator('#sidebar [data-select-all]'),
+  sidebarInvert: (page: Page): Locator => page.locator('#sidebar [data-select-invert]'),
+  sidebarQuickSelect: (page: Page): Locator => page.locator('#sidebar [data-quick-select]'),
+  highlightSwitch: (page: Page): Locator => page.locator('#sidebar #only-hl'),
+  kindChips: (page: Page): Locator => page.locator('#sidebar .kind-chip'),
   /** 文档树 */
   treeItems: (page: Page): Locator => page.locator('#filetree [data-doc]'),
   selectAllCheckbox: (page: Page): Locator => page.locator('#filetree [data-select-all]'),

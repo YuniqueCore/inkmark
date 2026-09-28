@@ -112,6 +112,7 @@ const deleteAnnotation = (ids: string[]): void => {
     if (!ok) return
     const idSet = new Set(ids)
     mutateActive((doc) => ({ ...doc, annotations: doc.annotations.filter((a) => !idSet.has(a.id)) }))
+    toast(`已删除 ${ids.length} 条批注`)
   })()
 }
 
@@ -125,6 +126,7 @@ const toggleAnnotationStatus = (ids: string[]): void => {
       idSet.has(a.id) ? { ...a, status: anyOpen ? 'resolved' : 'open', updatedAt: Date.now() } : a,
     ),
   }))
+  toast(anyOpen ? `已解决 ${ids.length} 条批注` : `已重开 ${ids.length} 条批注`)
 }
 
 /** 搜索批量批注在 ⌘F 面板（search-panel.ts）里完成：main 只接线 */
@@ -216,6 +218,7 @@ const sidebar = new SidebarView(sidebarEl, {
     sidebar.setHighlightMode(only)
     rerender(false)
   },
+  onNotify: (msg) => toast(msg),
 })
 
 const fileTree = new FileTreeView(treeEl, {

@@ -7,7 +7,7 @@
 import { snippet } from '../core/text'
 import { reportCategoryCounts } from '../core/slop'
 import type { SlopBand, SlopReport, SlopSample } from '../core/types'
-import { KIND_LABEL } from '../core/types'
+import { ALL_KINDS, KIND_LABEL } from '../core/types'
 import type { Annotation, AnnotationKind } from '../core/types'
 import { escapeHtml } from '../core/text'
 import { icon } from './icons'
@@ -23,6 +23,8 @@ export interface SidebarCallbacks {
   onFilterChange: (filter: StatusFilter) => void
   onKindFilterChange: (kinds: Set<AnnotationKind>) => void
   onHighlightModeChange: (only: boolean) => void
+  /** 轻量操作反馈（快速选中无匹配等）：main 侧接 toast */
+  onNotify?: (msg: string) => void
 }
 
 export interface SidebarRenderOptions {
@@ -49,8 +51,6 @@ const BAND_LABEL: Record<SlopBand, string> = {
   heavy: '严重',
 }
 
-const ALL_KINDS: AnnotationKind[] = ['issue', 'suggestion', 'question', 'highlight', 'praise', 'slop']
-
 /** 列表项：单条批注，或同 groupId 的批量批注聚合 */
 type ListItem = { kind: 'single'; ann: Annotation } | { kind: 'group'; members: Annotation[] }
 
@@ -63,6 +63,10 @@ export class SidebarView {
   private activeId: string | null = null
   /** 展开的批量批注组 */
   private expandedGroups = new Set<string>()
+  /** 卡片多选（批注 id，组卡选中 = 全部成员 id）：重渲染时剪除已不存在的 */
+  private selected = new Set<string>()
+  /** 上次渲染的选中数：0 → N 的瞬间给操作簇挂滑入动画，避免每次勾选重放 */
+  private prevSelectedSize = 0
   private lastArgs: { text: string; annotations: Annotation[]; opts: SidebarRenderOptions } = {
     text: '',
     annotations: [],
@@ -110,6 +114,13 @@ export class SidebarView {
     this.lastArgs = { text, annotations, opts }
     const open = annotations.filter((a) => a.status === 'open').length
     const shown = this.visibleOf(annotations)
+    // 选中集合剪除已不存在的批注（删除/重锚 id 不变，删除才失效）
+    const existing = new Set(annotations.map((a) => a.id))
+    for (const id of this.selected) if (!existing.has(id)) this.selected.delete(id)
+    const selectedAnns = annotations.filter((a) => this.selected.has(a.id))
+    const selectedAnyOpen = selectedAnns.some((a) => a.status === 'open')
+    const popIn = this.prevSelectedSize === 0 && this.selected.size > 0
+    this.prevSelectedSize = this.selected.size
 
     const chips = (['all', 'open', 'resolved'] as StatusFilter[])
       .map(
@@ -124,14 +135,18 @@ export class SidebarView {
       )
       .join('')
 
-    // 六类类型筛选 chips：始终全部展示，on 态用对应标注色
+    // 类型筛选 chips 以卡片实际为准：只展示当前文档里存在的类型（规范顺序见 core ALL_KINDS），
+    // 正被筛选但已不存在的类型保留 0 计数 chip 以便取消，杜绝清单与卡片漂移
     const countOf = (k: AnnotationKind) => annotations.filter((a) => a.kind === k).length
-    const kindChips = ALL_KINDS.map(
-      (k) =>
-        `<button class="chip-toggle kind-chip ${this.kindFilter.has(k) ? 'on' : ''}" data-kind="${k}">
-           ${KIND_LABEL[k]} <span class="opacity-60">${countOf(k)}</span>
-         </button>`,
-    ).join('')
+    const chipKinds = ALL_KINDS.filter((k) => countOf(k) > 0 || this.kindFilter.has(k))
+    const kindChips = chipKinds
+      .map(
+        (k) =>
+          `<button class="chip-toggle kind-chip ${this.kindFilter.has(k) ? 'on' : ''}" data-kind="${k}">
+             ${KIND_LABEL[k]} <span class="opacity-60">${countOf(k)}</span>
+           </button>`,
+      )
+      .join('')
 
     const items = buildListItems(shown)
     const cards = items
@@ -141,6 +156,35 @@ export class SidebarView {
           : this.renderGroupCard(item.members, text, opts),
       )
       .join('')
+
+    const strip =
+      annotations.length === 0
+        ? ''
+        : `
+      <div class="mb-2 flex items-center gap-1.5 rounded-lg border bg-muted/40 px-2 py-1.5" data-bulk-strip>
+        <label class="flex shrink-0 cursor-pointer items-center gap-1 text-[11px] text-muted-foreground">
+          <input type="checkbox" data-select-all class="size-3 accent-[var(--primary)]" ${this.selected.size === annotations.length && annotations.length > 0 ? 'checked' : ''}/> 全选
+        </label>
+        <button type="button" data-select-invert class="shrink-0 text-[11px] text-muted-foreground transition-colors hover:text-foreground" title="反选：选中未勾选的，取消已勾选的">反选</button>
+        <select data-quick-select class="h-6 min-w-0 flex-1 rounded-md border border-input bg-card px-1 text-[11px] text-muted-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40" aria-label="快速选中">
+          <option value="" disabled selected>快速选中…</option>
+          <option value="lost">失锚批注</option>
+          <option value="open">未解决</option>
+          <option value="resolved">已解决</option>
+          <option value="revised">改稿侧</option>
+          ${chipKinds.map((k) => `<option value="kind:${k}">${KIND_LABEL[k]}</option>`).join('')}
+        </select>
+        ${
+          this.selected.size > 0
+            ? `<div class="flex shrink-0 items-center gap-1 ${popIn ? 'bulk-pop' : ''}" data-bulk-actions>
+                 <span class="text-[11px] text-muted-foreground">已选 ${this.selected.size}</span>
+                 <button type="button" class="btn btn-outline btn-sm h-6 px-2 text-[11px]" data-bulk="resolve">${selectedAnyOpen ? '解决' : '重开'}</button>
+                 <button type="button" class="btn btn-outline btn-sm h-6 px-2 text-[11px] text-destructive hover:text-destructive" data-bulk="delete">删除</button>
+                 <button type="button" class="btn btn-ghost btn-sm h-6 w-6 p-0" data-bulk="clear" title="取消选择" aria-label="取消选择">${icon('x', 'size-3')}</button>
+               </div>`
+            : ''
+        }
+      </div>`
 
     this.root.innerHTML = `
       <div class="mb-3 flex items-baseline justify-between px-1">
@@ -152,19 +196,21 @@ export class SidebarView {
       </div>
       ${opts.slop ? this.renderSlopCard(opts.slop, opts.slopHistory ?? []) : ''}
       <div class="mb-1.5 flex flex-wrap gap-1.5 px-1">${chips}</div>
-      <div class="mb-2 flex flex-wrap gap-1 px-1">${kindChips}</div>
-      <label class="mb-3 flex cursor-pointer items-center gap-2 px-1 text-xs text-muted-foreground">
-        <input type="checkbox" id="only-hl" class="size-3.5 accent-[var(--primary)]" ${this.onlyHighlightFiltered ? 'checked' : ''}/>
+      ${chipKinds.length > 0 ? `<div class="mb-2 flex flex-wrap gap-1 px-1">${kindChips}</div>` : ''}
+      <div class="mb-3 flex items-center gap-2 px-1 text-xs text-muted-foreground">
+        <button type="button" id="only-hl" role="switch" aria-checked="${this.onlyHighlightFiltered}" class="ui-switch" aria-label="正文只高亮当前筛选结果"></button>
         正文只高亮当前筛选结果
-      </label>
+      </div>
+      ${strip}
       ${items.length === 0
         ? `<div class="mt-16 rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
              划选正文写批注、点顶栏「slop 预扫描」，<br>或按 ⌘F 搜索后一键批量批注
            </div>`
-        : `<div class="flex flex-col gap-2.5">${cards}</div>`}
+        : `<div class="flex flex-col gap-2.5 ${this.selected.size > 0 ? 'sel-active' : ''}">${cards}</div>`}
     `
 
     this.wireFilters()
+    this.wireStrip(annotations)
     this.wireCards(items)
   }
 
@@ -193,8 +239,57 @@ export class SidebarView {
         this.callbacks.onKindFilterChange(next)
       })
     })
-    this.root.querySelector('#only-hl')?.addEventListener('change', (e) => {
-      this.callbacks.onHighlightModeChange((e.target as HTMLInputElement).checked)
+    this.root.querySelector('#only-hl')?.addEventListener('click', () => {
+      this.callbacks.onHighlightModeChange(!this.onlyHighlightFiltered)
+    })
+  }
+
+  /** 批量条：全选 / 反选 / 快速选中 selector / 批量解决·删除·清除 */
+  private wireStrip(annotations: Annotation[]): void {
+    this.root.querySelector('[data-select-all]')?.addEventListener('change', (e) => {
+      const all = (e.target as HTMLInputElement).checked
+      this.selected = all ? new Set(annotations.map((a) => a.id)) : new Set()
+      this.rerender()
+    })
+    this.root.querySelector('[data-select-invert]')?.addEventListener('click', () => {
+      this.selected = new Set(annotations.filter((a) => !this.selected.has(a.id)).map((a) => a.id))
+      this.rerender()
+    })
+    const quick = this.root.querySelector('[data-quick-select]') as HTMLSelectElement | null
+    quick?.addEventListener('change', () => {
+      const v = quick.value
+      quick.value = ''
+      if (v === '') return
+      const match = (a: Annotation): boolean =>
+        v === 'lost'
+          ? a.anchorLost === true
+          : v === 'open' || v === 'resolved'
+            ? a.status === v
+            : v === 'revised'
+              ? a.target === 'revised'
+              : v.startsWith('kind:')
+                ? a.kind === (v.slice(5) as AnnotationKind)
+                : false
+      const ids = annotations.filter(match).map((a) => a.id)
+      if (ids.length === 0) {
+        this.callbacks.onNotify?.('没有匹配的批注')
+        return
+      }
+      for (const id of ids) this.selected.add(id)
+      this.rerender()
+    })
+    this.root.querySelectorAll('[data-bulk]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const op = (btn as HTMLElement).dataset.bulk
+        const ids = [...this.selected]
+        if (ids.length === 0) return
+        if (op === 'resolve') this.callbacks.onToggleStatus(ids)
+        if (op === 'delete') this.callbacks.onDelete(ids)
+        if (op === 'clear') {
+          this.selected.clear()
+          this.rerender()
+        }
+      })
     })
   }
 
@@ -211,6 +306,14 @@ export class SidebarView {
   private wireSingleCard(a: Annotation): void {
     const card = this.root.querySelector(`.ann-card[data-id="${a.id}"]`)
     if (!card) return
+    const check = card.querySelector('[data-select]') as HTMLInputElement | null
+    check?.addEventListener('change', () => {
+      if (check.checked) this.selected.add(a.id)
+      else this.selected.delete(a.id)
+      this.rerender()
+    })
+    // 勾选不触发展开卡片（定位批注）
+    check?.addEventListener('click', (e) => e.stopPropagation())
     for (const btn of Array.from(card.querySelectorAll('[data-op]'))) {
       btn.addEventListener('click', (e) => {
         e.stopPropagation()
@@ -229,6 +332,14 @@ export class SidebarView {
     const card = this.root.querySelector(`.ann-card[data-group="${groupId}"]`)
     if (!card) return
     const ids = members.map((m) => m.id)
+    const check = card.querySelector('[data-select-group]') as HTMLInputElement | null
+    check?.addEventListener('change', () => {
+      if (check.checked) for (const id of ids) this.selected.add(id)
+      else for (const id of ids) this.selected.delete(id)
+      this.rerender()
+    })
+    // 勾选不触发展开组卡
+    check?.addEventListener('click', (e) => e.stopPropagation())
     card.querySelectorAll('[data-op="focus"]').forEach((btn) =>
       btn.addEventListener('click', (e) => {
         e.stopPropagation()
@@ -319,9 +430,11 @@ export class SidebarView {
       ? `<span class="badge border-transparent" style="color:var(--kind-slop);background:var(--kind-slop-bg)">${escapeHtml(a.meta.label)}</span>`
       : ''
     const active = this.activeId === a.id
+    const selected = this.selected.has(a.id)
     return `
-      <div class="card ann-card p-3 transition-shadow ${a.status === 'resolved' ? 'opacity-60' : ''} ${active ? 'ring-2 ring-ring/40' : 'hover:shadow-md'}" data-id="${a.id}">
+      <div class="card ann-card group p-3 transition-[background-color,border-color,box-shadow] ${a.status === 'resolved' ? 'opacity-60' : ''} ${active ? 'ring-2 ring-ring/40' : 'hover:shadow-md'} ${selected ? 'sel-on' : ''}" data-id="${a.id}">
         <div class="mb-1.5 flex items-center gap-1.5">
+          <input type="checkbox" data-select="${a.id}" class="ann-check" ${selected ? 'checked' : ''} aria-label="选中该批注"/>
           <span class="badge border-transparent" style="color:var(--kind-${a.kind});background:var(--kind-${a.kind}-bg)">${KIND_LABEL[a.kind]}</span>
           ${slopInfo}
           ${a.target === 'revised' ? '<span class="badge border-sky-500/40 text-sky-600 dark:text-sky-400">改稿</span>' : ''}
@@ -364,14 +477,17 @@ export class SidebarView {
           .join('')}</div>`
       : ''
     return `
-      <div class="card ann-card p-3 transition-shadow ${allResolved ? 'opacity-60' : ''} ${active ? 'ring-2 ring-ring/40' : 'hover:shadow-md'}" data-group="${groupId}">
-        <button class="flex w-full items-center gap-1.5 text-left" data-group-op="expand">
-          <span class="badge border-transparent" style="color:var(--kind-${first.kind});background:var(--kind-${first.kind}-bg)">${KIND_LABEL[first.kind]}</span>
-          <span class="badge border-border bg-secondary text-secondary-foreground" title="一次搜索批量批注">${members.length} 处</span>
-          ${resolved > 0 && !allResolved ? `<span class="text-xs text-muted-foreground">${resolved} 已解决</span>` : ''}
-          ${allResolved ? '<span class="badge bg-secondary text-secondary-foreground">已解决</span>' : ''}
-          <span class="ml-auto text-muted-foreground transition-transform ${expanded ? 'rotate-90' : ''}">›</span>
-        </button>
+      <div class="card ann-card group p-3 transition-[background-color,border-color,box-shadow] ${allResolved ? 'opacity-60' : ''} ${active ? 'ring-2 ring-ring/40' : 'hover:shadow-md'} ${members.every((m) => this.selected.has(m.id)) ? 'sel-on' : ''}" data-group="${groupId}">
+        <div class="flex items-center gap-1.5">
+          <input type="checkbox" data-select-group class="ann-check" ${members.every((m) => this.selected.has(m.id)) ? 'checked' : ''} aria-label="选中该组全部批注"/>
+          <button class="flex min-w-0 flex-1 items-center gap-1.5 text-left" data-group-op="expand">
+            <span class="badge border-transparent" style="color:var(--kind-${first.kind});background:var(--kind-${first.kind}-bg)">${KIND_LABEL[first.kind]}</span>
+            <span class="badge border-border bg-secondary text-secondary-foreground" title="一次搜索批量批注">${members.length} 处</span>
+            ${resolved > 0 && !allResolved ? `<span class="text-xs text-muted-foreground">${resolved} 已解决</span>` : ''}
+            ${allResolved ? '<span class="badge bg-secondary text-secondary-foreground">已解决</span>' : ''}
+            <span class="ml-auto text-muted-foreground transition-transform ${expanded ? 'rotate-90' : ''}">›</span>
+          </button>
+        </div>
         ${first.comment ? `<div class="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed">${escapeHtml(first.comment)}</div>` : ''}
         ${rows}
         <div class="mt-2 flex gap-0.5">
