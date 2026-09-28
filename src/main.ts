@@ -304,7 +304,9 @@ async function removeDocs(ids: string[]): Promise<void> {
   const docs = state.docs.filter((d) => ids.includes(d.id))
   if (docs.length === 0) return
   const count = docs.reduce((acc, d) => acc + d.annotations.length, 0)
-  const names = docs.map((d) => d.name).join('、')
+  // 名称清单截断展示：多文档批量删除不把确认弹层撑成长清单（弹层本身另有滚动兜底）
+  const shown = docs.slice(0, 3).map((d) => d.name).join('、')
+  const names = docs.length > 3 ? `${shown} 等 ${docs.length} 份文档` : shown
   const ok = await confirmDialog({
     title: `移除 ${docs.length} 个文档？`,
     description: `${names}${count > 0 ? `（共 ${count} 条批注）` : ''}——删除后不可恢复。`,
@@ -839,6 +841,12 @@ function openSearch(): void {
 function bootstrap(): void {
   state = loadWorkspace()
   rerender(false)
+  // header 版本号（构建期由 vite define 注入 package.json version）
+  const versionEl = document.querySelector('#app-version')
+  if (versionEl) {
+    versionEl.textContent = `v${__APP_VERSION__}`
+    versionEl.setAttribute('title', `当前版本 v${__APP_VERSION__}`)
+  }
   // 移动端抽屉：背板点击与 Esc 关闭；跨断点时清掉抽屉状态
   $('#drawer-backdrop').addEventListener('click', closeDrawers)
   document.addEventListener('keydown', (e) => {

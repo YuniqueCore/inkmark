@@ -22,21 +22,24 @@ export function confirmDialog(opts: ConfirmOptions): Promise<boolean> {
     const overlay = document.createElement('div')
     overlay.className = 'fixed inset-0 z-100 bg-black/50 backdrop-blur-[2px]'
     const panel = document.createElement('div')
+    // max-h + 可滚动正文：批量操作把标题/描述撑长时弹层不得溢出视口（通病约束，所有确认共用）
     panel.className =
-      'fixed left-1/2 top-1/2 z-101 w-[min(420px,92vw)] -translate-x-1/2 -translate-y-1/2 rounded-xl border bg-card p-5 text-card-foreground shadow-2xl'
+      'fixed left-1/2 top-1/2 z-101 flex max-h-[86vh] w-[min(420px,92vw)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border bg-card p-5 text-card-foreground shadow-2xl'
     panel.setAttribute('role', 'alertdialog')
     panel.setAttribute('aria-modal', 'true')
     panel.setAttribute('aria-label', opts.title)
     panel.style.animation = 'pop-in 0.14s ease-out'
     panel.innerHTML = `
-      <div class="flex items-start gap-3">
-        ${opts.danger ? `<div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive">${icon('trash', 'size-4')}</div>` : ''}
-        <div class="min-w-0">
-          <h2 class="text-[15px] font-semibold leading-snug tracking-tight">${escapeHtml(opts.title)}</h2>
-          ${opts.description ? `<p class="mt-1.5 text-sm leading-relaxed text-muted-foreground">${escapeHtml(opts.description)}</p>` : ''}
+      <div class="min-h-0 overflow-y-auto">
+        <div class="flex items-start gap-3">
+          ${opts.danger ? `<div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive">${icon('trash', 'size-4')}</div>` : ''}
+          <div class="min-w-0">
+            <h2 class="text-[15px] font-semibold leading-snug tracking-tight">${escapeHtml(opts.title)}</h2>
+            ${opts.description ? `<p class="mt-1.5 text-sm leading-relaxed text-muted-foreground">${escapeHtml(opts.description)}</p>` : ''}
+          </div>
         </div>
       </div>
-      <div class="mt-5 flex justify-end gap-2">
+      <div class="mt-5 flex shrink-0 justify-end gap-2">
         <button class="btn btn-outline btn-sm" data-op="cancel">${opts.cancelText ?? '取消'}</button>
         <button class="btn btn-sm ${opts.danger ? 'confirm-danger' : 'btn-default'}" data-op="confirm">${opts.confirmText ?? '确认'}</button>
       </div>`
@@ -84,14 +87,14 @@ export function textDialog(opts: TextDialogOptions): Promise<string | null> {
     overlay.className = 'fixed inset-0 z-100 bg-black/50 backdrop-blur-[2px]'
     const panel = document.createElement('div')
     panel.className =
-      'fixed left-1/2 top-1/2 z-101 flex w-[min(720px,94vw)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border bg-card p-5 text-card-foreground shadow-2xl'
+      'fixed left-1/2 top-1/2 z-101 flex max-h-[86vh] w-[min(720px,94vw)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border bg-card p-5 text-card-foreground shadow-2xl'
     panel.style.animation = 'pop-in 0.14s ease-out'
     panel.innerHTML = `
-      <h2 class="text-[15px] font-semibold leading-snug tracking-tight">${escapeHtml(opts.title)}</h2>
-      ${opts.description ? `<p class="mt-1.5 text-sm leading-relaxed text-muted-foreground">${escapeHtml(opts.description)}</p>` : ''}
+      <h2 class="shrink-0 text-[15px] font-semibold leading-snug tracking-tight">${escapeHtml(opts.title)}</h2>
+      ${opts.description ? `<p class="mt-1.5 shrink-0 text-sm leading-relaxed text-muted-foreground">${escapeHtml(opts.description)}</p>` : ''}
       <textarea id="text-dialog-input" rows="12" placeholder="${escapeHtml(opts.placeholder ?? '')}"
-        class="input-base mt-3 flex-1 resize-none font-mono text-[13px] leading-relaxed">${escapeHtml(opts.value ?? '')}</textarea>
-      <div class="mt-4 flex items-center justify-between">
+        class="input-base mt-3 min-h-0 flex-1 resize-none font-mono text-[13px] leading-relaxed">${escapeHtml(opts.value ?? '')}</textarea>
+      <div class="mt-4 flex shrink-0 items-center justify-between">
         <span class="text-xs text-muted-foreground">⌘/Ctrl + Enter 确认</span>
         <span class="flex gap-2">
           <button class="btn btn-outline btn-sm" data-op="cancel">${opts.cancelText ?? '取消'}</button>
