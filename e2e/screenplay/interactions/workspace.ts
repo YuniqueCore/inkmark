@@ -1,5 +1,6 @@
 /** 工作台级原子交互：顶栏、抽屉、文件树、导出弹层。 */
 
+import { Buffer } from 'node:buffer'
 import { BrowseTheWorkbench } from '../abilities/BrowseTheWorkbench'
 import { Workbench } from '../screens/Workbench'
 import { Interaction, Task } from '../support/kernel'
@@ -26,6 +27,40 @@ export const CloseExportModal = (): Interaction =>
 export const RunSlopScan = (): Interaction =>
   Interaction.where('点顶栏 slop 预扫描', async (actor) => {
     await Workbench.headerButton(BrowseTheWorkbench.as(actor).page, /词库预扫描/).click()
+  })
+
+/** 点顶栏「示例」 */
+export const ClickSampleButton = (): Interaction =>
+  Interaction.where('点顶栏「示例」', async (actor) => {
+    await Workbench.headerButton(BrowseTheWorkbench.as(actor).page, /载入一段带 AI 味的示例文档/).click()
+  })
+
+/** 导入一个内存中的 .txt 文件（不经真实文件选择器） */
+export const ImportTextFile = (name: string, content: string): Interaction =>
+  Interaction.where(`导入文本文件 ${name}`, async (actor) => {
+    await BrowseTheWorkbench.as(actor).page
+      .locator('#file-input')
+      .setInputFiles({ name, mimeType: 'text/plain', buffer: Buffer.from(content, 'utf8') })
+    await BrowseTheWorkbench.as(actor).page.locator('#editor .editor-blk').first().waitFor({ state: 'visible' })
+  })
+
+/** 进入「编辑原文」模式 */
+export const EnterSourceEditMode = (): Interaction =>
+  Interaction.where('点顶栏「编辑原文」', async (actor) => {
+    await Workbench.headerButton(BrowseTheWorkbench.as(actor).page, /编辑原文：直接修改规范文本/).click()
+    await BrowseTheWorkbench.as(actor).page.locator('#edit-source').waitFor({ state: 'visible' })
+  })
+
+/** 改写编辑原文的 textarea 内容 */
+export const ReplaceSourceText = (text: string): Interaction =>
+  Interaction.where('改写原文内容', async (actor) => {
+    await BrowseTheWorkbench.as(actor).page.locator('#edit-source').fill(text)
+  })
+
+/** 点「完成并重锚批注」 */
+export const SaveSourceEdit = (): Interaction =>
+  Interaction.where('点「完成并重锚批注」', async (actor) => {
+    await BrowseTheWorkbench.as(actor).page.getByRole('button', { name: '完成并重锚批注' }).click()
   })
 
 /** 切换文档树抽屉 / 批注栏抽屉（移动端语义） */

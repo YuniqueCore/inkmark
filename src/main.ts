@@ -437,22 +437,44 @@ function toggleEdit(): void {
 function saveTextEdit(newText: string): void {
   const doc = activeDoc()
   if (!doc) return
-  mode = 'annotate'
   if (newText === doc.text) {
+    mode = 'annotate'
     rerender(false)
     return
   }
   if (newText.trim() === '') {
-    toast('文本不能为空')
-    mode = 'edit'
+    toast('文本不能为空') // 留在编辑态改正
     return
   }
-  const { annotations, moved, clamped } = reanchorAnnotations(doc.text, newText, doc.annotations)
-  slopReports.delete(doc.id) // 文本已变，上一次评分失效
-  mutateActive((d) => ({ ...d, text: newText, annotations }))
+  // 预演重锚：只有「引文被改掉」的失锚才是真实损失，保存前让用户知情确认；
+  // 单纯位移（moved）是保护行为，不打扰
+  const preview = reanchorAnnotations(doc.text, newText, doc.annotations)
+  if (preview.clamped > 0) {
+    void (async () => {
+      const ok = await confirmDialog({
+        title: '保存编辑？',
+        description: `有 ${preview.clamped} 条批注的引文被改掉，保存后将失锚（钉在改动处；把原文改回来会自动恢复）。`,
+        confirmText: '保存',
+        danger: true,
+      })
+      if (!ok) return
+      applyTextEdit(newText, preview)
+    })()
+    return
+  }
+  applyTextEdit(newText, preview)
+}
+
+function applyTextEdit(
+  newText: string,
+  preview: ReturnType<typeof reanchorAnnotations>,
+): void {
+  mode = 'annotate'
+  slopReports.delete(activeDoc()?.id ?? '') // 文本已变，上一次评分失效
+  mutateActive((d) => ({ ...d, text: newText, annotations: preview.annotations }))
   const parts = ['已保存编辑']
-  if (moved > 0) parts.push(`${moved} 条批注重新锚定`)
-  if (clamped > 0) parts.push(`${clamped} 条失锚（标记在改动处）`)
+  if (preview.moved > 0) parts.push(`${preview.moved} 条批注重新锚定`)
+  if (preview.clamped > 0) parts.push(`${preview.clamped} 条失锚（标记在改动处）`)
   toast(parts.join('，'))
 }
 
@@ -586,10 +608,30 @@ function w3cToast(merged: number, unmatched: number, routed: number): string {
 
 // ---------------------------------------------------------------- 顶栏动作
 
-function loadSample(): void {
+const SAMPLE_NAME = '示例：AI 味产品文'
+
+/** 载入示例：新建一份示例文档并跳转过去（内容追加、不覆盖）。
+ * 工作区已有内容时先确认（告知会跳转走）；已有示例文档则直接复用，避免堆积副本。 */
+async function loadSample(): Promise<void> {
+  const existing = state.docs.find((d) => d.name === SAMPLE_NAME)
+  if (state.docs.length > 0) {
+    const ok = await confirmDialog({
+      title: existing ? '跳转到示例文档？' : '载入示例文档？',
+      description: existing
+        ? '已有一份示例文档，将直接跳转过去；你当前的文档与批注保持不变。'
+        : '将新建一份示例文档（带 AI 味的演示文本）并跳转过去；你当前的文档与批注保持不变。',
+      confirmText: existing ? '跳转' : '载入示例',
+    })
+    if (!ok) return
+  }
+  if (existing) {
+    state = {...state, activeDocId: existing.id}
+    rerender(false)
+    return
+  }
   const doc: DocItem = {
     id: newDocId(),
-    name: '示例：AI 味产品文',
+    name: SAMPLE_NAME,
     path: '',
     text: SAMPLE_TEXT,
     annotations: [],
@@ -639,7 +681,7 @@ function togglePanel(which: 'tree' | 'sidebar'): void {
   }
 }
 
-$('#btn-sample').addEventListener('click', loadSample)
+$('#btn-sample').addEventListener('click', () => void loadSample())
 $('#btn-import-files').addEventListener('click', () => $('#file-input').click())
 $('#btn-import-folder').addEventListener('click', () => $('#folder-input').click())
 $('#file-input').addEventListener('change', (e) => {

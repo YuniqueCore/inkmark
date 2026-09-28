@@ -1,7 +1,7 @@
 {
   "name": "inkmark",
   "private": true,
-  "version": "0.7.6",
+  "version": "0.7.7",
   "description": "划词批注工作台：给 AI 改过的文本做行内批注，一键导出原文+批注 / 片段+批注 / 评审引用块",
   "type": "module",
   "scripts": {
@@ -16,6 +16,7 @@
   "devDependencies": {
     "@playwright/test": "^1.63.0",
     "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^26.6.3",
     "happy-dom": "^20.14.5",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.6.0",

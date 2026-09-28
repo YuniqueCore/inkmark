@@ -52,8 +52,16 @@ export function reanchorAnnotations(
     // 末行无换行符，diff 行进按 +1 统一计步，这里统一钳回新文本范围
     const s = Math.max(0, Math.min(start, newText.length))
     const e = Math.max(0, Math.min(end, newText.length))
+    let lo = Math.min(s, e)
+    let hi = Math.max(s, e)
+    if (lo === hi) {
+      // 整行被删等场景钳制点会重合：零宽区间渲染不出任何标记，
+      // 扩成 1 字符让失锚标记可见、可点（批注本就是「钉在改动处」的近似）
+      lo = Math.max(0, Math.min(lo, newText.length - 1))
+      hi = Math.min(lo + 1, newText.length)
+    }
     // 引文已被改掉：标记失锚（编辑器波浪线 + 侧栏徽标），批注仍不丢
-    return { ...a, start: Math.min(s, e), end: Math.max(s, e), anchorLost: true as const }
+    return { ...a, start: lo, end: hi, anchorLost: true as const }
   })
 
   return { annotations: next, moved, clamped }
