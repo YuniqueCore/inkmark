@@ -1,12 +1,33 @@
-# InkMark · 划词批注工作台
+<div align="center">
 
-给 AI 改过的文本做**行内批注**的纯网页小工具。划选文字写批注，一键导出三种格式，把"哪里有问题"准确递回给 AI。
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://signature4u.vercel.app/api/sign?text=InkMark&font=great-vibes&bg=transparent&fontSize=190&fill=gradient&f1=e2e8f0&f2=7dd3fc" />
+  <img src="https://signature4u.vercel.app/api/sign?text=InkMark&font=great-vibes&bg=transparent&fontSize=190&fill=gradient&f1=0f172a&f2=0284c7" alt="InkMark" width="380" />
+</picture>
 
-UI 按 shadcn/ui 语系构建（Tailwind CSS v4 + 设计 token，灵感来自 rareui）：中性 zinc 底、细边框、subtle 阴影、明暗双主题（顶栏切换，跟随系统偏好，localStorage 记忆）。构建产物 gzip 约 52KB。
+**划词批注工作台** —— 给 AI 改过的文本做**行内批注**，把「哪里有问题」准确递回给 AI。
+
+[![部署 Pages](https://github.com/YuniqueCore/inkmark/actions/workflows/deploy.yml/badge.svg)](https://github.com/YuniqueCore/inkmark/actions/workflows/deploy.yml)
+[![最新发布](https://img.shields.io/github/v/release/YuniqueCore/inkmark?display_name=tag&sort=semver)](https://github.com/YuniqueCore/inkmark/releases)
+![构建体积](https://img.shields.io/badge/gzip-%E2%89%8852KB-informational)
+
+**[在线使用 →](https://yuniquecore.github.io/inkmark/)**
+
+<img src="docs/screenshots/desktop-light.png" alt="桌面亮色主题：slop 预扫描标红套话候选，侧栏评分统计卡与批注列表" width="100%" />
+
+| 手机 · 撰写卡（快捷语两行封顶、横向滚动） | 桌面 · 暗色主题 |
+| --- | --- |
+| <img src="docs/screenshots/mobile-composer.png" alt="手机端撰写卡：四类批注类型与快捷语 chips" width="360" /> | <img src="docs/screenshots/desktop-dark.png" alt="桌面暗色主题" width="100%" /> |
+
+</div>
+
+---
+
+UI 按 shadcn/ui 语系构建（Tailwind CSS v4 + 设计 token，灵感来自 rareui）：中性 zinc 底、细边框、subtle 阴影、明暗双主题（顶栏切换，跟随系统偏好，localStorage 记忆）。构建产物 gzip 约 52KB，纯前端、零后端。
 
 ## 功能
 
-- **划词批注**：选中正文文字 → 停点浮出标注小点 → hover 展开撰写卡片 → 选类型（问题 / 建议 / 疑问 / 重点 / 认可）→ 写批注。批注以彩色高亮留在原文上；**草稿保护**——输入中鼠标滑出 / 误点外部不丢稿，草稿按段落记账、重选即取回（Esc 显式取消才丢弃），卡片与弹层滚动缩放跟随锚点。
+- **划词批注**：选中正文文字 → 停点浮出标注小点 → hover 展开撰写卡片 → 选类型（建议 / 疑问 / 重点 / 认可）→ 快捷批注语 chips（两行封顶、横向滚动）或直接输入。批注以彩色高亮留在原文上；**草稿保护**——输入中鼠标滑出 / 误点外部不丢稿，草稿按段落记账、重选即取回（Esc 显式取消才丢弃），卡片与弹层滚动缩放跟随锚点，卡内滚动不误关。
 - **编辑原文 + robust anchoring**：直接修改规范文本，完成后批注按引文自动重锚——quote 精确重定位（含 prefix/suffix 消歧），改掉的部分经行级 diff 位移钳到改动边界，批注永不因编辑丢失；失锚批注带可见标记（正文琥珀色波浪线 + 侧栏/弹层「失锚」徽标），引文改回来时自动清除。
 - **对照视图**：贴入 AI 改稿，生成原文 vs 改稿的行级 track-changes diff（Myers 算法，超大改动自动降级）；**两侧都可划选写批注**——原文侧批注钉在被改动的行上，改稿侧批注钉在新增行上（侧栏带「改稿」标记），清除改稿时一并处理。
 - **三种导出**（顶栏「导出」或 ⌘/Ctrl+S）：每条批注都带 `@start-end` 字符偏移（0-based、右端开区间，与 W3C position 选择器对齐），机器可精确定位；下载文件名以来源文档名打头（`chapter-3-批注-snippets-2026-09-28.md`），多份文档的批注文件不再混淆：
@@ -42,7 +63,7 @@ bun run test:e2e   # Playwright screenplay 浏览器套件（用系统 Chrome）
 - **vitest（tests/）**：core 纯函数与组件逻辑（草稿记账、IME 守卫、导出 / 导入 / 重锚）。
 - **Playwright screenplay（e2e/）**：真实浏览器行为，按 Screenplay 模式分层——
   `abilities/`（驾驶页面）→ `screens/`（语义定位器契约）→ `interactions/`（原子操作）→
-  `tasks/`（业务工作流）→ `questions/`(只读状态查询)，断言只出现在 `e2e/specs/`。
+  `tasks/`（业务工作流）→ `questions/`（只读状态查询），断言只出现在 `e2e/specs/`。
   重点覆盖：撰写卡在操作内部控件（横滚快捷语、输入、失焦）时的稳定性、
   批注弹层编辑态、导出弹层、文件树批量操作、手机视口抽屉互斥。
 
@@ -72,3 +93,11 @@ e2e/             Playwright screenplay 浏览器套件（abilities/tasks/questio
 
 - [ ] 对照视图导出独立的 diff 评审报告（当前改稿侧批注并入三种导出并带「改稿」标记）
 
+---
+
+<div align="center">
+
+页首签名由 [animated-sign-4u](https://github.com/YuniqueUnic/animated-sign-4u) 的 `/api/sign` 接口实时生成（动画 SVG · 透明底 · 明暗双配色），
+在编辑器里用 `?bg=transparent` 可以自己调一份 → **[signature4u.vercel.app/editor](https://signature4u.vercel.app/editor?bg=transparent)**
+
+</div>
