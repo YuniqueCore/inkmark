@@ -7,7 +7,7 @@
 import { snippet } from '../core/text'
 import { reportCategoryCounts } from '../core/slop'
 import type { SlopBand, SlopReport, SlopSample } from '../core/types'
-import { ALL_KINDS, KIND_LABEL } from '../core/types'
+import { ALL_KINDS, KIND_LABEL, MANUAL_KINDS } from '../core/types'
 import type { Annotation, AnnotationKind } from '../core/types'
 import { escapeHtml } from '../core/text'
 import { icon } from './icons'
@@ -135,10 +135,13 @@ export class SidebarView {
       )
       .join('')
 
-    // 类型筛选 chips 以卡片实际为准：只展示当前文档里存在的类型（规范顺序见 core ALL_KINDS），
-    // 正被筛选但已不存在的类型保留 0 计数 chip 以便取消，杜绝清单与卡片漂移
+    // 类型筛选 chips 与撰写卡同一套清单：人工四类常驻（含 0 计数），
+    // 扫描/遗留类型（问题/AI 味）存在或正被筛选时才出现——行内容稳定、又不丢机器类型的筛选入口
     const countOf = (k: AnnotationKind) => annotations.filter((a) => a.kind === k).length
-    const chipKinds = ALL_KINDS.filter((k) => countOf(k) > 0 || this.kindFilter.has(k))
+    const isManual = (k: AnnotationKind) => (MANUAL_KINDS as readonly string[]).includes(k)
+    const chipKinds = ALL_KINDS.filter(
+      (k) => isManual(k) || countOf(k) > 0 || this.kindFilter.has(k),
+    )
     const kindChips = chipKinds
       .map(
         (k) =>
@@ -196,7 +199,7 @@ export class SidebarView {
       </div>
       ${opts.slop ? this.renderSlopCard(opts.slop, opts.slopHistory ?? []) : ''}
       <div class="mb-1.5 flex flex-wrap gap-1.5 px-1">${chips}</div>
-      ${chipKinds.length > 0 ? `<div class="mb-2 flex flex-wrap gap-1 px-1">${kindChips}</div>` : ''}
+      ${annotations.length > 0 && chipKinds.length > 0 ? `<div class="mb-2 flex flex-wrap gap-1 px-1">${kindChips}</div>` : ''}
       <div class="mb-3 flex items-center gap-2 px-1 text-xs text-muted-foreground">
         <button type="button" id="only-hl" role="switch" aria-checked="${this.onlyHighlightFiltered}" class="ui-switch" aria-label="正文只高亮当前筛选结果"></button>
         正文只高亮当前筛选结果

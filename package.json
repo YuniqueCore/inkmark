@@ -1,7 +1,7 @@
 {
   "name": "inkmark",
   "private": true,
-  "version": "0.10.1",
+  "version": "0.10.2",
   "description": "划词批注工作台：给 AI 改过的文本做行内批注，一键导出原文+批注 / 片段+批注 / 评审引用块",
   "type": "module",
   "scripts": {
@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@floating-ui/dom": "^1.8.0",
+    "approx-string-match": "^2.0.0",
     "fflate": "^0.8.3"
   }
 }

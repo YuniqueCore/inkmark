@@ -111,26 +111,28 @@ const checkCard = (selector: string): void => {
   box.dispatchEvent(new Event('change'))
 }
 
-describe('类型 chips 以卡片实际为准', () => {
-  it('只渲染存在类型的 chips（规范顺序：人工四类在前），0 计数类型不出现', () => {
+describe('类型 chips 与撰写卡一致', () => {
+  it('人工四类常驻（含 0 计数），机器类型存在时才追加', () => {
     sidebar.render(
       doc([ann({ kind: 'issue' }), ann({ id: 'a2', kind: 'issue' }), ann({ id: 'a3', kind: 'praise' })]).text,
       [ann({ kind: 'issue' }), ann({ id: 'a2', kind: 'issue' }), ann({ id: 'a3', kind: 'praise' })],
       {},
     )
     const kinds = [...root.querySelectorAll('.kind-chip')].map((c) => c.getAttribute('data-kind'))
-    // ALL_KINDS 规范顺序：认可（人工）在问题（遗留）之前
-    expect(kinds).toEqual(['praise', 'issue'])
-    expect(root.querySelector('.kind-chip[data-kind="suggestion"]')).toBeNull()
+    // ALL_KINDS 规范顺序：人工四类（含 0 计数的建议/疑问/重点）在前，存在的「问题」追加在后
+    expect(kinds).toEqual(['suggestion', 'question', 'highlight', 'praise', 'issue'])
+    expect(root.querySelector('.kind-chip[data-kind="highlight"]')?.textContent).toContain('0')
     expect(root.querySelector('.kind-chip[data-kind="issue"]')?.textContent).toContain('2')
+    // AI 味不存在 → 不出现
+    expect(root.querySelector('.kind-chip[data-kind="slop"]')).toBeNull()
   })
 
-  it('正被筛选但已不存在的类型保留 0 计数 chip 以便取消', () => {
-    sidebar.setKindFilter(new Set(['suggestion' as const]))
+  it('正被筛选的机器类型保留 0 计数 chip 以便取消', () => {
+    sidebar.setKindFilter(new Set(['slop' as const]))
     sidebar.render(doc([ann({ kind: 'issue' })]).text, [ann({ kind: 'issue' })], {})
     const kinds = [...root.querySelectorAll('.kind-chip')].map((c) => c.getAttribute('data-kind'))
-    expect(kinds).toEqual(['suggestion', 'issue'])
-    expect(root.querySelector('.kind-chip[data-kind="suggestion"]')?.textContent).toContain('0')
+    expect(kinds).toEqual(['suggestion', 'question', 'highlight', 'praise', 'issue', 'slop'])
+    expect(root.querySelector('.kind-chip[data-kind="slop"]')?.textContent).toContain('0')
   })
 
   it('无批注时不渲染类型 chips 行', () => {

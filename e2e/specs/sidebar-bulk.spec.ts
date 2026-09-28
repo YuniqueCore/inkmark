@@ -59,11 +59,11 @@ test.describe('侧栏卡片多选', () => {
       AnnotateFirstBlock({ kind: 'suggestion', comment: '建议类' }),
       AnnotateFirstBlock({ from: 10, to: 20, kind: 'praise', comment: '认可类' }),
     )
-    // 只有卡片实际拥有的类型（问题 / 疑问 / 重点 / AI 味 不出现）
+    // 人工四类常驻（与撰写卡一致），未出现的机器类型不占位
     const kinds = Workbench.kindChips(page)
-    await expect(kinds).toHaveCount(2)
+    await expect(kinds).toHaveCount(4)
     await expect(kinds.nth(0)).toContainText('建议')
-    await expect(kinds.nth(1)).toContainText('认可')
+    await expect(kinds.nth(3)).toContainText('认可')
     // 开关关闭：正文高亮不随筛选；筛建议后仍 2 处高亮
     await kinds.nth(0).click()
     await expect(Workbench.highlights(page)).toHaveCount(2)

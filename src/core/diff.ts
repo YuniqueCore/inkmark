@@ -163,3 +163,74 @@ export function diffStats(rows: DiffRow[]): { added: number; removed: number } {
   }
   return { added, removed }
 }
+
+/**
+ * 字符级 diff：批注重锚的钳制兜底用（core/reanchor.ts）。
+ * 行级 diff 对单行文档粒度太粗——任何编辑都把整行记成 del+add，
+ * 被钳制的批注会一起挤到段首；字符级才能钉在真实改动点。
+ * 同样走「裁公共前后缀 → Myers → 超预算降级为整块 del+add」；
+ * 相邻同类型操作合并成一段，保证行数与文本长度同阶。
+ */
+export function diffChars(a: string, b: string): DiffRow[] {
+  let pre = 0
+  const minLen = Math.min(a.length, b.length)
+  while (pre < minLen && a[pre] === b[pre]) pre++
+  let suf = 0
+  while (
+    suf < a.length - pre &&
+    suf < b.length - pre &&
+    a[a.length - 1 - suf] === b[b.length - 1 - suf]
+  )
+    suf++
+  const midA = a.slice(pre, a.length - suf)
+  const midB = b.slice(pre, b.length - suf)
+
+  const maxD = Math.max(64, Math.min(2048, Math.floor(2_000_000 / (midA.length + midB.length + 2))))
+  const ops = myersCore([...midA], [...midB], maxD)
+
+  const rows: DiffRow[] = []
+  if (pre > 0) rows.push({ type: 'equal', text: a.slice(0, pre), aStart: 0, bStart: 0 })
+  let aCur = pre
+  let bCur = pre
+  if (ops === null) {
+    if (midA.length > 0) rows.push({ type: 'del', text: midA, aStart: aCur, bStart: null })
+    if (midB.length > 0) rows.push({ type: 'add', text: midB, aStart: null, bStart: bCur })
+  } else {
+    let k = 0
+    while (k < ops.length) {
+      const t = ops[k]!.t
+      let text = ''
+      if (t === 'equal') {
+        while (k < ops.length && ops[k]!.t === 'equal') {
+          text += midA[ops[k]!.i]
+          k++
+        }
+        rows.push({ type: 'equal', text, aStart: aCur, bStart: bCur })
+        aCur += text.length
+        bCur += text.length
+      } else if (t === 'del') {
+        while (k < ops.length && ops[k]!.t === 'del') {
+          text += midA[ops[k]!.i]
+          k++
+        }
+        rows.push({ type: 'del', text, aStart: aCur, bStart: null })
+        aCur += text.length
+      } else {
+        while (k < ops.length && ops[k]!.t === 'add') {
+          text += midB[ops[k]!.j]
+          k++
+        }
+        rows.push({ type: 'add', text, aStart: null, bStart: bCur })
+        bCur += text.length
+      }
+    }
+  }
+  if (suf > 0)
+    rows.push({
+      type: 'equal',
+      text: a.slice(a.length - suf),
+      aStart: aCur,
+      bStart: bCur,
+    })
+  return rows
+}

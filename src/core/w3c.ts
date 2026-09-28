@@ -2,10 +2,12 @@
  *
  * 导出：内部批注 → 标准 Annotation（TextQuoteSelector + TextPositionSelector 双选择器，
  * kind / resolved 以 tagging body 表达，保持模型内的无损信息）。
- * 导入：优先按位置 + 原文校验；失配时按 exact 全文搜索、prefix/suffix 消歧重锚
- * （robust anchoring）；找不到的条目跳过并计数，绝不静默错锚。
+ * 导入：优先按位置 + 原文校验；失配时按引文多策略锚定（core/quote-match.ts：
+ * 精确 + 上下文消歧 + 容错模糊回锚 + 置信度门控）；锚不上的条目跳过并计数，
+ * 绝不静默错锚。
  */
 
+import { anchorQuote } from './quote-match'
 import { textQuoteSelector } from './text'
 import type { Annotation, AnnotationKind, DocItem } from './types'
 
@@ -147,7 +149,15 @@ function parseOne(item: unknown, text: string, now: number, idx: number, isRevis
   const exact = typeof quote?.exact === 'string' ? quote.exact : null
   if (exact === null || exact === '') return null
 
-  const anchor = reanchor(text, exact, asString(quote?.prefix), asString(quote?.suffix), position)
+  const hint =
+    position && typeof position.start === 'number' && typeof position.end === 'number'
+      ? {start: position.start, end: position.end}
+      : undefined
+  const anchor = anchorQuote(
+    text,
+    {exact, prefix: asString(quote?.prefix), suffix: asString(quote?.suffix)},
+    hint,
+  )
   if (anchor === null) return null
 
   const bodies = Array.isArray(obj.body) ? (obj.body as Array<Record<string, unknown>>) : []
@@ -180,52 +190,4 @@ function parseOne(item: unknown, text: string, now: number, idx: number, isRevis
 
 function asString(v: unknown): string | undefined {
   return typeof v === 'string' ? v : undefined
-}
-
-/**
- * 锚点解析：①位置选择器处原文与 exact 一致 → 直接用；②全文唯一直接用；
- * ③多处命中时用 prefix / suffix 消歧（匹配数最多者，平局取最早）。
- * 编辑原文后的批注重锚（core/reanchor.ts）复用同一逻辑。
- */
-export function reanchor(
-  text: string,
-  exact: string,
-  prefix: string | undefined,
-  suffix: string | undefined,
-  position: { start?: unknown; end?: unknown } | undefined,
-): { start: number; end: number } | null {
-  const p = prefix ?? ''
-  const s = suffix ?? ''
-  if (position && typeof position.start === 'number' && typeof position.end === 'number') {
-    if (
-      position.start >= 0 &&
-      position.end <= text.length &&
-      text.slice(position.start, position.end) === exact
-    ) {
-      return { start: position.start, end: position.end }
-    }
-  }
-  let at = text.indexOf(exact)
-  if (at === -1) return null
-  let best = at
-  let bestScore = scoreAt(text, at, exact.length, p, s)
-  if (bestScore < 2) {
-    while (at !== -1) {
-      const score = scoreAt(text, at, exact.length, p, s)
-      if (score > bestScore) {
-        best = at
-        bestScore = score
-        if (score === 2) break
-      }
-      at = text.indexOf(exact, at + 1)
-    }
-  }
-  return { start: best, end: best + exact.length }
-}
-
-function scoreAt(text: string, at: number, len: number, prefix: string, suffix: string): number {
-  let score = 0
-  if (prefix === '' || (at >= prefix.length && text.startsWith(prefix, at - prefix.length))) score++
-  if (suffix === '' || text.startsWith(suffix, at + len)) score++
-  return score
 }
