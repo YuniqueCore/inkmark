@@ -13,11 +13,11 @@
 
 **[在线使用 →](https://yuniquecore.github.io/inkmark/)**
 
-<img src="docs/screenshots/desktop-light.png" alt="桌面亮色主题：slop 预扫描标红套话候选，侧栏评分统计卡与批注列表" width="100%" />
+<img src="docs/screenshots/desktop-light.png" alt="桌面亮色主题：AI 味候选红色波浪线 + 认可/建议/疑问/重点彩色高亮，侧栏多类批注卡" width="100%" />
 
 | 手机 · 撰写卡（快捷语两行封顶、横向滚动） | 桌面 · 暗色主题 |
 | --- | --- |
-| <img src="docs/screenshots/mobile-composer.png" alt="手机端撰写卡：四类批注类型与快捷语 chips" width="360" /> | <img src="docs/screenshots/desktop-dark.png" alt="桌面暗色主题" width="100%" /> |
+| <img src="docs/screenshots/mobile-composer.png" alt="手机端：多色批注高亮与撰写卡" width="360" /> | <img src="docs/screenshots/desktop-dark.png" alt="桌面暗色主题" width="100%" /> |
 
 </div>
 
