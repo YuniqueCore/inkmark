@@ -50,7 +50,12 @@ function anchorText(a: Annotation, text: string, opts: ExportOptions): string {
 function marker(a: Annotation, num: string): string {
   const label = KIND_LABEL[a.kind]
   const lost = a.anchorLost ? '·失锚' : ''
-  return `【批注${num}·${label} @${a.start}-${a.end}${lost}】${a.comment.trim()}`
+  return `【批注${num}·${label} @${a.start}-${a.end}${lost}】${a.comment.trim()}${replacementNote(a)}`
+}
+
+/** 批量批注的建议替换词：机器可执行的指令片段（三种文本导出共用） */
+function replacementNote(a: Annotation): string {
+  return a.replacement ? ` → 替换为「${a.replacement}」` : ''
 }
 
 /**
@@ -113,7 +118,7 @@ export function exportSnippets(text: string, anns: Annotation[], opts: ExportOpt
       const quote = snippet(anchorText(a, text, opts), a.start, a.end, maxLen)
       const sideMark = a.target === 'revised' ? '（改稿）' : ''
       const lost = a.anchorLost ? '·失锚' : ''
-      return `【片段${num} @${a.start}-${a.end}${lost}】${sideMark}${quote}\n【批注${num}·${KIND_LABEL[a.kind]}】${a.comment.trim()}`
+      return `【片段${num} @${a.start}-${a.end}${lost}】${sideMark}${quote}\n【批注${num}·${KIND_LABEL[a.kind]}】${a.comment.trim()}${replacementNote(a)}`
     })
     .join('\n\n')
   return opts.fileName ? `文件：${opts.fileName}\n\n${body}` : body
@@ -133,7 +138,7 @@ export function exportReview(text: string, anns: Annotation[], opts: ExportOptio
     const quote = snippet(anchorText(a, text, opts), a.start, a.end, maxLen).replace(/\n+/g, ' ')
     const sideLabel = a.target === 'revised' ? '改稿' : '原文'
     lines.push(`> ${sideLabel} @${a.start}-${a.end}${a.anchorLost ? '·失锚' : ''}：${quote}`)
-    lines.push(`> ${KIND_MARK[a.kind]} 批注${num}（${KIND_LABEL[a.kind]}）：${a.comment.trim()}`)
+    lines.push(`> ${KIND_MARK[a.kind]} 批注${num}（${KIND_LABEL[a.kind]}）：${a.comment.trim()}${replacementNote(a)}`)
     lines.push('')
   }
   const head = opts.fileName ? `文件：${opts.fileName}\n\n` : ''

@@ -5,16 +5,17 @@ import { diffLines, diffStats } from './core/diff'
 import { importFileList, newDocId } from './core/import'
 import type { W3CRouted } from './core/import'
 import { reanchorAnnotations } from './core/reanchor'
-import { buildBatchAnnotations, type MatchRange } from './core/batch'
+import { buildBatchAnnotations, findMatches } from './core/batch'
 import { splitBlocks } from './core/text'
 import { appendSample, hitsToAnnotations, scanSlopReport } from './core/slop'
 import type { SlopReport } from './core/types'
-import type { Annotation, AnnotationInput, AnnotationKind, DocItem, SlopLexicon } from './core/types'
+import type { Annotation, AnnotationInput, DocItem, SlopLexicon } from './core/types'
 import { EditorView } from './ui/editor'
 import { ExporterView } from './ui/exporter'
 import { FileTreeView } from './ui/filetree'
 import { AnnotationPopup } from './ui/annotation-popup'
 import { SelectionPin } from './ui/selection-pin'
+import { SearchPanelView } from './ui/search-panel'
 import { confirmDialog, textDialog } from './ui/confirm'
 import { SidebarView } from './ui/sidebar'
 import { initResizers } from './ui/resizer'
@@ -111,15 +112,7 @@ const toggleAnnotationStatus = (ids: string[]): void => {
   }))
 }
 
-/** 搜索批量批注：N 个匹配区间 → 一组共享 groupId 的批注 */
-const batchAnnotate = (matches: MatchRange[], kind: AnnotationKind, comment: string): void => {
-  const anns = buildBatchAnnotations(matches, { kind, comment })
-  if (anns.length === 0) return
-  mutateActive((doc) => ({ ...doc, annotations: [...doc.annotations, ...anns] }))
-  sidebar.includeKind(kind) // 类型筛选开着时让新卡可见
-  rerender(false)
-  toast(`已批量批注 ${anns.length} 处`)
-}
+/** 搜索批量批注在 ⌘F 面板（search-panel.ts）里完成：main 只接线 */
 
 /** 打开批注编辑弹层：摘录与弹出内容按锚定侧取文本。
  * rect 缺省时从高亮元素实时查询（侧栏编辑入口；高亮可能刚被重渲染）。 */
@@ -191,7 +184,7 @@ const sidebar = new SidebarView(sidebarEl, {
   },
   onDelete: deleteAnnotation,
   onToggleStatus: toggleAnnotationStatus,
-  onBatchAnnotate: batchAnnotate,
+  onOpenSearch: openSearch,
   onFilterChange: (f) => {
     sidebar.setFilter(f)
     rerender(false)
@@ -364,7 +357,12 @@ function rerender(syncPopup = true): void {
     const { added, removed } = diffStats(rows)
     stats = `+${added} / −${removed}`
   } else {
-    editor.render(doc?.text ?? '', editorAnnotations(), loadSample)
+    editor.render(
+      doc?.text ?? '',
+      editorAnnotations(),
+      loadSample,
+      searchPreview ? findMatches(doc?.text ?? '', searchPreview) : [],
+    )
   }
   const diffStatsEl = document.querySelector('#diff-stats')
   if (diffStatsEl) {
@@ -377,6 +375,10 @@ function rerender(syncPopup = true): void {
     slopHistory: doc?.slopHistory ?? [],
   })
   fileTree.render(state.docs, state.activeDocId)
+  searchPanel.setDocs(
+    state.docs.map((d) => ({ id: d.id, name: d.name, text: d.text })),
+    state.activeDocId,
+  )
   if (syncPopup && doc) annotationPopup.sync(doc.text, doc.annotations, doc.revised)
   save.markDirty()
 }
@@ -725,6 +727,53 @@ document.addEventListener('keydown', (e) => {
   }
 })
 
+// ---------------------------------------------------------------- 搜索与批量批注（⌘F 面板）
+
+/** 面板打开时的搜索词：非空则编辑器渲染预览描边（rerender 管道携带） */
+let searchPreview: string | null = null
+
+const searchPanel = new SearchPanelView({
+  onQueryChange: (query) => {
+    searchPreview = query
+    rerender(false)
+  },
+  onNavigate: (hit) => {
+    if (hit.docId !== state.activeDocId) switchDoc(hit.docId)
+    editor.scrollToRange(hit.start, hit.end)
+  },
+  onBatchAnnotate: (targets, kind, comment, replacement) => {
+    let total = 0
+    state = {
+      ...state,
+      docs: state.docs.map((d) => {
+        const target = targets.find((t) => t.docId === d.id)
+        if (!target) return d
+        const anns = buildBatchAnnotations(target.matches, { kind, comment, replacement })
+        total += anns.length
+        return { ...d, annotations: [...d.annotations, ...anns] }
+      }),
+    }
+    sidebar.includeKind(kind)
+    rerender(false)
+    toast(`已批量批注 ${total} 处${targets.length > 1 ? `（跨 ${targets.length} 份文档）` : ''}`)
+  },
+  onClose: () => {
+    searchPreview = null
+    rerender(false)
+  },
+})
+
+function openSearch(): void {
+  if (!activeDoc()) {
+    toast('先导入或载入一段文本')
+    return
+  }
+  searchPanel.toggle(
+    state.docs.map((d) => ({ id: d.id, name: d.name, text: d.text })),
+    state.activeDocId,
+  )
+}
+
 // ---------------------------------------------------------------- 启动
 
 function bootstrap(): void {
@@ -733,7 +782,17 @@ function bootstrap(): void {
   // 移动端抽屉：背板点击与 Esc 关闭；跨断点时清掉抽屉状态
   $('#drawer-backdrop').addEventListener('click', closeDrawers)
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !e.isComposing) closeDrawers()
+    if (e.isComposing) return
+    // ⌘F / Ctrl+F：搜索与批量批注面板（接管浏览器默认查找）
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') {
+      e.preventDefault()
+      openSearch()
+      return
+    }
+    if (e.key === 'Escape') {
+      if (searchPanel.isOpen()) searchPanel.close()
+      closeDrawers()
+    }
   })
   window.matchMedia('(max-width: 1023.98px)').addEventListener('change', closeDrawers)
   initResizers({

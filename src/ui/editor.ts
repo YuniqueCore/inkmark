@@ -4,6 +4,8 @@ import { buildSegments } from '../core/anchors'
 import type { DiffRow } from '../core/diff'
 import { escapeHtml, splitBlocks } from '../core/text'
 import type { Annotation, AnnotationKind } from '../core/types'
+import type { MatchRange } from '../core/batch'
+import { rangeOfOffsets } from './selection-offsets'
 
 /** 编辑原文模式下的选段过滤：批注只与同侧的行相交 */
 function annsForSide(anns: Annotation[], revised: boolean): Annotation[] {
@@ -13,12 +15,19 @@ function annsForSide(anns: Annotation[], revised: boolean): Annotation[] {
 /** 多类重叠时取优先级最高的底色 */
 const KIND_PRIORITY: AnnotationKind[] = ['slop', 'issue', 'praise', 'suggestion', 'question', 'highlight']
 
-function renderBlockContent(blockText: string, blockAnns: Annotation[], blockStart: number): string {
-  const segments = buildSegments(blockStart, blockText, blockAnns)
+function renderBlockContent(
+  blockText: string,
+  blockAnns: Annotation[],
+  blockStart: number,
+  searchRanges: MatchRange[] = [],
+): string {
+  const segments = buildSegments(blockStart, blockText, blockAnns, searchRanges)
   return segments
     .map((seg) => {
       const html = escapeHtml(seg.text).replaceAll('\n', '<br>')
-      if (seg.annIds.length === 0) return html
+      if (seg.annIds.length === 0) {
+        return seg.search ? `<span class="seg-search">${html}</span>` : html
+      }
       const kinds = seg.annIds
         .map((id) => blockAnns.find((a) => a.id === id)?.kind ?? 'issue')
         .filter((k, i, arr) => arr.indexOf(k) === i)
@@ -27,7 +36,7 @@ function renderBlockContent(blockText: string, blockAnns: Annotation[], blockSta
       const lost =
         seg.annIds.length > 0 &&
         seg.annIds.every((id) => blockAnns.find((a) => a.id === id)?.anchorLost)
-      return `<span class="seg-hl k-${kind}${lost ? ' seg-lost' : ''}" ${
+      return `<span class="seg-hl k-${kind}${lost ? ' seg-lost' : ''}${seg.search ? ' seg-search' : ''}" ${
         lost ? 'title="原引文已不在原文中，批注钉在改动处"' : ''
       } data-ann-ids="${seg.annIds.join(' ')}">${html}</span>`
     })
@@ -71,7 +80,12 @@ export class EditorView {
     })
   }
 
-  render(text: string, annotations: Annotation[], onEmptySample?: () => void): void {
+  render(
+    text: string,
+    annotations: Annotation[],
+    onEmptySample?: () => void,
+    searchRanges: MatchRange[] = [],
+  ): void {
     if (text.trim() === '') {
       this.root.innerHTML = `
         <div class="mx-auto mt-[18vh] max-w-md rounded-xl border border-dashed bg-card/60 p-8 text-center">
@@ -94,7 +108,8 @@ export class EditorView {
     const blocks = splitBlocks(text)
     const parts = blocks.map((b) => {
       const anns = annotations.filter((a) => a.start < b.start + b.text.length && a.end > b.start)
-      return `<p class="editor-blk" data-start="${b.start}">${renderBlockContent(b.text, anns, b.start)}</p>`
+      const hits = searchRanges.filter((r) => r.start < b.start + b.text.length && r.end > b.start)
+      return `<p class="editor-blk" data-start="${b.start}">${renderBlockContent(b.text, anns, b.start, hits)}</p>`
     })
     this.root.innerHTML = parts.join('')
   }
@@ -163,5 +178,17 @@ export class EditorView {
     el.scrollIntoView({ behavior: 'smooth', block: 'center' })
     el.classList.add('active')
     setTimeout(() => el.classList.remove('active'), 1400)
+  }
+
+  /** 搜索跳转：滚动到规范文本偏移处（预览描边由 searchRanges 渲染负责）。 */
+  scrollToRange(start: number, end: number): void {
+    const range = rangeOfOffsets(this.root, start, end)
+    if (!range) return
+    const rect = range.getBoundingClientRect()
+    const host = this.root.getBoundingClientRect()
+    const margin = 60
+    if (rect.top < host.top + margin || rect.bottom > host.bottom - margin) {
+      this.root.scrollTop += rect.top - host.top - this.root.clientHeight / 2 + rect.height
+    }
   }
 }

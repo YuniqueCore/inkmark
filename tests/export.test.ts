@@ -2,10 +2,18 @@ import { describe, expect, it } from 'vitest'
 import { exportFileName, exportInline, exportReview, exportSnippets, numberAnnotations, zipEntryNames } from '../src/core/export'
 import type { Annotation } from '../src/core/types'
 
-function ann(id: string, start: number, end: number, comment: string, status: 'open' | 'resolved' = 'open'): Annotation {
+function ann(
+  id: string,
+  start: number,
+  end: number,
+  comment: string,
+  status: 'open' | 'resolved' = 'open',
+  replacement?: string,
+): Annotation {
   return {
     id, start, end, kind: 'issue', comment,
     status, source: 'manual', createdAt: 0, updatedAt: 0,
+    ...(replacement ? { replacement } : {}),
   }
 }
 
@@ -140,5 +148,22 @@ describe('zipEntryNames（多文档 zip 条目名）', () => {
       'x-批注-w3c-2026-09-28.json',
       'y-批注-w3c-2026-09-28.json',
     ])
+  })
+})
+
+describe('替换指令（机器可执行）', () => {
+  const target = ann('r', 4, 14, '用词不当', 'open', '技术演进')
+
+  it('exportInline：行内标记带「→ 替换为」', () => {
+    expect(exportInline(TEXT, [target])).toContain('【批注①·问题 @4-14】用词不当 → 替换为「技术演进」')
+  })
+  it('exportSnippets：批注行带「→ 替换为」', () => {
+    expect(exportSnippets(TEXT, [target])).toContain('【批注①·问题】用词不当 → 替换为「技术演进」')
+  })
+  it('exportReview：批注行带「→ 替换为」', () => {
+    expect(exportReview(TEXT, [target])).toContain('批注①（问题）：用词不当 → 替换为「技术演进」')
+  })
+  it('无替换词时不产生指令', () => {
+    expect(exportReview(TEXT, [ann('a', 4, 14, '普通批注')])).not.toContain('替换为')
   })
 })

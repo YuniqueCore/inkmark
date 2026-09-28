@@ -1,16 +1,16 @@
-/** 侧栏：批注列表、筛选、单条/分组操作、搜索批量批注。
+/** 侧栏：批注列表、筛选、单条/分组操作。搜索与批量批注在 ⌘F 面板（search-panel.ts）。
 
  * 批量批注模型：N 条共享 groupId 的一阶批注在列表里聚合为一张卡
  * （统计 + 展开跳转）；聚合是派生状态，不复制可变状态。
  */
 
-import { findMatches, type MatchRange } from '../core/batch'
 import { snippet } from '../core/text'
 import { reportCategoryCounts } from '../core/slop'
 import type { SlopBand, SlopReport, SlopSample } from '../core/types'
-import { KIND_LABEL, MANUAL_KINDS, QUICK_PHRASES, hasQuickPhrase, toggleQuickPhrase } from '../core/types'
+import { KIND_LABEL } from '../core/types'
 import type { Annotation, AnnotationKind } from '../core/types'
 import { escapeHtml } from '../core/text'
+import { icon } from './icons'
 
 export type StatusFilter = 'all' | 'open' | 'resolved'
 
@@ -19,7 +19,7 @@ export interface SidebarCallbacks {
   onEdit: (a: Annotation) => void
   onDelete: (ids: string[]) => void
   onToggleStatus: (ids: string[]) => void
-  onBatchAnnotate: (matches: MatchRange[], kind: AnnotationKind, comment: string) => void
+  onOpenSearch: () => void
   onFilterChange: (filter: StatusFilter) => void
   onKindFilterChange: (kinds: Set<AnnotationKind>) => void
   onHighlightModeChange: (only: boolean) => void
@@ -61,10 +61,6 @@ export class SidebarView {
   private kindFilter: Set<AnnotationKind> = new Set()
   private onlyHighlightFiltered = false
   private activeId: string | null = null
-  /** 搜索批量批注：查询词 / 类型 / 批注语（输入态保存在视图内，重渲染后回填） */
-  private searchQuery = ''
-  private searchKind: AnnotationKind = 'suggestion'
-  private searchComment = ''
   /** 展开的批量批注组 */
   private expandedGroups = new Set<string>()
   private lastArgs: { text: string; annotations: Annotation[]; opts: SidebarRenderOptions } = {
@@ -149,9 +145,11 @@ export class SidebarView {
     this.root.innerHTML = `
       <div class="mb-3 flex items-baseline justify-between px-1">
         <h3 class="text-sm font-semibold tracking-tight">批注</h3>
-        <span class="text-xs text-muted-foreground">${open} 条待处理</span>
+        <span class="flex items-center gap-1">
+          <button class="btn btn-ghost btn-sm h-7 w-7 p-0 text-muted-foreground" data-op="open-search" title="搜索与批量批注（⌘F）" aria-label="搜索与批量批注">${icon('search', 'size-3.5')}</button>
+          <span class="text-xs text-muted-foreground">${open} 条待处理</span>
+        </span>
       </div>
-      ${this.renderSearch(text)}
       ${opts.slop ? this.renderSlopCard(opts.slop, opts.slopHistory ?? []) : ''}
       <div class="mb-1.5 flex flex-wrap gap-1.5 px-1">${chips}</div>
       <div class="mb-2 flex flex-wrap gap-1 px-1">${kindChips}</div>
@@ -161,97 +159,13 @@ export class SidebarView {
       </label>
       ${items.length === 0
         ? `<div class="mt-16 rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-             划选正文写批注、点顶栏「slop 预扫描」，<br>或在上方搜索后一键批量批注
+             划选正文写批注、点顶栏「slop 预扫描」，<br>或按 ⌘F 搜索后一键批量批注
            </div>`
         : `<div class="flex flex-col gap-2.5">${cards}</div>`}
     `
 
     this.wireFilters()
-    this.wireSearch(text)
     this.wireCards(items)
-  }
-
-  // ---------------------------------------------------------------- 搜索批量批注
-
-  private renderSearch(text: string): string {
-    const matches = findMatches(text, this.searchQuery)
-    const canSubmit = matches.length > 0 && (this.searchComment.trim() !== '' || this.searchKind === 'praise')
-    const composer =
-      this.searchQuery.trim() === ''
-        ? ''
-        : `
-        <div class="mt-2 text-xs text-muted-foreground">
-          正文命中 <span class="font-medium text-foreground">${matches.length}</span> 处
-        </div>
-        <div class="mt-1.5 flex flex-wrap gap-1">${MANUAL_KINDS.map(
-          (k) =>
-            `<button class="chip-toggle ${this.searchKind === k ? 'on' : ''}" data-batch-kind="${k}">${KIND_LABEL[k]}</button>`,
-        ).join('')}</div>
-        <div class="chip-scroll mt-1.5">${(QUICK_PHRASES[this.searchKind] ?? [])
-          .map(
-            (p) =>
-              `<button class="chip-toggle ${hasQuickPhrase(this.searchComment, p) ? 'on' : ''}" data-batch-phrase="${escapeHtml(p)}">${escapeHtml(p)}</button>`,
-          )
-          .join('')}</div>
-        <textarea id="batch-comment" class="input-base mt-1.5 min-h-12 resize-y text-[13px]" placeholder="批注内容：点选快捷语或直接输入；认可类型可不写描述……">${escapeHtml(this.searchComment)}</textarea>
-        <button id="batch-submit" class="btn btn-default btn-sm mt-2 w-full" ${canSubmit ? '' : 'disabled'}>批量批注 ${matches.length} 处</button>`
-    return `
-      <div class="card mb-3 p-3">
-        <input id="batch-search" class="input-base h-8 text-[13px]" placeholder="搜索正文，一键批量批注…" value="${escapeHtml(this.searchQuery)}" />
-        ${composer}
-      </div>`
-  }
-
-  private wireSearch(text: string): void {
-    const input = this.root.querySelector('#batch-search') as HTMLInputElement | null
-    if (!input) return
-    // 输入即重渲染（命中数与撰写块随查询变化），重渲染后夺回焦点
-    input.addEventListener('input', () => {
-      this.searchQuery = input.value
-      this.rerender()
-      const fresh = this.root.querySelector('#batch-search') as HTMLInputElement | null
-      fresh?.focus()
-      fresh?.setSelectionRange(fresh.value.length, fresh.value.length)
-    })
-    this.root.querySelectorAll('[data-batch-kind]').forEach((chip) =>
-      chip.addEventListener('click', () => {
-        this.searchKind = (chip as HTMLElement).dataset.batchKind as AnnotationKind
-        this.rerender()
-      }),
-    )
-    this.root.querySelectorAll('[data-batch-phrase]').forEach((chip) =>
-      chip.addEventListener('click', () => {
-        this.searchComment = toggleQuickPhrase(this.searchComment, (chip as HTMLElement).dataset.batchPhrase ?? '')
-        this.rerender()
-        const comment = this.root.querySelector('#batch-comment') as HTMLTextAreaElement | null
-        comment?.focus()
-      }),
-    )
-    this.root.querySelector('#batch-comment')?.addEventListener('input', (e) => {
-      // 只同步状态与 chips on 态，不整体重渲染（保住输入焦点）
-      this.searchComment = (e.target as HTMLTextAreaElement).value
-      const value = this.searchComment
-      this.root.querySelectorAll('[data-batch-phrase]').forEach((c) =>
-        c.classList.toggle('on', hasQuickPhrase(value, (c as HTMLElement).dataset.batchPhrase ?? '')),
-      )
-      this.refreshSubmitState(text)
-    })
-    this.root.querySelector('#batch-submit')?.addEventListener('click', () => {
-      const matches = findMatches(text, this.searchQuery)
-      if (matches.length === 0) return
-      this.callbacks.onBatchAnnotate(matches, this.searchKind, this.searchComment.trim())
-      this.searchQuery = ''
-      this.searchComment = ''
-      this.rerender()
-    })
-  }
-
-  /** 批注语变化后只更新提交按钮的可用态 */
-  private refreshSubmitState(text: string): void {
-    const btn = this.root.querySelector('#batch-submit') as HTMLButtonElement | null
-    if (!btn) return
-    const matches = findMatches(text, this.searchQuery)
-    btn.disabled = !(matches.length > 0 && (this.searchComment.trim() !== '' || this.searchKind === 'praise'))
   }
 
   private rerender(): void {
@@ -262,6 +176,9 @@ export class SidebarView {
   // ---------------------------------------------------------------- 列表
 
   private wireFilters(): void {
+    this.root.querySelector('[data-op="open-search"]')?.addEventListener('click', () => {
+      this.callbacks.onOpenSearch()
+    })
     this.root.querySelectorAll('[data-filter]').forEach((btn) =>
       btn.addEventListener('click', () =>
         this.callbacks.onFilterChange((btn as HTMLElement).dataset.filter as StatusFilter),
@@ -316,6 +233,13 @@ export class SidebarView {
       btn.addEventListener('click', (e) => {
         e.stopPropagation()
         this.callbacks.onFocus((btn as HTMLElement).dataset.id!)
+      }),
+    )
+    card.querySelectorAll('[data-op="edit"]').forEach((btn) =>
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const member = members.find((m) => m.id === (btn as HTMLElement).dataset.id)
+        if (member) this.callbacks.onEdit(member)
       }),
     )
     card.querySelector('[data-group-op="expand"]')?.addEventListener('click', () => {
@@ -434,6 +358,7 @@ export class SidebarView {
               <button class="min-w-0 flex-1 truncate text-left text-muted-foreground transition-colors hover:text-foreground" data-op="focus" data-id="${m.id}" title="${escapeHtml(quote)}">“${escapeHtml(quote)}”</button>
               ${m.anchorLost ? '<span class="badge border-amber-500/40 text-amber-600 dark:text-amber-400">失锚</span>' : ''}
               ${m.status === 'resolved' ? '<span class="badge bg-secondary text-secondary-foreground">已解决</span>' : ''}
+              <button class="btn btn-ghost btn-sm h-6 shrink-0 px-1.5 text-xs" data-op="edit" data-id="${m.id}">编辑</button>
             </div>`
           })
           .join('')}</div>`

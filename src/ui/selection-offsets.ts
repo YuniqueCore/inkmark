@@ -47,6 +47,39 @@ export function rectOfAnnotation(root: HTMLElement, id: string): DOMRect | null 
   return el?.getBoundingClientRect() ?? null
 }
 
+/** 规范文本偏移区间 → 编辑区内的 DOM Range（搜索跳转用）；定位不到返回 null。 */
+export function rangeOfOffsets(root: HTMLElement, start: number, end: number): Range | null {
+  for (const blk of root.querySelectorAll<HTMLElement>('.editor-blk')) {
+    const blockStart = Number(blk.dataset.start ?? 0)
+    const blockEnd = blockStart + textLengthOf(blk)
+    if (start < blockStart || start >= blockEnd) continue
+    const s = offsetToPoint(blk, start - blockStart)
+    const e = offsetToPoint(blk, Math.min(end, blockEnd) - blockStart)
+    const range = document.createRange()
+    range.setStart(s.node, s.offset)
+    range.setEnd(e.node, e.offset)
+    return range
+  }
+  return null
+}
+
+/** 块内规范偏移 → DOM 位置（textLengthOf 与 domPointToOffset 同一计数规则，<br> 记 1） */
+function offsetToPoint(blk: HTMLElement, offset: number): { node: Node; offset: number } {
+  let acc = 0
+  const walk = (n: Node): { node: Node; offset: number } | null => {
+    for (const child of Array.from(n.childNodes)) {
+      const len = textLengthOf(child)
+      if (offset < acc + len) {
+        if (child.nodeType === Node.TEXT_NODE) return { node: child, offset: offset - acc }
+        return walk(child) ?? { node: child, offset: 0 }
+      }
+      acc += len
+    }
+    return null
+  }
+  return walk(blk) ?? { node: blk, offset: blk.childNodes.length }
+}
+
 /** DOM 位置 → 规范文本偏移。位置不在任何编辑块内返回 null。 */
 function domPointToOffset(node: Node, offset: number): number | null {
   const blk = (node.nodeType === Node.TEXT_NODE ? node.parentElement : node as HTMLElement)?.closest('.editor-blk') as HTMLElement | null

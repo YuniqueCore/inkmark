@@ -26,10 +26,10 @@ export function findMatches(text: string, query: string): MatchRange[] {
   }))
 }
 
-/** 由匹配区间构造一批共享 groupId 的批注（comment / kind 全组一致）。 */
+/** 由匹配区间构造一批共享 groupId 的批注（comment / kind / replacement 全组一致）。 */
 export function buildBatchAnnotations(
   matches: MatchRange[],
-  input: { kind: AnnotationKind; comment: string },
+  input: { kind: AnnotationKind; comment: string; replacement?: string },
   now = Date.now(),
 ): Annotation[] {
   if (matches.length === 0) return []
@@ -43,6 +43,7 @@ export function buildBatchAnnotations(
     status: 'open' as const,
     source: 'manual' as const,
     groupId,
+    ...(input.replacement ? { replacement: input.replacement } : {}),
     createdAt: now,
     updatedAt: now,
   }))

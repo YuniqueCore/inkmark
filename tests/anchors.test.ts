@@ -57,3 +57,25 @@ describe('buildSegments', () => {
     expect(segs).toEqual([{ text: blockText, annIds: [] }])
   })
 })
+
+describe('搜索预览区间', () => {
+  const ann = (id: string, start: number, end: number): Annotation => ({
+    id, start, end, kind: 'issue', comment: '', status: 'open', source: 'manual', createdAt: 0, updatedAt: 0,
+  })
+
+  it('搜索区间渲染为独立描边段；与批注重叠时按扫描线切段', () => {
+    // 批注 [0,3)，搜索 [2,6)：批注段 / 重叠段 / 纯搜索段 / 关闭后回普通段
+    const segs = buildSegments(0, 'abcdefghij', [ann('a', 0, 3)], [{ start: 2, end: 6 }])
+    expect(segs).toEqual([
+      { text: 'ab', annIds: ['a'] },
+      { text: 'c', annIds: ['a'], search: true },
+      { text: 'def', annIds: [], search: true },
+      { text: 'ghij', annIds: [] },
+    ])
+  })
+
+  it('无搜索区间时不产生 search 标记（与既有行为一致）', () => {
+    expect(buildSegments(0, 'abc', [ann('a', 0, 3)])).toEqual([{ text: 'abc', annIds: ['a'] }])
+    expect(buildSegments(0, 'abc', [], [])).toEqual([{ text: 'abc', annIds: [] }])
+  })
+})

@@ -91,6 +91,8 @@ export interface Annotation {
   /** 批量批注组：同一 groupId 的批注在侧栏聚合为一张卡（统计 + 展开跳转）。
    * 每条批注仍是独立的一阶 [start,end)，导出 / W3C / 重锚不受分组影响 */
   groupId?: string
+  /** 批量批注的建议替换词（同组一致）：导出为机器可执行的替换指令 */
+  replacement?: string
   createdAt: number
   updatedAt: number
 }

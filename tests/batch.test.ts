@@ -65,3 +65,12 @@ describe('buildBatchAnnotations', () => {
     expect(buildBatchAnnotations([], { kind: 'praise', comment: '' })).toEqual([])
   })
 })
+
+describe('buildBatchAnnotations · 替换词', () => {
+  it('replacement 随组写入每条批注；缺省不携带', () => {
+    const with_ = buildBatchAnnotations([{ start: 0, end: 2 }], { kind: 'suggestion', comment: 'c', replacement: '新词' })
+    expect(with_[0]!.replacement).toBe('新词')
+    const without = buildBatchAnnotations([{ start: 0, end: 2 }], { kind: 'suggestion', comment: 'c' })
+    expect('replacement' in without[0]!).toBe(false)
+  })
+})
