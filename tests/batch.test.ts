@@ -1,7 +1,7 @@
 /** 搜索批量批注核心：findMatches 匹配语义 + buildBatchAnnotations 构造。 */
 
 import { describe, expect, it } from 'vitest'
-import { buildBatchAnnotations, findMatches } from '../src/core/batch'
+import { buildBatchAnnotations, findMatches, regexIssue } from '../src/core/batch'
 
 describe('findMatches', () => {
   it('返回全部非重叠出现位置', () => {
@@ -32,6 +32,40 @@ describe('findMatches', () => {
 
   it('查询两端的空白被忽略', () => {
     expect(findMatches('ab ab', ' ab ')).toHaveLength(2)
+  })
+})
+
+describe('findMatches · 匹配方式（Aa / .*）', () => {
+  it('caseSensitive：区分大小写后只命中字面一致的片段', () => {
+    expect(findMatches('Foo foo FOO', 'foo', {caseSensitive: true})).toEqual([{start: 4, end: 7}])
+    expect(findMatches('Foo foo FOO', 'foo')).toHaveLength(3) // 缺省不区分
+  })
+
+  it('regex：查询按正则解析', () => {
+    expect(findMatches('aXb a?b axb', 'a.b', {regex: true})).toEqual([
+      {start: 0, end: 3},
+      {start: 4, end: 7},
+      {start: 8, end: 11},
+    ])
+  })
+
+  it('regex 关闭时元字符按字面匹配', () => {
+    expect(findMatches('aXb a?b', 'a?b', {regex: false})).toEqual([{start: 4, end: 7}])
+  })
+
+  it('无效正则返回空（不抛错）', () => {
+    expect(findMatches('abc', 'a(', {regex: true})).toEqual([])
+  })
+
+  it('regex 模式跳过零长命中（批注区间必须非空）', () => {
+    expect(findMatches('ab', 'x*', {regex: true})).toEqual([])
+    expect(findMatches('ab', 'a*', {regex: true})).toEqual([{start: 0, end: 1}])
+  })
+
+  it('regexIssue：无效正则返回错误信息，有效返回 null', () => {
+    expect(regexIssue('a(')).not.toBeNull()
+    expect(regexIssue('a?b')).toBeNull()
+    expect(regexIssue('  ')).toBeNull() // 空白串能构造正则，交给 findMatches 返回空
   })
 })
 

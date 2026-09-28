@@ -1,14 +1,13 @@
 /** 已有批注的锚定卡片：点击正文高亮（或侧栏编辑）弹出，贴着高亮位置带箭头，支持原位编辑。 */
 
 import { arrow, autoUpdate, computePosition, flip, offset, shift } from '@floating-ui/dom'
-import { escapeHtml } from '../core/text'
-import { icon } from './icons'
-import { snippet } from '../core/text'
-import { hasQuickPhrase, KIND_LABEL, MANUAL_KINDS, QUICK_PHRASES, toggleQuickPhrase } from '../core/types'
+import { escapeHtml, snippet } from '../core/text'
+import { KIND_LABEL } from '../core/types'
 import type { Annotation, AnnotationKind } from '../core/types'
+import { ComposerForm, type ComposerState } from './composer'
 
 export interface PopupCallbacks {
-  onUpdate: (id: string, kind: AnnotationKind, comment: string) => void
+  onUpdate: (id: string, kind: AnnotationKind, comment: string, replacement?: string) => void
   onDelete: (id: string) => void
   onToggleStatus: (id: string) => void
   onCopySnippet: (text: string) => void
@@ -18,16 +17,14 @@ export interface PopupCallbacks {
 const LOST_BADGE =
   '<span class="badge border-amber-500/40 text-amber-600 dark:text-amber-400" title="原引文已不在原文中，批注钉在改动处">失锚</span>'
 
-// 编辑弹层可切换的类型 = 人工可写四类；历史 issue / 扫描 slop 由静态徽标呈现
-const KINDS = MANUAL_KINDS
-
 export class AnnotationPopup {
   private el: HTMLElement
   private activeId: string | null = null
   /** 当前正在原位编辑的批注 */
   private editingId: string | null = null
-  /** 编辑态的类型选择（进入编辑时从批注自身初始化） */
-  private editKind: AnnotationKind = 'suggestion'
+  /** 编辑态撰写状态：挂载的 ComposerForm 持有 DOM，这里记账以跨 re-render 保留输入 */
+  private editState: ComposerState | null = null
+  private editComposer: ComposerForm | null = null
   private anchorRect: DOMRect | null = null
   private arrowEl: HTMLElement
   private stopAutoUpdate: (() => void) | null = null
@@ -42,18 +39,14 @@ export class AnnotationPopup {
     this.arrowEl.className = 'popup-arrow absolute size-2.5 rotate-45 bg-popover'
     document.body.append(this.el)
 
-    // 快捷语 chips 用容器级委托：切换类型会整体重绘 chips（innerHTML），
-    // 逐 chip 绑定会让新 chip 变成「点了没反应」的死按钮
-    this.el.addEventListener('click', (e) => {
-      const chip = (e.target as HTMLElement).closest('.phrase-chip') as HTMLElement | null
-      if (!chip) return
-      const item = chip.closest('.popup-item') as HTMLElement | null
-      const input = item?.querySelector('.popup-edit-input') as HTMLTextAreaElement | null
-      if (!input) return
-      input.value = toggleQuickPhrase(input.value, chip.dataset.phrase ?? '')
-      item!.querySelectorAll('.phrase-chip').forEach((c) =>
-        c.classList.toggle('on', hasQuickPhrase(input.value, (c as HTMLElement).dataset.phrase ?? '')),
-      )
+    // 编辑态键盘：⌘Enter 保存（批注语 / 替换词上均可用）；Esc 退出编辑由
+    // document 级监听统一处理（组合中的 Esc 属于取消候选，已在彼处排除）
+    this.el.addEventListener('keydown', (e) => {
+      if (!this.editingId) return
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        e.stopPropagation()
+        this.saveEdit()
+      }
     })
 
     document.addEventListener('mousedown', (e) => {
@@ -63,8 +56,7 @@ export class AnnotationPopup {
         // 编辑中有未保存改动：误点外部不销毁编辑（保存/取消/Esc 才是出口）；
         // 未改动则照常关闭
         const a = this.items.find((x) => x.id === this.editingId)
-        const input = this.el.querySelector('.popup-edit-input') as HTMLTextAreaElement | null
-        if (a && input && input.value !== a.comment) return
+        if (a && this.hasUnsavedChanges(a)) return
       }
       this.close()
     })
@@ -72,7 +64,7 @@ export class AnnotationPopup {
       if (e.isComposing) return // 输入法组合中的 Escape 是取消候选，不是关闭卡片
       if (e.key === 'Escape' && !this.el.classList.contains('hidden')) {
         // 编辑态先退出编辑，再关卡片
-        if (this.editingId) this.render()
+        if (this.editingId) this.exitEdit()
         else this.close()
       }
     })
@@ -83,6 +75,26 @@ export class AnnotationPopup {
     })
   }
 
+  /** 编辑态与原批注的差异 = 未保存改动（类型 / 批注语 / 替换词任一变化） */
+  private hasUnsavedChanges(a: Annotation): boolean {
+    const s = this.editState
+    if (!s) return false
+    return s.kind !== a.kind || s.comment !== a.comment || s.replacement !== (a.replacement ?? '')
+  }
+
+  /** 进入编辑态：从批注自身初始化撰写状态（保存时不会悄悄改掉未动的字段） */
+  private beginEdit(a: Annotation): void {
+    this.editState = {kind: a.kind, comment: a.comment, replacement: a.replacement ?? ''}
+  }
+
+  /** 退出编辑态回到展示（不保存） */
+  private exitEdit(): void {
+    this.editingId = null
+    this.editState = null
+    this.render()
+    this.place()
+  }
+
   /** 点击高亮入口：展示该位置的全部批注（编辑指定条时置顶） */
   openFor(id: string, text: string, annotations: Annotation[], edit = false): void {
     const anchor = annotations.find((a) => a.id === id)
@@ -91,31 +103,25 @@ export class AnnotationPopup {
       return
     }
     // 对同一条批注重复点击高亮：编辑中有未保存改动则保持原编辑不被重置
-    if (this.editingId && this.editingId === id) {
-      const input = this.el.querySelector('.popup-edit-input') as HTMLTextAreaElement | null
-      if (input && input.value !== anchor.comment) return
-    }
+    if (this.editingId && this.editingId === id && this.hasUnsavedChanges(anchor)) return
     this.sourceText = text
     this.items = annotations
       .filter((a) => a.target === anchor.target && overlaps(a, anchor))
       .sort((x, y) => (x.id === id ? -1 : y.id === id ? 1 : x.start - y.start))
     this.activeId = id
     this.editingId = edit ? id : null
-    // 编辑态直接保存时不应把类型悄悄改掉：从批注自身初始化 chip 选择
-    if (edit) this.editKind = anchor.kind
+    if (edit) this.beginEdit(anchor)
     this.el.classList.remove('hidden')
     this.render()
     this.place()
-    if (edit) {
-      const input = this.el.querySelector('.popup-edit-input') as HTMLTextAreaElement | null
-      input?.focus()
-      input?.select()
-    }
+    if (edit) this.editComposer?.focusComment(true)
   }
 
   close(): void {
     this.activeId = null
     this.editingId = null
+    this.editState = null
+    this.editComposer = null
     this.items = []
     this.el.classList.add('hidden')
     this.el.innerHTML = ''
@@ -144,17 +150,38 @@ export class AnnotationPopup {
       .join('<div class="my-2 border-t"></div>')
     this.el.innerHTML = `<div class="p-3">${cards}</div>`
     this.el.append(this.arrowEl)
+    this.mountComposer()
     this.bindItemEvents()
   }
 
-  /** 编辑态的快捷语 chips；on 态 = 短语已包含在批注语里 */
-  private editPhraseChips(comment: string): string {
-    return (QUICK_PHRASES[this.editKind] ?? [])
-      .map(
-        (p) =>
-          `<button class="chip-toggle phrase-chip ${hasQuickPhrase(comment, p) ? 'on' : ''}" data-phrase="${escapeHtml(p)}">${escapeHtml(p)}</button>`,
-      )
-      .join('')
+  /** 编辑态挂载共用撰写表单；editState 跨 re-render 保留（主流程重渲染不丢输入） */
+  private mountComposer(): void {
+    const mount =
+      this.editingId && this.editState
+        ? (this.el.querySelector(`[data-ann-id="${this.editingId}"] [data-composer]`) as HTMLElement | null)
+        : null
+    if (!mount || !this.editState) {
+      this.editComposer = null
+      return
+    }
+    this.editComposer = new ComposerForm(
+      mount,
+      {onChange: (s) => this.onEditChange(s)},
+      this.editState,
+      {commentClass: 'min-h-16 resize-y text-sm popup-edit-input'},
+    )
+    this.editComposer.render()
+  }
+
+  /** 编辑中任意字段变化：记账 + 头部类型徽标实时跟随（定向更新，输入法安全） */
+  private onEditChange(s: ComposerState): void {
+    this.editState = s
+    const badge = this.el.querySelector(`[data-ann-id="${this.editingId}"] .popup-kind-badge`)
+    if (badge instanceof HTMLElement) {
+      badge.textContent = KIND_LABEL[s.kind]
+      badge.style.color = `var(--kind-${s.kind})`
+      badge.style.background = `var(--kind-${s.kind}-bg)`
+    }
   }
 
   private renderItem(a: Annotation): string {
@@ -166,16 +193,12 @@ export class AnnotationPopup {
       return `
         <div data-ann-id="${a.id}" class="popup-item">
           <div class="mb-2 flex items-center gap-1.5">
-            <span class="badge border-transparent" style="color:var(--kind-${a.kind});background:var(--kind-${a.kind}-bg)">${KIND_LABEL[a.kind]}</span>
+            <span class="popup-kind-badge badge border-transparent" style="color:var(--kind-${a.kind});background:var(--kind-${a.kind}-bg)">${KIND_LABEL[a.kind]}</span>
             ${meta}
             ${a.anchorLost ? LOST_BADGE : ''}
           </div>
           <p class="mb-2 line-clamp-2 border-l-2 border-primary/30 pl-2 text-[12.5px] text-muted-foreground">“${escapeHtml(quote)}”</p>
-          <div class="mb-2 flex flex-wrap gap-1">${MANUAL_KINDS.includes(this.editKind) ? '' : `<span class="chip-toggle on" style="color:var(--kind-${this.editKind});background:var(--kind-${this.editKind}-bg)">${KIND_LABEL[this.editKind]}</span>`}${KINDS.map(
-            (k) => `<button class="chip-toggle kind-chip ${this.editKind === k ? 'on' : ''}" data-kind="${k}" data-role="edit-kind">${icon(k)} ${KIND_LABEL[k]}</button>`,
-          ).join('')}</div>
-          <div data-role="phrases" class="chip-scroll mb-2">${this.editPhraseChips(a.comment)}</div>
-          <textarea class="input-base popup-edit-input min-h-16 resize-y text-sm" placeholder="批注内容：点选快捷语或直接输入；认可类型可不写描述……">${escapeHtml(a.comment)}</textarea>
+          <div data-composer></div>
           <div class="mt-2 flex items-center justify-between">
             <span class="flex items-center gap-1 text-xs text-muted-foreground"><span class="kbd">⌘</span><span class="kbd">↵</span> 保存</span>
             <span class="flex gap-1.5">
@@ -206,38 +229,6 @@ export class AnnotationPopup {
   }
 
   private bindItemEvents(): void {
-    // kind chips（编辑态）
-    this.el.querySelectorAll('[data-role="edit-kind"]').forEach((chip) => {
-      chip.addEventListener('click', () => {
-        const item = chip.closest('.popup-item') as HTMLElement
-        this.editKind = (chip as HTMLElement).dataset.kind as AnnotationKind
-        item.querySelectorAll('.kind-chip').forEach((c) =>
-          c.classList.toggle('on', (c as HTMLElement).dataset.kind === this.editKind),
-        )
-        // 快捷语随类型切换（点击行为由容器级委托处理）
-        const host = item.querySelector('[data-role="phrases"]')
-        const input = item.querySelector('.popup-edit-input') as HTMLTextAreaElement | null
-        if (host && input) host.innerHTML = this.editPhraseChips(input.value)
-      })
-    })
-    // 编辑态键盘：Cmd+Enter 保存；Esc 退出编辑态回到展示（输入法组合中的
-    // Esc 属于取消候选，交给输入法）。其余按键不拦截，保持全局快捷键可用。
-    const input = this.el.querySelector('.popup-edit-input') as HTMLTextAreaElement | null
-    if (input) {
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-          e.stopPropagation()
-          this.saveEdit()
-          return
-        }
-        if (e.key === 'Escape' && !e.isComposing) {
-          e.stopPropagation()
-          this.editingId = null
-          this.render()
-          this.place()
-        }
-      })
-    }
     this.el.querySelectorAll('[data-op]').forEach((btn) => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation()
@@ -246,18 +237,14 @@ export class AnnotationPopup {
         if (!id) return
         if (op === 'edit') {
           const a = this.items.find((x) => x.id === id)
-          if (a) this.editKind = a.kind
+          if (!a) return
           this.editingId = id
+          this.beginEdit(a)
           this.render()
           this.place()
-          const input = this.el.querySelector('.popup-edit-input') as HTMLTextAreaElement | null
-          input?.focus()
+          this.editComposer?.focusComment()
         }
-        if (op === 'cancel-edit') {
-          this.editingId = null
-          this.render()
-          this.place()
-        }
+        if (op === 'cancel-edit') this.exitEdit()
         if (op === 'save') this.saveEdit()
         if (op === 'toggle') this.callbacks.onToggleStatus(id)
         if (op === 'delete') this.callbacks.onDelete(id)
@@ -270,21 +257,19 @@ export class AnnotationPopup {
   }
 
   private saveEdit(): void {
-    if (!this.editingId) return
-    const input = this.el.querySelector('.popup-edit-input') as HTMLTextAreaElement | null
-    if (!input) return
-    const comment = input.value.trim()
+    if (!this.editingId || !this.editComposer) return
     // 认可类允许只划不写；其余类型仍需描述
-    if (comment === '' && this.editKind !== 'praise') {
-      input.focus()
+    if (!this.editComposer.canSubmit()) {
+      this.editComposer.focusComment()
       return
     }
+    const s = this.editComposer.state()
     // 先退出编辑态再触发更新：onUpdate 会同步重绘，若 editingId 仍在，
     // 重绘会把编辑态原样画回去
     const id = this.editingId
-    const kind = this.editKind
     this.editingId = null
-    this.callbacks.onUpdate(id, kind, comment)
+    this.editState = null
+    this.callbacks.onUpdate(id, s.kind, s.comment.trim(), s.replacement.trim() || undefined)
   }
 
   private place(): void {

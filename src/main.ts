@@ -6,6 +6,7 @@ import { importFileList, newDocId } from './core/import'
 import type { W3CRouted } from './core/import'
 import { reanchorAnnotations } from './core/reanchor'
 import { buildBatchAnnotations, findMatches } from './core/batch'
+import type { MatchOptions } from './core/batch'
 import { splitBlocks } from './core/text'
 import { appendSample, hitsToAnnotations, scanSlopReport } from './core/slop'
 import type { SlopReport } from './core/types'
@@ -129,11 +130,13 @@ const openAnnotationEditor = (id: string, rect?: DOMRect): void => {
 }
 
 const annotationPopup = new AnnotationPopup({
-  onUpdate: (id, kind, comment) => {
+  onUpdate: (id, kind, comment, replacement) => {
     mutateActive((doc) => ({
       ...doc,
       annotations: doc.annotations.map((a) =>
-        a.id === id ? { ...a, kind, comment, updatedAt: Date.now() } : a,
+        a.id === id
+          ? {...a, kind, comment, replacement: replacement || undefined, updatedAt: Date.now()}
+          : a,
       ),
     }))
   },
@@ -145,13 +148,14 @@ const annotationPopup = new AnnotationPopup({
 })
 
 const selectionPin = new SelectionPin({
-  onCreate: (info, kind, comment) => {
+  onCreate: (info, kind, comment, replacement) => {
     addAnnotation({
       start: info.start,
       end: info.end,
       kind,
       comment,
       ...(info.side === 'b' ? { target: 'revised' as const } : {}),
+      ...(replacement ? { replacement } : {}),
     })
   },
   onCopySelection: (quoted) => {
@@ -361,7 +365,7 @@ function rerender(syncPopup = true): void {
       doc?.text ?? '',
       editorAnnotations(),
       loadSample,
-      searchPreview ? findMatches(doc?.text ?? '', searchPreview) : [],
+      searchPreview ? findMatches(doc?.text ?? '', searchPreview.query, searchPreview.match) : [],
     )
   }
   const diffStatsEl = document.querySelector('#diff-stats')
@@ -729,12 +733,12 @@ document.addEventListener('keydown', (e) => {
 
 // ---------------------------------------------------------------- 搜索与批量批注（⌘F 面板）
 
-/** 面板打开时的搜索词：非空则编辑器渲染预览描边（rerender 管道携带） */
-let searchPreview: string | null = null
+/** 面板打开时的搜索状态：查询词 + 匹配方式（Aa / .*）；非空词则编辑器渲染预览描边 */
+let searchPreview: {query: string; match: MatchOptions} | null = null
 
 const searchPanel = new SearchPanelView({
-  onQueryChange: (query) => {
-    searchPreview = query
+  onQueryChange: (query, match) => {
+    searchPreview = {query, match}
     rerender(false)
   },
   onNavigate: (hit) => {

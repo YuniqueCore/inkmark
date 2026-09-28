@@ -4,6 +4,7 @@
 
 import { expect, test } from '../screenplay/fixtures/screenplay'
 import { BrowseTheWorkbench } from '../screenplay/abilities/BrowseTheWorkbench'
+import { Workbench } from '../screenplay/screens/Workbench'
 import {
   BlurComposerInput,
   ClickPinDot,
@@ -64,11 +65,23 @@ test.describe('撰写卡稳定性', () => {
   })
 
   test('快捷语点击写入批注语、再点移除（可逆）', async ({ actor }) => {
+    const page = BrowseTheWorkbench.as(actor).page
     await actor.attemptsTo(ExpandComposerFromSelection(), PickPhrase('句式空洞'))
-    const input = BrowseTheWorkbench.as(actor).page.locator('#pin-composer-input')
+    const input = Workbench.composerInput(page)
     await expect(input).toHaveValue('句式空洞')
     await actor.attemptsTo(PickPhrase('句式空洞'))
     await expect(input).toHaveValue('')
+  })
+
+  test('撰写卡内嵌替换词输入：与面板同款，随草稿与提交走', async ({ actor }) => {
+    const page = BrowseTheWorkbench.as(actor).page
+    await actor.attemptsTo(ExpandComposerFromSelection())
+    // 表单为共用 ComposerForm：类型 chips + 快捷语 + 批注语 + 替换词一体
+    await expect(Workbench.composerReplacement(page)).toBeVisible()
+    await Workbench.composerReplacement(page).fill('更准确的词')
+    await Workbench.composerInput(page).fill('统一措辞')
+    await Workbench.submitButton(page).click()
+    await expect.poll(() => actor.asks(SidebarCardCount())).toBe(1)
   })
 
   test('完整链路：划选 → 快捷语 → 提交 → 正文高亮与侧栏条目', async ({ actor }) => {

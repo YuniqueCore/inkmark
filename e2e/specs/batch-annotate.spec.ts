@@ -1,9 +1,9 @@
-/** ⌘F 搜索面板：预览描边 / 批量批注 / 替换指令 / 跨文档 / 分组卡内单条编辑。 */
+/** ⌘F 搜索面板：预览描边 / 批量批注 / 替换指令 / 跨文档 / Aa·.* 匹配开关。 */
 
-import type { Page } from '@playwright/test'
 import { expect, test } from '../screenplay/fixtures/screenplay'
 import { BrowseTheWorkbench } from '../screenplay/abilities/BrowseTheWorkbench'
 import { Interaction } from '../screenplay/support/kernel'
+import { Workbench } from '../screenplay/screens/Workbench'
 import {
   ImportTextFile,
   OpenExportModal,
@@ -11,16 +11,13 @@ import {
 import { HighlightCount } from '../screenplay/questions/workbench'
 import { OpenSampleDocument } from '../screenplay/tasks/workbench'
 
-const panelInput = (page: Page) => page.locator('#sp-input')
-const panelSubmit = (page: Page) => page.locator('#sp-submit')
-
 /** ⌘F 打开面板并输入查询词 */
 const SearchViaHotkey = (query: string): Interaction =>
   Interaction.where(`⌘F 打开面板搜索「${query}」`, async (actor) => {
     const page = BrowseTheWorkbench.as(actor).page
     await page.keyboard.press('ControlOrMeta+f')
-    await panelInput(page).waitFor({ state: 'visible' })
-    await panelInput(page).fill(query)
+    await Workbench.panelInput(page).waitFor({ state: 'visible' })
+    await Workbench.panelInput(page).fill(query)
     // 输入触发编辑器预览描边
     await page.locator('#editor .seg-search').first().waitFor({ state: 'visible' })
   })
@@ -33,19 +30,19 @@ test.describe('搜索面板（⌘F）', () => {
   test('⌘F 唤起面板；输入实时预览描边；Esc 关闭并清除预览', async ({ actor }) => {
     const page = BrowseTheWorkbench.as(actor).page
     await actor.attemptsTo(SearchViaHotkey('方式'))
-    await expect(page.locator('#sp-count')).toContainText('命中 2 处')
+    await expect(Workbench.panelCount(page)).toContainText('命中 2 处')
     await expect(page.locator('#editor .seg-search')).toHaveCount(2)
 
     await page.keyboard.press('Escape')
-    await expect(page.locator('#sp-input')).toHaveCount(0)
+    await expect(Workbench.panelInput(page)).toHaveCount(0)
     await expect(page.locator('#editor .seg-search')).toHaveCount(0)
   })
 
   test('批量批注 → 分组卡；组内单条「编辑」直开弹层', async ({ actor }) => {
     const page = BrowseTheWorkbench.as(actor).page
     await actor.attemptsTo(SearchViaHotkey('方式'))
-    await page.locator('#sp-comment').fill('统一处理')
-    await panelSubmit(page).click()
+    await Workbench.panelComment(page).fill('统一处理')
+    await Workbench.panelSubmit(page).click()
 
     await expect.poll(() => actor.asks(HighlightCount())).toBe(2)
     const card = page.locator('.ann-card[data-group]')
@@ -55,15 +52,15 @@ test.describe('搜索面板（⌘F）', () => {
 
     await card.locator('[data-group-op="expand"]').click()
     await card.locator('[data-op="edit"]').first().click()
-    await expect(page.locator('.popup-edit-input')).toBeVisible()
+    await expect(Workbench.popupInput(page)).toBeVisible()
   })
 
   test('替换词随批量批注写入，导出含机器可执行指令', async ({ actor }) => {
     const page = BrowseTheWorkbench.as(actor).page
     await actor.attemptsTo(SearchViaHotkey('方式'))
-    await page.locator('#sp-comment').fill('统一替换')
-    await page.locator('#sp-replacement').fill('路径')
-    await panelSubmit(page).click()
+    await Workbench.panelComment(page).fill('统一替换')
+    await Workbench.panelReplacement(page).fill('路径')
+    await Workbench.panelSubmit(page).click()
 
     await actor.attemptsTo(OpenExportModal())
     await expect(page.locator('#export-preview')).toHaveValue(/替换为「路径」/)
@@ -75,10 +72,10 @@ test.describe('搜索面板（⌘F）', () => {
       ImportTextFile('另一份.txt', '这里也有方式二字。\n还有方式一次。'),
       SearchViaHotkey('方式'),
     )
-    await page.locator('#sp-cross').check()
-    await expect(page.locator('#sp-count')).toContainText('命中 4 处')
-    await page.locator('#sp-comment').fill('统一处理')
-    await panelSubmit(page).click()
+    await Workbench.panelCrossDoc(page).check()
+    await expect(Workbench.panelCount(page)).toContainText('命中 4 处')
+    await Workbench.panelComment(page).fill('统一处理')
+    await Workbench.panelSubmit(page).click()
 
     // 当前文档 2 处；切到另一份也有分组卡
     await expect.poll(() => actor.asks(HighlightCount())).toBe(2)
@@ -88,13 +85,44 @@ test.describe('搜索面板（⌘F）', () => {
     await expect(page.locator('.ann-card[data-group]')).toContainText('2 处')
   })
 
+  test('.* 正则开关解析查询，非法正则计数提示「正则无效」', async ({ actor }) => {
+    const page = BrowseTheWorkbench.as(actor).page
+    // 字面模式下「方?式」不出现（? 非正文）：0 命中，无描边
+    await page.keyboard.press('ControlOrMeta+f')
+    await Workbench.panelInput(page).fill('方?式')
+    await expect(Workbench.panelCount(page)).toContainText('命中 0 处')
+    await expect(page.locator('#editor .seg-search')).toHaveCount(0)
+
+    // .* 开启：? 变量词，命中两处「方式」并实时描边
+    await Workbench.panelRegexToggle(page).click()
+    await expect(Workbench.panelCount(page)).toContainText('命中 2 处')
+    await expect(page.locator('#editor .seg-search')).toHaveCount(2)
+
+    // 非法正则：计数提示且输入描红
+    await Workbench.panelInput(page).fill('方(式')
+    await expect(Workbench.panelCount(page)).toContainText('正则无效')
+    await expect(Workbench.panelInput(page)).toHaveClass(/text-destructive/)
+  })
+
+  test('Aa 开关区分大小写', async ({ actor }) => {
+    const page = BrowseTheWorkbench.as(actor).page
+    await actor.attemptsTo(ImportTextFile('大小写.txt', 'Foo foo FOO。'))
+    await page.keyboard.press('ControlOrMeta+f')
+    await Workbench.panelInput(page).fill('foo')
+    await expect(Workbench.panelCount(page)).toContainText('命中 3 处')
+
+    await Workbench.panelCaseToggle(page).click()
+    await expect(Workbench.panelCount(page)).toContainText('命中 1 处')
+    await expect(page.locator('#editor .seg-search')).toHaveCount(1)
+  })
+
   test('侧栏搜索按钮同样唤起面板；Enter 跳转到下一处命中', async ({ actor }) => {
     const page = BrowseTheWorkbench.as(actor).page
     await page.locator('[data-op="open-search"]').click()
-    await panelInput(page).waitFor({ state: 'visible' })
-    await panelInput(page).fill('方式')
+    await Workbench.panelInput(page).waitFor({ state: 'visible' })
+    await Workbench.panelInput(page).fill('方式')
     await page.locator('#editor .seg-search').first().waitFor({ state: 'visible' })
-    await panelInput(page).press('Enter') // 导航不抛错、命中描边仍在
+    await Workbench.panelInput(page).press('Enter') // 导航不抛错、命中描边仍在
     await expect(page.locator('#editor .seg-search')).toHaveCount(2)
   })
 

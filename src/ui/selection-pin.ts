@@ -11,9 +11,9 @@
 
 import { computePosition, offset, shift, size, limitShift } from '@floating-ui/dom'
 import { escapeHtml } from '../core/text'
-import { icon } from './icons'
-import { hasQuickPhrase, KIND_LABEL, MANUAL_KINDS, QUICK_PHRASES, toggleQuickPhrase } from '../core/types'
+import { MANUAL_KINDS } from '../core/types'
 import type { AnnotationKind } from '../core/types'
+import { ComposerForm, type ComposerState } from './composer'
 
 export interface SelectionInfo {
   start: number
@@ -34,12 +34,10 @@ export interface SelectionInfo {
 type PinSide = 'left' | 'right'
 
 export interface PinCallbacks {
-  onCreate: (info: SelectionInfo, kind: AnnotationKind, comment: string) => void
+  onCreate: (info: SelectionInfo, kind: AnnotationKind, comment: string, replacement?: string) => void
   onCopySelection: (quoted: string) => void
   onDismiss: () => void
 }
-
-const KINDS = MANUAL_KINDS
 
 export class SelectionPin {
   private pin: HTMLElement
@@ -48,13 +46,14 @@ export class SelectionPin {
   /** 小点在鼠标停点的哪一侧，以及纵向延伸方向 */
   private pinSide: PinSide = 'right'
   private pinVertical: 'up' | 'down' = 'down'
-  private kind: AnnotationKind = 'suggestion'
   private closeTimer: ReturnType<typeof setTimeout> | undefined
   /** card 已展开（hover 进入过） */
   private expanded = false
-  /** 草稿按「文档+侧+范围」记账：写一半后划选了别处，重选同一段落可取回（含类型） */
-  private drafts = new Map<string, {text: string; kind: AnnotationKind}>()
+  /** 草稿按「文档+侧+范围」记账：写一半后划选了别处，重选同一段落可取回（含类型与替换词） */
+  private drafts = new Map<string, {text: string; kind: AnnotationKind; replacement: string}>()
   private draftKey = ''
+  /** 展开期间挂载的共用撰写表单（类型 chips + 快捷语 + 批注语 + 替换词） */
+  private composer: ComposerForm | null = null
 
   constructor(private callbacks: PinCallbacks) {
     this.pin = document.createElement('button')
@@ -73,26 +72,7 @@ export class SelectionPin {
     this.card.addEventListener('mouseenter', () => this.cancelCollapse())
     this.card.addEventListener('mouseleave', () => this.scheduleCollapse())
 
-    this.card.addEventListener('input', () => this.saveDraft())
-    this.card.addEventListener('click', (e) => {
-      const phraseChip = (e.target as HTMLElement).closest('.phrase-chip') as HTMLElement | null
-      if (phraseChip) {
-        const input = this.card.querySelector('#pin-composer-input') as HTMLTextAreaElement | null
-        if (input) {
-          input.value = toggleQuickPhrase(input.value, phraseChip.dataset.phrase ?? '')
-          input.dispatchEvent(new Event('input', { bubbles: true })) // 同步草稿
-          this.refreshPhraseChips()
-        }
-        return
-      }
-      const chip = (e.target as HTMLElement).closest('.kind-chip') as HTMLElement | null
-      if (chip) {
-        this.kind = chip.dataset.kind as AnnotationKind
-        this.refreshChips()
-        this.refreshPhraseChips() // 快捷语随类型切换
-        this.saveDraft()
-      }
-    })
+    // 撰写表单（ComposerForm）自理输入与 chips；卡片只留键盘快捷键与操作按钮
     this.card.addEventListener('keydown', (e) => {
       if (e.isComposing) return // 输入法组合中的 Enter/Escape 属于候选操作，不是提交或关闭
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) this.submit()
@@ -105,10 +85,6 @@ export class SelectionPin {
     this.card.addEventListener('click', (e) => {
       const op = (e.target as HTMLElement).dataset.op
       if (op === 'submit') this.submit()
-      if (op === 'cancel') {
-        this.discardDraft()
-        this.dismiss()
-      }
       if (op === 'copy') {
         if (this.info) this.callbacks.onCopySelection(this.info.quoted)
       }
@@ -119,8 +95,7 @@ export class SelectionPin {
       if (this.pin.contains(t) || this.card.contains(t)) return
       // 有草稿时点外部不销毁撰写状态：误触不该吞掉写了一半的批注，
       // 重选同一段落即可取回；空卡片维持「点外部关闭」的习惯。
-      const input = this.card.querySelector('#pin-composer-input') as HTMLTextAreaElement | null
-      if (input && input.value.trim() !== '') return
+      if (this.hasDraftContent()) return
       this.dismiss()
     })
     document.addEventListener('keydown', (e) => {
@@ -181,18 +156,13 @@ export class SelectionPin {
     const draft = this.drafts.get(this.draftKey)
     // 历史草稿可能存着已下架的类型（issue/slop）：回退到默认，避免 chips 无选中态
     const dk = draft?.kind ?? 'suggestion'
-    this.kind = MANUAL_KINDS.includes(dk) ? dk : 'suggestion'
     const quoted = this.info.quoted
     this.card.innerHTML = `
       <div class="p-3">
         <p class="mb-2.5 line-clamp-2 border-l-2 border-primary/30 pl-2 text-[13px] text-muted-foreground">
           “${escapeHtml(quoted.length > 90 ? quoted.slice(0, 90) + '……' : quoted)}”
         </p>
-        <div class="mb-2.5 flex flex-wrap gap-1">${KINDS.map(
-          (k) => `<button class="chip-toggle kind-chip" data-kind="${k}">${icon(k)} ${KIND_LABEL[k]}</button>`,
-        ).join('')}</div>
-        <div id="pin-phrases" class="chip-scroll mb-2.5"></div>
-        <textarea id="pin-composer-input" class="input-base min-h-20 resize-y" placeholder="批注内容：点选快捷语或直接输入；认可类型可不写描述……"></textarea>
+        <div data-composer></div>
         <div class="mt-2.5 flex items-center justify-between">
           <span class="flex items-center gap-1 text-xs text-muted-foreground">
             <span class="kbd">⌘</span><span class="kbd">↵</span> 提交
@@ -203,10 +173,17 @@ export class SelectionPin {
           </span>
         </div>
       </div>`
-    this.refreshChips()
-    const input = this.card.querySelector('#pin-composer-input') as HTMLTextAreaElement | null
-    if (input && draft) input.value = draft.text
-    this.refreshPhraseChips()
+    this.composer = new ComposerForm(
+      this.card.querySelector('[data-composer]') as HTMLElement,
+      {onChange: (s) => this.onComposerChange(s)},
+      {
+        kind: MANUAL_KINDS.includes(dk) ? dk : 'suggestion',
+        comment: draft?.text ?? '',
+        replacement: draft?.replacement ?? '',
+      },
+    )
+    this.composer.render()
+    this.refreshSubmit()
     // 以 visibility:hidden 参与定位测量：display:none 会被 floating-ui 量成 0×0，
     // shift 无法感知真实宽度，靠视口右缘时卡片按零宽度定位、整块撑出屏幕外。
     // pop-in 动画的初始关键帧（scale 0.98）也会让测量矩形偏差几像素，一并停掉；
@@ -217,13 +194,13 @@ export class SelectionPin {
     void this.placeCard().then(() => {
       this.card.style.visibility = ''
       this.card.style.animation = ''
-      const input = this.card.querySelector('#pin-composer-input') as HTMLTextAreaElement | null
-      input?.focus()
+      this.composer?.focusComment()
     })
   }
 
   private collapse(): void {
     this.expanded = false
+    this.composer = null
     this.card.classList.add('hidden')
     this.card.innerHTML = ''
   }
@@ -232,8 +209,7 @@ export class SelectionPin {
     // 已有草稿（含输入法组合中的文本）时不自动收起：hover 离开只应关掉「误触展开」
     // 的空卡片，不能在输入途中吞掉撰写内容（卡片消失的根因）。写了一半的卡片只通过
     // 提交 / 取消 / Esc / 点击卡片外部关闭。
-    const input = this.card.querySelector('#pin-composer-input') as HTMLTextAreaElement | null
-    if (input && input.value.trim() !== '') return
+    if (this.hasDraftContent()) return
     this.cancelCollapse()
     this.closeTimer = setTimeout(() => this.collapse(), 320)
   }
@@ -242,48 +218,36 @@ export class SelectionPin {
     clearTimeout(this.closeTimer)
   }
 
-  private refreshChips(): void {
-    this.card.querySelectorAll('.kind-chip').forEach((chip) => {
-      chip.classList.toggle('on', (chip as HTMLElement).dataset.kind === this.kind)
-    })
+  /** 草稿账本里当前范围是否留有撰写内容（批注语或替换词） */
+  private hasDraftContent(): boolean {
+    const draft = this.drafts.get(this.draftKey)
+    return draft !== undefined && (draft.text.trim() !== '' || draft.replacement.trim() !== '')
   }
 
-  /** 当前类型的快捷语 chips；on 态 = 短语已包含在批注语里 */
-  private phraseChips(): string {
-    const input = this.card.querySelector('#pin-composer-input') as HTMLTextAreaElement | null
-    const value = input?.value ?? ''
-    return (QUICK_PHRASES[this.kind] ?? [])
-      .map(
-        (p) =>
-          `<button class="chip-toggle phrase-chip ${hasQuickPhrase(value, p) ? 'on' : ''}" data-phrase="${escapeHtml(p)}">${escapeHtml(p)}</button>`,
-      )
-      .join('')
+  /** 撰写变化：记账草稿 + 提交按钮态（表单自身已保证只做定向更新） */
+  private onComposerChange(s: ComposerState): void {
+    if (this.draftKey) {
+      this.drafts.set(this.draftKey, {text: s.comment, kind: s.kind, replacement: s.replacement})
+    }
+    this.refreshSubmit()
   }
 
-  private refreshPhraseChips(): void {
-    const host = this.card.querySelector('#pin-phrases')
-    if (host) host.innerHTML = this.phraseChips()
+  private refreshSubmit(): void {
+    const submit = this.card.querySelector('[data-op="submit"]') as HTMLButtonElement | null
+    if (submit && this.composer) submit.disabled = !this.composer.canSubmit()
   }
 
   private submit(): void {
-    const input = this.card.querySelector('#pin-composer-input') as HTMLTextAreaElement | null
-    if (!input || !this.info) return
-    const comment = input.value.trim()
+    if (!this.composer || !this.info) return
     // 认可类允许只划不写：标记本身就是反馈；其余类型仍需描述
-    if (comment === '' && this.kind !== 'praise') {
-      input.focus()
+    if (!this.composer.canSubmit()) {
+      this.composer.focusComment()
       return
     }
+    const s = this.composer.state()
     this.discardDraft()
-    this.callbacks.onCreate(this.info, this.kind, comment)
+    this.callbacks.onCreate(this.info, s.kind, s.comment.trim(), s.replacement.trim() || undefined)
     this.dismiss()
-  }
-
-  /** 撰写内容记入当前范围的草稿（输入与切换类型时调用） */
-  private saveDraft(): void {
-    if (!this.draftKey) return
-    const input = this.card.querySelector('#pin-composer-input') as HTMLTextAreaElement | null
-    if (input) this.drafts.set(this.draftKey, {text: input.value, kind: this.kind})
   }
 
   private discardDraft(): void {
@@ -308,11 +272,9 @@ export class SelectionPin {
       })
       return
     }
-    const draft = this.drafts.get(this.draftKey)
     // 「正被使用」的卡片不因选区丢失而关闭：有草稿，或输入框仍持有焦点
     //（展开即 focus，用户可能还没输入就开始滚快捷语/挪视口）
-    const input = this.card.querySelector('#pin-composer-input') as HTMLTextAreaElement | null
-    const engaged = (draft !== undefined && draft.text.trim() !== '') || (input !== null && document.activeElement === input)
+    const engaged = this.hasDraftContent() || (this.composer?.isFocused() ?? false)
     if (engaged) {
       this.pin.classList.add('hidden')
       return

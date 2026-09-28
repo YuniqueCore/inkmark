@@ -12,18 +12,43 @@ export interface MatchRange {
   end: number
 }
 
+/** 匹配方式（VSCode 搜索的 Aa / .* 两个开关） */
+export interface MatchOptions {
+  /** 区分大小写（缺省不区分） */
+  caseSensitive?: boolean
+  /** 把查询当正则解析（缺省按字面匹配） */
+  regex?: boolean
+}
+
+/** .* 模式下查询是否为有效正则；无效返回错误信息（面板描红提示），有效返回 null */
+export function regexIssue(query: string): string | null {
+  try {
+    new RegExp(query.trim(), 'u')
+    return null
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e)
+  }
+}
+
 /** 正文里 query 的全部出现位置：非重叠、按出现顺序。
- * 拉丁字母大小写不敏感；query 为空白返回 []；正则元字符按字面匹配。 */
-export function findMatches(text: string, query: string): MatchRange[] {
+ * 缺省大小写不敏感、正则元字符按字面匹配；MatchOptions 切换 Aa / .*。
+ * 空白查询与无效正则返回 []；正则模式的零长命中跳过（批注区间必须非空）。 */
+export function findMatches(text: string, query: string, options: MatchOptions = {}): MatchRange[] {
   const q = query.trim()
   if (q === '') return []
-  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const re = new RegExp(escaped, 'giu')
-  re.lastIndex = 0
-  return [...text.matchAll(re)].map((m) => ({
-    start: m.index!,
-    end: m.index! + m[0]!.length,
-  }))
+  const source = options.regex ? q : q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  let re: RegExp
+  try {
+    re = new RegExp(source, `g${options.caseSensitive ? '' : 'i'}u`)
+  } catch {
+    return [] // 无效正则：无命中（面板经 regexIssue 描红提示）
+  }
+  return [...text.matchAll(re)]
+    .filter((m) => m[0]!.length > 0)
+    .map((m) => ({
+      start: m.index!,
+      end: m.index! + m[0]!.length,
+    }))
 }
 
 /** 由匹配区间构造一批共享 groupId 的批注（comment / kind / replacement 全组一致）。 */

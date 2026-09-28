@@ -23,14 +23,14 @@ const info = (over: Partial<SelectionInfo> = {}): SelectionInfo => ({
 let pin: SelectionPin
 let pinEl: HTMLElement
 let card: HTMLElement
-let created: {info: SelectionInfo; kind: string; comment: string} | null
+let created: {info: SelectionInfo; kind: string; comment: string; replacement?: string} | null
 
 beforeEach(() => {
   document.body.innerHTML = ''
   created = null
   pin = new SelectionPin({
-    onCreate: (i, kind, comment) => {
-      created = {info: i, kind, comment}
+    onCreate: (i, kind, comment, replacement) => {
+      created = {info: i, kind, comment, replacement}
     },
     onCopySelection: () => {},
     onDismiss: () => {},
@@ -53,7 +53,7 @@ async function showPin(over: Partial<SelectionInfo> = {}): Promise<void> {
 async function openCard(): Promise<HTMLTextAreaElement> {
   pinEl.dispatchEvent(new MouseEvent('mouseenter'))
   await Promise.resolve()
-  const input = card.querySelector('#pin-composer-input') as HTMLTextAreaElement
+  const input = card.querySelector('[data-role="composer-comment"]') as HTMLTextAreaElement
   expect(input).toBeTruthy()
   return input
 }
@@ -63,6 +63,9 @@ const type = (input: HTMLTextAreaElement, text: string): void => {
   input.dispatchEvent(new Event('input', {bubbles: true}))
 }
 
+const replacementInput = (): HTMLInputElement =>
+  card.querySelector('[data-role="composer-replacement"]') as HTMLInputElement
+
 describe('SelectionPin 草稿保护', () => {
   it('有草稿时点击外部：卡片与草稿保留', async () => {
     await showPin()
@@ -71,7 +74,7 @@ describe('SelectionPin 草稿保护', () => {
     document.body.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}))
     expect(card.classList.contains('hidden')).toBe(false)
     expect(
-      (card.querySelector('#pin-composer-input') as HTMLTextAreaElement).value,
+      (card.querySelector('[data-role="composer-comment"]') as HTMLTextAreaElement).value,
     ).toBe('写了一半的批注')
   })
 
@@ -90,9 +93,9 @@ describe('SelectionPin 草稿保护', () => {
     card.dispatchEvent(new MouseEvent('mouseleave'))
     vi.advanceTimersByTime(500)
     expect(card.classList.contains('hidden')).toBe(false)
-    expect((card.querySelector('#pin-composer-input') as HTMLTextAreaElement).value).toBe(
-      '输入中的内容',
-    )
+    expect(
+      (card.querySelector('[data-role="composer-comment"]') as HTMLTextAreaElement).value,
+    ).toBe('输入中的内容')
   })
 
   it('空卡片鼠标滑出：误触 hover 仍自动收起', async () => {
@@ -183,12 +186,44 @@ describe('SelectionPin 草稿保护', () => {
     const label = chip().dataset.phrase!
     chip().dispatchEvent(new MouseEvent('click', {bubbles: true}))
     await Promise.resolve()
-    const input = card.querySelector('#pin-composer-input') as HTMLTextAreaElement
+    const input = card.querySelector('[data-role="composer-comment"]') as HTMLTextAreaElement
     expect(input.value).toBe(label)
     expect(chip().classList.contains('on')).toBe(true)
     chip().dispatchEvent(new MouseEvent('click', {bubbles: true}))
     expect(input.value).toBe('')
     expect(chip().classList.contains('on')).toBe(false)
+  })
+
+  it('建议替换词随提交传出（划词也能下达机器可执行指令）', async () => {
+    await showPin()
+    const input = await openCard()
+    type(input, '统一措辞')
+    replacementInput().value = '更准确的词'
+    replacementInput().dispatchEvent(new Event('input', {bubbles: true}))
+    card.querySelector('[data-op="submit"]')!.dispatchEvent(new MouseEvent('click', {bubbles: true}))
+    expect(created).not.toBeNull()
+    expect(created!.comment).toBe('统一措辞')
+    expect(created!.replacement).toBe('更准确的词')
+  })
+
+  it('替换词随草稿记账：划选别处再划回，批注语与替换词一起恢复', async () => {
+    await showPin({start: 10, end: 22})
+    let input = await openCard()
+    type(input, '带替换的草稿')
+    replacementInput().value = '新词'
+    replacementInput().dispatchEvent(new Event('input', {bubbles: true}))
+
+    // 划选另一段：全新空会话
+    await showPin({start: 100, end: 112})
+    input = await openCard()
+    expect(input.value).toBe('')
+    expect(replacementInput().value).toBe('')
+
+    // 划回原段：批注语与替换词一起恢复
+    await showPin({start: 10, end: 22})
+    input = await openCard()
+    expect(input.value).toBe('带替换的草稿')
+    expect(replacementInput().value).toBe('新词')
   })
 
   it('撰写卡只提供四类人工类型；切换类型后快捷语 chips 随之更换', async () => {
@@ -225,7 +260,7 @@ describe('卡片在操作内部控件时稳定存在', () => {
     await showPin()
     await openCard()
     await settle()
-    card.querySelector('#pin-phrases')!.dispatchEvent(new Event('scroll', {bubbles: true}))
+    card.querySelector('[data-role="phrases"]')!.dispatchEvent(new Event('scroll', {bubbles: true}))
     expect(card.classList.contains('hidden')).toBe(false)
   })
 
@@ -241,7 +276,7 @@ describe('卡片在操作内部控件时稳定存在', () => {
     await showPin()
     await openCard()
     await settle()
-    expect(document.activeElement).toBe(card.querySelector('#pin-composer-input'))
+    expect(document.activeElement).toBe(card.querySelector('[data-role="composer-comment"]'))
     document.dispatchEvent(new Event('scroll'))
     expect(card.classList.contains('hidden')).toBe(false)
     expect(pinEl.classList.contains('hidden')).toBe(true)

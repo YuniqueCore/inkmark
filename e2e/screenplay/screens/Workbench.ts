@@ -2,26 +2,46 @@
 
 import type { Locator, Page } from '@playwright/test'
 
+/** 划词撰写卡（body 直挂的浮层；对象字面量内部复用经此入口） */
+const composerCardOf = (page: Page): Locator => page.locator('body > div.popover-panel.z-50')
+
 export const Workbench = {
   /** 正文首块（示例文档的第一段） */
   firstBlock: (page: Page): Locator => page.locator('#editor .editor-blk').first(),
   /** 划选后出现的小点（body 直挂的 fixed 圆钮） */
   pinDot: (page: Page): Locator => page.locator('body > button.fixed'),
   /** 划词撰写卡 */
-  composerCard: (page: Page): Locator => page.locator('body > div.popover-panel.z-50'),
-  composerInput: (page: Page): Locator => page.locator('#pin-composer-input'),
-  phraseRow: (page: Page): Locator => page.locator('#pin-phrases'),
-  phraseChips: (page: Page): Locator => page.locator('#pin-phrases .phrase-chip'),
+  composerCard: composerCardOf,
+  composerInput: (page: Page): Locator =>
+    composerCardOf(page).locator('[data-role="composer-comment"]'),
+  composerReplacement: (page: Page): Locator =>
+    composerCardOf(page).locator('[data-role="composer-replacement"]'),
+  phraseRow: (page: Page): Locator => composerCardOf(page).locator('[data-role="phrases"]'),
+  phraseChips: (page: Page): Locator =>
+    composerCardOf(page).locator('[data-role="phrases"] .phrase-chip'),
   kindChip: (page: Page, kind: string): Locator =>
-    page.locator(`body > div.popover-panel.z-50 [data-kind="${kind}"]`),
+    composerCardOf(page).locator(`.kind-chip[data-kind="${kind}"]`),
   submitButton: (page: Page): Locator =>
-    page.locator('body > div.popover-panel.z-50').getByRole('button', { name: '添加批注' }),
+    composerCardOf(page).getByRole('button', { name: '添加批注' }),
   /** 批注高亮段 */
   highlights: (page: Page): Locator => page.locator('#editor .seg-hl'),
   /** 批注详情弹层（点击高亮出现） */
   popup: (page: Page): Locator => page.locator('body > div.popover-panel.z-60'),
   popupInput: (page: Page): Locator => page.locator('.popup-edit-input'),
-  popupPhraseChips: (page: Page): Locator => page.locator('[data-role="phrases"] .phrase-chip'),
+  popupPhraseChips: (page: Page): Locator =>
+    page.locator('body > div.popover-panel.z-60 [data-role="phrases"] .phrase-chip'),
+  /** ⌘F 搜索面板 */
+  panel: (page: Page): Locator => page.locator('body > div.popover-panel.z-70'),
+  panelInput: (page: Page): Locator => page.locator('#sp-input'),
+  panelCount: (page: Page): Locator => page.locator('#sp-count'),
+  panelComment: (page: Page): Locator =>
+    page.locator('[data-sp-composer] [data-role="composer-comment"]'),
+  panelReplacement: (page: Page): Locator =>
+    page.locator('[data-sp-composer] [data-role="composer-replacement"]'),
+  panelCaseToggle: (page: Page): Locator => page.locator('#sp-case'),
+  panelRegexToggle: (page: Page): Locator => page.locator('#sp-regex'),
+  panelCrossDoc: (page: Page): Locator => page.locator('#sp-cross'),
+  panelSubmit: (page: Page): Locator => page.locator('#sp-submit'),
   /** 侧栏批注卡 */
   sidebarCards: (page: Page): Locator => page.locator('#sidebar .ann-card'),
   /** 文档树 */

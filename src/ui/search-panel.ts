@@ -1,15 +1,20 @@
 /** 搜索与批量批注面板：⌘F 或侧栏搜索按钮唤起的 VSCode 式浮层。
  *
+ * 面板只管搜索本身：查询输入、Aa 大小写、.* 正则、命中导航与批量提交；
+ * 撰写表单（类型 / 快捷语 / 批注语 / 替换词）由 ComposerForm 内嵌提供，
+ * 与划词撰写卡、批注弹层编辑态共用同一组件。
+ *
  * 输入法契约：面板内任何输入事件只做定向 DOM 更新（命中计数、按钮态、
- * chips on 态），绝不整体重绘面板 —— 组合输入中替换节点会打断输入法。
+ * toggle 选中态），绝不整体重绘面板 —— 组合输入中替换节点会打断输入法。
  * 正文预览描边经 onQueryChange 交给 main 重渲染编辑器（另一棵子树，安全）。
  */
 
-import { findMatches, type MatchRange } from '../core/batch'
+import { findMatches, regexIssue } from '../core/batch'
+import type { MatchOptions, MatchRange } from '../core/batch'
 import { escapeHtml } from '../core/text'
-import { KIND_LABEL, MANUAL_KINDS, QUICK_PHRASES, hasQuickPhrase, toggleQuickPhrase } from '../core/types'
 import type { AnnotationKind } from '../core/types'
 import { icon } from './icons'
+import { ComposerForm } from './composer'
 
 export interface SearchHit {
   docId: string
@@ -29,21 +34,27 @@ export interface SearchPanelDocs {
 }
 
 export interface SearchPanelCallbacks {
-  /** 查询变化 → main 更新编辑器预览描边 */
-  onQueryChange: (query: string) => void
+  /** 查询或匹配方式变化 → main 更新编辑器预览描边 */
+  onQueryChange: (query: string, match: MatchOptions) => void
   /** 跳到第 index 个命中（跨文档时可能切文档） */
   onNavigate: (hit: SearchHit) => void
   onBatchAnnotate: (targets: BatchTarget[], kind: AnnotationKind, comment: string, replacement?: string) => void
   onClose: () => void
 }
 
+/** VSCode 式开关按钮的选中态（与顶栏模式按钮同款高亮） */
+const TOGGLE_ON = 'bg-secondary text-secondary-foreground'
+
 export class SearchPanelView {
   private el: HTMLElement
   private open = false
   private query = ''
-  private kind: AnnotationKind = 'suggestion'
-  private comment = ''
-  private replacement = ''
+  /** 匹配开关在会话内记忆（跨开合保留，与编辑器搜索习惯一致） */
+  private caseSensitive = false
+  private useRegex = false
+  /** ComposerForm 每次打开重建；lastKind 记住上次选择的类型 */
+  private lastKind: AnnotationKind = 'suggestion'
+  private composer: ComposerForm | null = null
   private crossDoc = false
   private navIndex = 0
   private docs: SearchPanelDocs[] = []
@@ -77,9 +88,8 @@ export class SearchPanelView {
     if (!this.open) return
     this.open = false
     this.query = ''
-    this.comment = ''
-    this.replacement = ''
     this.navIndex = 0
+    this.composer = null
     this.el.classList.add('hidden')
     this.el.innerHTML = ''
     this.callbacks.onClose()
@@ -94,6 +104,10 @@ export class SearchPanelView {
 
   // ---------------------------------------------------------------- 数据
 
+  private matchOptions(): MatchOptions {
+    return {caseSensitive: this.caseSensitive, regex: this.useRegex}
+  }
+
   private scopedDocs(): SearchPanelDocs[] {
     return this.crossDoc ? this.docs : this.docs.filter((d) => d.id === this.activeDocId)
   }
@@ -101,19 +115,19 @@ export class SearchPanelView {
   private allHits(): SearchHit[] {
     const hits: SearchHit[] = []
     for (const d of this.scopedDocs()) {
-      for (const m of findMatches(d.text, this.query)) hits.push({ docId: d.id, ...m })
+      for (const m of findMatches(d.text, this.query, this.matchOptions())) hits.push({ docId: d.id, ...m })
     }
     return hits
   }
 
   private targets(): BatchTarget[] {
     return this.scopedDocs()
-      .map((d) => ({ docId: d.id, matches: findMatches(d.text, this.query) }))
+      .map((d) => ({ docId: d.id, matches: findMatches(d.text, this.query, this.matchOptions()) }))
       .filter((t) => t.matches.length > 0)
   }
 
   private canSubmit(): boolean {
-    return this.allHits().length > 0 && (this.comment.trim() !== '' || this.kind === 'praise')
+    return this.allHits().length > 0 && (this.composer?.canSubmit() ?? false)
   }
 
   // ---------------------------------------------------------------- 渲染
@@ -125,6 +139,8 @@ export class SearchPanelView {
         <div class="flex items-center gap-1.5">
           <span class="text-muted-foreground">${icon('search', 'size-4')}</span>
           <input id="sp-input" class="input-base h-8 min-w-0 flex-1 text-[13px]" placeholder="搜索正文（Enter 下一个，Esc 关闭）…" value="${escapeHtml(this.query)}" />
+          <button id="sp-case" class="btn btn-ghost btn-sm h-7 w-7 p-0 text-[11px] font-semibold ${this.caseSensitive ? TOGGLE_ON : ''}" title="区分大小写" aria-pressed="${this.caseSensitive}">Aa</button>
+          <button id="sp-regex" class="btn btn-ghost btn-sm h-7 w-7 p-0 text-[11px] font-semibold ${this.useRegex ? TOGGLE_ON : ''}" title="使用正则表达式" aria-pressed="${this.useRegex}">.*</button>
           <button id="sp-close" class="btn btn-ghost btn-sm h-7 w-7 p-0" title="关闭 (Esc)" aria-label="关闭搜索">${icon('x', 'size-3.5')}</button>
         </div>
         <div class="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
@@ -135,12 +151,7 @@ export class SearchPanelView {
           </span>
         </div>
         <div id="sp-body" class="mt-2 border-t border-border pt-2">
-          <div class="flex flex-wrap gap-1">${MANUAL_KINDS.map(
-            (k) => `<button class="chip-toggle ${this.kind === k ? 'on' : ''}" data-sp-kind="${k}">${KIND_LABEL[k]}</button>`,
-          ).join('')}</div>
-          <div id="sp-phrases" class="chip-scroll mt-1.5">${this.phraseChips()}</div>
-          <textarea id="sp-comment" class="input-base mt-1.5 min-h-12 resize-y text-[13px]" placeholder="批注内容：点选快捷语或直接输入；认可类型可不写描述……">${escapeHtml(this.comment)}</textarea>
-          <input id="sp-replacement" class="input-base mt-1.5 h-8 text-[13px]" placeholder="建议替换词（可选，导出为机器可执行指令）" value="${escapeHtml(this.replacement)}" />
+          <div data-sp-composer></div>
           <div class="mt-2 flex items-center gap-2">
             <label class="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground" title="在整个工作区的所有文档里搜索并批量批注">
               <input type="checkbox" id="sp-cross" class="size-3 accent-[var(--primary)]" ${this.crossDoc ? 'checked' : ''}/>
@@ -150,17 +161,17 @@ export class SearchPanelView {
           </div>
         </div>
       </div>`
+    this.composer = new ComposerForm(
+      this.el.querySelector('[data-sp-composer]') as HTMLElement,
+      {onChange: (s) => {
+        this.lastKind = s.kind
+        this.refreshSubmit()
+      }},
+      {kind: this.lastKind},
+    )
+    this.composer.render()
     this.wire()
     this.refresh()
-  }
-
-  private phraseChips(): string {
-    return (QUICK_PHRASES[this.kind] ?? [])
-      .map(
-        (p) =>
-          `<button class="chip-toggle ${hasQuickPhrase(this.comment, p) ? 'on' : ''}" data-sp-phrase="${escapeHtml(p)}">${escapeHtml(p)}</button>`,
-      )
-      .join('')
   }
 
   private wire(): void {
@@ -168,9 +179,7 @@ export class SearchPanelView {
     input.addEventListener('input', () => {
       // 只更新计数与正文预览，绝不重绘面板（输入法组合安全）
       this.query = input.value
-      this.navIndex = 0
-      this.callbacks.onQueryChange(this.query)
-      this.refresh()
+      this.afterMatchChange()
     })
     input.addEventListener('keydown', (e) => {
       if (e.isComposing) return
@@ -186,33 +195,15 @@ export class SearchPanelView {
     this.el.querySelector('#sp-close')?.addEventListener('click', () => this.close())
     this.el.querySelector('#sp-prev')?.addEventListener('click', () => this.navigate(-1))
     this.el.querySelector('#sp-next')?.addEventListener('click', () => this.navigate(1))
-
-    this.el.querySelectorAll('[data-sp-kind]').forEach((chip) =>
-      chip.addEventListener('click', () => {
-        this.kind = (chip as HTMLElement).dataset.spKind as AnnotationKind
-        // 定向更新：kind chips 选中态 + 快捷语整排（不重绘面板）
-        this.el.querySelectorAll('[data-sp-kind]').forEach((c) =>
-          c.classList.toggle('on', (c as HTMLElement).dataset.spKind === this.kind),
-        )
-        const host = this.el.querySelector('#sp-phrases')!
-        host.innerHTML = this.phraseChips()
-        this.wirePhraseChips()
-        this.refreshSubmit()
-      }),
-    )
-    this.wirePhraseChips()
-
-    this.el.querySelector('#sp-comment')?.addEventListener('input', (e) => {
-      this.comment = (e.target as HTMLTextAreaElement).value
-      // 只同步 chips on 态与提交态，不重绘（输入法安全）
-      const value = this.comment
-      this.el.querySelectorAll('[data-sp-phrase]').forEach((c) =>
-        c.classList.toggle('on', hasQuickPhrase(value, (c as HTMLElement).dataset.spPhrase ?? '')),
-      )
-      this.refreshSubmit()
+    this.el.querySelector('#sp-case')?.addEventListener('click', () => {
+      this.caseSensitive = !this.caseSensitive
+      this.syncToggle('#sp-case', this.caseSensitive)
+      this.afterMatchChange()
     })
-    this.el.querySelector('#sp-replacement')?.addEventListener('input', (e) => {
-      this.replacement = (e.target as HTMLInputElement).value
+    this.el.querySelector('#sp-regex')?.addEventListener('click', () => {
+      this.useRegex = !this.useRegex
+      this.syncToggle('#sp-regex', this.useRegex)
+      this.afterMatchChange()
     })
     this.el.querySelector('#sp-cross')?.addEventListener('change', (e) => {
       this.crossDoc = (e.target as HTMLInputElement).checked
@@ -220,29 +211,31 @@ export class SearchPanelView {
       this.refresh()
     })
     this.el.querySelector('#sp-submit')?.addEventListener('click', () => {
-      if (!this.canSubmit()) return
+      if (!this.composer || !this.canSubmit()) return
+      const s = this.composer.state()
       this.callbacks.onBatchAnnotate(
         this.targets(),
-        this.kind,
-        this.comment.trim(),
-        this.replacement.trim() || undefined,
+        s.kind,
+        s.comment.trim(),
+        s.replacement.trim() || undefined,
       )
       this.close()
     })
   }
 
-  private wirePhraseChips(): void {
-    this.el.querySelectorAll('[data-sp-phrase]').forEach((chip) =>
-      chip.addEventListener('click', () => {
-        this.comment = toggleQuickPhrase(this.comment, (chip as HTMLElement).dataset.spPhrase ?? '')
-        const comment = this.el.querySelector('#sp-comment') as HTMLTextAreaElement | null
-        if (comment) comment.value = this.comment
-        this.el.querySelectorAll('[data-sp-phrase]').forEach((c) =>
-          c.classList.toggle('on', hasQuickPhrase(this.comment, (c as HTMLElement).dataset.spPhrase ?? '')),
-        )
-        this.refreshSubmit()
-      }),
-    )
+  /** 匹配方式或查询变化：重置导航、同步预览描边与命中计数 */
+  private afterMatchChange(): void {
+    this.navIndex = 0
+    this.callbacks.onQueryChange(this.query, this.matchOptions())
+    this.refresh()
+  }
+
+  private syncToggle(sel: string, on: boolean): void {
+    const btn = this.el.querySelector(sel) as HTMLButtonElement | null
+    if (!btn) return
+    btn.classList.toggle('bg-secondary', on)
+    btn.classList.toggle('text-secondary-foreground', on)
+    btn.setAttribute('aria-pressed', String(on))
   }
 
   private navigate(delta: number): void {
@@ -255,9 +248,15 @@ export class SearchPanelView {
 
   /** 定向刷新：命中计数 / 导航可用态 / 提交按钮（不重绘面板、不碰焦点） */
   private refresh(): void {
+    const invalid = this.useRegex && this.query.trim() !== '' && regexIssue(this.query) !== null
     const hits = this.allHits()
     const count = this.el.querySelector('#sp-count')
-    if (count) count.textContent = this.query.trim() === '' ? '' : `命中 ${hits.length} 处`
+    if (count) {
+      count.textContent =
+        this.query.trim() === '' ? '' : invalid ? '正则无效' : `命中 ${hits.length} 处`
+    }
+    const input = this.el.querySelector('#sp-input') as HTMLInputElement | null
+    if (input) input.classList.toggle('text-destructive', invalid)
     const prev = this.el.querySelector('#sp-prev') as HTMLButtonElement | null
     const next = this.el.querySelector('#sp-next') as HTMLButtonElement | null
     if (prev && next) {
@@ -270,9 +269,8 @@ export class SearchPanelView {
 
   private refreshSubmit(): void {
     const submit = this.el.querySelector('#sp-submit') as HTMLButtonElement | null
-    if (!submit) return
-    const total = this.allHits().length
-    submit.textContent = `批量批注 ${total} 处`
+    if (!submit || !this.composer) return
+    submit.textContent = `批量批注 ${this.allHits().length} 处`
     submit.disabled = !this.canSubmit()
   }
 }
