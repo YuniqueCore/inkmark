@@ -31,8 +31,7 @@ export const Workbench = {
   popupPhraseChips: (page: Page): Locator =>
     page.locator('body > div.popover-panel.z-60 [data-role="phrases"] .phrase-chip'),
   /** ⌘F 搜索面板 */
-  panel: (page: Page): Locator => page.locator('body > div.popover-panel.z-70'),
-  panelInput: (page: Page): Locator => page.locator('#sp-input'),
+  panel: (page: Page): Locator => page.locator('body > div.popover-panel.z-70'),  panelInput: (page: Page): Locator => page.locator('#sp-input'),
   panelCount: (page: Page): Locator => page.locator('#sp-count'),
   panelComment: (page: Page): Locator =>
     page.locator('[data-sp-composer] [data-role="composer-comment"]'),
@@ -42,10 +41,12 @@ export const Workbench = {
   panelRegexToggle: (page: Page): Locator => page.locator('#sp-regex'),
   panelCrossDoc: (page: Page): Locator => page.locator('#sp-cross'),
   panelSubmit: (page: Page): Locator => page.locator('#sp-submit'),
+  /** 导入冲突诊断树 */
+  conflictDialog: (page: Page): Locator => page.locator('[role="dialog"][aria-label="导入冲突诊断"]'),
   /** 侧栏批注卡 */
   sidebarCards: (page: Page): Locator => page.locator('#sidebar .ann-card'),
   /** 文档树 */
-  treeItems: (page: Page): Locator => page.locator('#filetree [data-doc-id]'),
+  treeItems: (page: Page): Locator => page.locator('#filetree [data-doc]'),
   selectAllCheckbox: (page: Page): Locator => page.locator('#filetree [data-select-all]'),
   bulkBar: (page: Page): Locator => page.locator('#filetree [data-bulk-bar]'),
   bulkDelete: (page: Page): Locator => page.locator('#filetree [data-bulk="delete"]'),

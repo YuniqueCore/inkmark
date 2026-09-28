@@ -198,6 +198,13 @@
   .chip-toggle.on {
     @apply border-border bg-secondary text-secondary-foreground shadow-xs;
   }
+  /* 分段迷你控件（导入诊断树逐行动作）：容器给边框，选项选中态同 chip */
+  .seg-opt {
+    @apply rounded-md px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:text-foreground;
+  }
+  .seg-opt.on {
+    @apply bg-secondary text-secondary-foreground shadow-xs;
+  }
   /* 快捷语 chips 容器：grid 列流式布局，纵向封顶两行、超出转水平滚动，
      不让词表撑高卡片（隐藏滚动条，边缘截断的 chip 即可滚动暗示） */
   .chip-scroll {

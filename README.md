@@ -38,6 +38,7 @@ UI 按 shadcn/ui 语系构建（Tailwind CSS v4 + 设计 token，灵感来自 ra
   2. **片段 + 批注**：逐条列出被批注的片段和对应批注；
   3. **评审引用块**：Markdown 引用格式，直接贴回聊天窗口给 AI agent。
   支持复制与下载 .md；默认不含已解决批注（可勾选包含）；「包含文件信息」开关在导出顶部标注来源文件名，多文档场景区分出处（W3C JSON 保持标准格式不受影响）。
+- **文件夹导入 + 冲突诊断树**：工作区为空时直接导入；已有文档时，同名冲突（相对路径 + 文件名）先弹**诊断树**——逐行决策「覆盖 / 重命名 / 跳过」，或用批量预设（**全部覆盖 / 覆盖未标注的 / 覆盖标注的**）；重命名插扩展名前递增（`chapter-1-1.txt`），同名同文标「无变化」跳过，取消则整次作废。**覆盖不毁批注**：原有批注按「编辑原文」同款管线重锚到新文本，弹层内预演预告重锚 / 失锚条数，先知情再确认。单文件导入走同一套诊断，无双轨逻辑。
 - **W3C Web Annotation 导入 / 导出**：批注可导出为标准 Annotation JSON（TextQuoteSelector + TextPositionSelector 双选择器）；导入时自动按 quote 在目标文本里重锚（位置失配 → 全文搜索 → prefix/suffix 消歧），锚不上的明确跳过、绝不错。打开 .json 文件即可导入。
 - **slop 预扫描**：内置 [anti-slop-kit](https://github.com/YuniqueCore/natural-talk) 的中英文词库（zh 169 条 / en 212 条），一键把套话候选标成红色波浪线预填批注，人工复核后解决或删除。扫描管线与 `slop_check.py` 完全对齐：代码围栏 / 行内代码 / URL / 邮箱保护、正则 flags、重叠去重先于 cluster/density 阈值升级；**评分分档同源**（w / cluster_w / density_w 权重，score = 证据权重 / 千单位，clean / light / noticeable / heavy）；**评分历史**随文档持久化（最近 20 次采样），统计卡展示环比升降与迷你趋势线。
 - **文档树多选批量操作**：树内每份文档可勾选（支持全选），批量导出（弹层选格式后统一复制 / 打包 zip，同名文件自动加序号）或批量删除（二次确认）；每个条目 hover 还有单项导出按钮，无需切换文档即可导出。
@@ -82,6 +83,8 @@ src/
     diff.ts      行级 Myers diff（对照视图）
     reanchor.ts  编辑原文后的批注重锚（quote 重锚 + diff 位移兜底）
     w3c.ts       W3C Web Annotation 导入 / 导出与 robust 重锚
+    import.ts    导入管线（文本 / 会话 / W3C 分类解析）
+    import-conflict.ts  导入冲突判定与计划（诊断树 / 重命名 / 批量预设）
     slop.ts      词库扫描：保护区掩码 / 去重 / cluster / density
   ui/            DOM 层（editor / selection / sidebar / exporter / storage）
   skill/         natural-talk 子模块——词库单一来源：

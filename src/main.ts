@@ -7,6 +7,8 @@ import type { W3CRouted } from './core/import'
 import { reanchorAnnotations } from './core/reanchor'
 import { buildBatchAnnotations, findMatches } from './core/batch'
 import type { MatchOptions } from './core/batch'
+import { buildImportPlan } from './core/import-conflict'
+import { importConflictDialog } from './ui/import-conflict-dialog'
 import { splitBlocks } from './core/text'
 import { appendSample, hitsToAnnotations, scanSlopReport } from './core/slop'
 import type { SlopReport } from './core/types'
@@ -559,24 +561,78 @@ async function clearRevised(): Promise<void> {
 
 // ---------------------------------------------------------------- 导入
 
-/** 文件导入编排：管线（分类/解析）在 core/import.ts，这里只做状态应用与提示 */
+/** 文件导入编排：管线（分类/解析）在 core/import.ts，冲突判定在 core/import-conflict.ts，
+ * 这里只做诊断弹出、状态应用与提示。工作区为空 → 直接导入；存在同名冲突 → 先弹
+ * 诊断树（取消 = 整次导入作废，W3C/会话也一并作废），确认后一次性落盘。 */
 async function importFiles(files: FileList | File[]): Promise<void> {
   const r = await importFileList(files, { docs: state.docs, currentDoc: activeDoc() })
-  const applied = applyW3C(r.w3cRouted)
-  const newDocs = [...r.textDocs, ...r.sessionDocs]
-  if (newDocs.length > 0) {
-    state = { docs: [...state.docs, ...newDocs], activeDocId: newDocs[0]!.id }
+  const plan = buildImportPlan(
+    r.textDocs.map((d) => ({name: d.name, path: d.path, text: d.text})),
+    state.docs,
+  )
+  let rows = plan.rows
+  if (plan.hasConflicts) {
+    const decided = await importConflictDialog(plan, state.docs)
+    if (!decided) return
+    rows = decided
   }
-  if (applied.merged > 0 || newDocs.length > 0) rerender(false)
+
+  // 落盘：direct/rename 建新文档；overwrite 覆盖文本并重锚已有批注（编辑原文同款管线）
+  const now = Date.now()
+  const fresh: DocItem[] = []
+  const overwrites = new Map<string, {text: string; annotations: Annotation[]}>()
+  let reanchored = 0
+  let lost = 0
+  for (const row of rows) {
+    if (row.action === 'direct' || row.action === 'rename') {
+      fresh.push({
+        id: newDocId(),
+        name: row.renameTo ?? row.incoming.name,
+        path: row.incoming.path,
+        text: row.incoming.text,
+        annotations: [],
+        addedAt: now,
+      })
+    } else if (row.action === 'overwrite' && row.existing) {
+      const preview = reanchorAnnotations(row.existing.text, row.incoming.text, row.existing.annotations)
+      overwrites.set(row.existing.id, {text: row.incoming.text, annotations: preview.annotations})
+      reanchored += preview.moved
+      lost += preview.clamped
+    }
+  }
+
+  const applied = applyW3C(r.w3cRouted)
+  const newDocs = [...fresh, ...r.sessionDocs]
+  if (overwrites.size > 0 || newDocs.length > 0) {
+    state = {
+      docs: [
+        ...state.docs.map((d) => {
+          const ow = overwrites.get(d.id)
+          return ow ? {...d, text: ow.text, annotations: ow.annotations} : d
+        }),
+        ...newDocs,
+      ],
+      activeDocId: fresh[0]?.id ?? r.sessionDocs[0]?.id ?? state.activeDocId,
+    }
+  }
+  if (applied.merged > 0 || newDocs.length > 0 || overwrites.size > 0) rerender(false)
   if (applied.merged > 0 || applied.unmatched > 0) {
     toast(w3cToast(applied.merged, applied.unmatched, applied.routed))
-  } else if (newDocs.length === 0 && r.w3cFiles === 0) {
+  } else if (newDocs.length === 0 && overwrites.size === 0 && r.w3cFiles === 0) {
     toast(r.skipped > 0 ? `没有可导入的文本文件（跳过 ${r.skipped} 个）` : '没有可导入的文件')
   }
-  if (newDocs.length > 0) {
+  if (newDocs.length > 0 || overwrites.size > 0) {
+    const action = (a: string): number => rows.filter((row) => row.action === a).length
     const parts: string[] = []
-    if (r.textDocs.length > 0) parts.push(`导入 ${r.textDocs.length} 个文档`)
+    const imported = action('direct') + action('rename')
+    if (imported > 0) parts.push(`导入 ${imported} 个文档`)
+    if (overwrites.size > 0) {
+      let p = `覆盖 ${overwrites.size}`
+      if (reanchored > 0 || lost > 0) p += `（重锚 ${reanchored}${lost > 0 ? ` · 失锚 ${lost}` : ''}）`
+      parts.push(p)
+    }
     if (r.sessionDocs.length > 0) parts.push(`会话已合并（${r.sessionDocs.length} 个文档）`)
+    if (action('identical') > 0) parts.push(`${action('identical')} 个内容相同已跳过`)
     if (r.skipped > 0) parts.push(`跳过 ${r.skipped}`)
     if (r.truncated > 0) parts.push(`${r.truncated} 个超大文件已截断`)
     toast(parts.join('，'))

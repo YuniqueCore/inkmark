@@ -38,6 +38,7 @@ The UI follows the shadcn/ui design language (Tailwind CSS v4 + design tokens, i
   2. **Snippets + annotations**: each annotated passage listed with its annotations;
   3. **Review block**: Markdown quote format, paste it straight back to your AI agent.
   Copy or download as .md; resolved annotations are excluded by default (opt-in); a “file info” switch stamps the source file name on top — handy with multiple documents (W3C JSON stays standards-compliant).
+- **Folder import + conflict treeview**: with an empty workspace, imports go straight in; otherwise same-name conflicts (relative path + file name) open a **diagnostic treeview** first — decide per file "overwrite / rename / skip", or use the bulk presets (**overwrite all / overwrite un-annotated / overwrite annotated**); renames increment before the extension (`chapter-1-1.txt`), identical content is flagged "no change" and skipped, and cancelling voids the whole import. **Overwriting never destroys annotations**: existing annotations re-anchor onto the new text through the same pipeline as source editing, with a re-anchor / lost-anchor preview per row before you confirm. Single-file imports run the same diagnosis — no second code path.
 - **W3C Web Annotation import / export**: export annotations as standard Annotation JSON (TextQuoteSelector + TextPositionSelector); on import, quotes are re-anchored automatically (position mismatch → full-text search → prefix/suffix disambiguation) and anything that can't be anchored is skipped explicitly — never mis-anchored. Opening a .json file imports it.
 - **Slop pre-scan**: ships with the [anti-slop-kit](https://github.com/YuniqueCore/natural-talk) lexicons (169 zh / 212 en entries); one click marks boilerplate candidates with red squiggles and prefills annotations for human review. The pipeline mirrors `slop_check.py`: protected regions (code fences / inline code / URLs / emails), regex flags, overlap dedupe before cluster/density escalation; **identical scoring** (w / cluster_w / density_w weights, score = evidence weight per kilo-unit, clean / light / noticeable / heavy); **score history** persists per document (last 20 samples) with deltas and a mini trend line in the stats card.
 - **Document tree with bulk actions**: multi-select documents (select all supported), bulk export (pick a format once → copy everything or download a zip, duplicate names auto-numbered) or bulk delete (with confirmation); each tree row also has a hover export button, so you never need to switch documents just to export.
@@ -82,6 +83,8 @@ src/
     diff.ts      line-level Myers diff (revision view)
     reanchor.ts  re-anchoring after source edits (quote re-anchor + diff shift fallback)
     w3c.ts       W3C Web Annotation import / export with robust re-anchoring
+    import.ts    import pipeline (text / session / W3C classification)
+    import-conflict.ts  import-conflict plan (treeview / renames / bulk presets)
     slop.ts      lexicon scan: protected regions / dedupe / cluster / density
   ui/            DOM layer (editor / selection / sidebar / exporter / storage)
   skill/         natural-talk submodule — single source of truth for lexicons:
