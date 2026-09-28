@@ -216,3 +216,43 @@ describe('SelectionPin 草稿保护', () => {
     expect(pinEl.classList.contains('hidden')).toBe(true)
   })
 })
+
+describe('卡片在操作内部控件时稳定存在', () => {
+  /** 展开卡的 focus 落在 placeCard 的异步链上，等一个宏任务确保已聚焦 */
+  const settle = (): Promise<void> => new Promise((r) => setTimeout(r, 0))
+
+  it('横向滚动快捷语行：卡片保留（滚动源自卡片内部，不触发重锚定）', async () => {
+    await showPin()
+    await openCard()
+    await settle()
+    card.querySelector('#pin-phrases')!.dispatchEvent(new Event('scroll', {bubbles: true}))
+    expect(card.classList.contains('hidden')).toBe(false)
+  })
+
+  it('textarea 自身滚动：卡片保留', async () => {
+    await showPin()
+    const input = await openCard()
+    await settle()
+    input.dispatchEvent(new Event('scroll', {bubbles: true}))
+    expect(card.classList.contains('hidden')).toBe(false)
+  })
+
+  it('输入框聚焦但为空时视口滚动：卡片保留为写作面板、小点退场', async () => {
+    await showPin()
+    await openCard()
+    await settle()
+    expect(document.activeElement).toBe(card.querySelector('#pin-composer-input'))
+    document.dispatchEvent(new Event('scroll'))
+    expect(card.classList.contains('hidden')).toBe(false)
+    expect(pinEl.classList.contains('hidden')).toBe(true)
+  })
+
+  it('失焦且无草稿：视口滚动仍按原语义关闭', async () => {
+    await showPin()
+    await openCard()
+    await settle()
+    ;(document.activeElement as HTMLElement).blur()
+    document.dispatchEvent(new Event('scroll'))
+    expect(card.classList.contains('hidden')).toBe(true)
+  })
+})

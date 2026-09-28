@@ -29,10 +29,22 @@ git clone --recurse-submodules https://github.com/YuniqueCore/inkmark.git
 bun install        # 或 npm install
 bun run dev        # 开发
 bun run build      # 类型检查 + 构建到 dist/
-bun run test       # vitest 单测
+bun run test       # vitest 单测（core 纯函数 + 组件逻辑）
+bun run test:e2e   # Playwright screenplay 浏览器套件（用系统 Chrome）
 ```
 
 > 词库来自 [natural-talk](https://github.com/YuniqueCore/natural-talk) 子模块（`skill/`），克隆时需要 `--recurse-submodules`；已克隆的仓库用 `git submodule update --init` 补齐。
+
+## 测试
+
+双层测试，各司其职：
+
+- **vitest（tests/）**：core 纯函数与组件逻辑（草稿记账、IME 守卫、导出 / 导入 / 重锚）。
+- **Playwright screenplay（e2e/）**：真实浏览器行为，按 Screenplay 模式分层——
+  `abilities/`（驾驶页面）→ `screens/`（语义定位器契约）→ `interactions/`（原子操作）→
+  `tasks/`（业务工作流）→ `questions/`(只读状态查询)，断言只出现在 `e2e/specs/`。
+  重点覆盖：撰写卡在操作内部控件（横滚快捷语、输入、失焦）时的稳定性、
+  批注弹层编辑态、导出弹层、文件树批量操作、手机视口抽屉互斥。
 
 ## 结构
 
@@ -51,6 +63,7 @@ src/
   skill/         natural-talk 子模块——词库单一来源：
                  skill/references/anti-slop-kit/scripts/data/{zh,en}.json
 tests/           vitest 正反例
+e2e/             Playwright screenplay 浏览器套件（abilities/tasks/questions/specs）
 ```
 
 设计约束：**规范文本是唯一事实源**——批注只存 `[start, end)` 偏移；core 不碰 DOM 和存储；localStorage 是唯一 IO 边界。原文在批注过程中只读，因此偏移不会漂移（编辑原文属于将来功能，届时需要引入 robust anchoring）。

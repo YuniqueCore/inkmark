@@ -24,6 +24,9 @@ export function confirmDialog(opts: ConfirmOptions): Promise<boolean> {
     const panel = document.createElement('div')
     panel.className =
       'fixed left-1/2 top-1/2 z-101 w-[min(420px,92vw)] -translate-x-1/2 -translate-y-1/2 rounded-xl border bg-card p-5 text-card-foreground shadow-2xl'
+    panel.setAttribute('role', 'alertdialog')
+    panel.setAttribute('aria-modal', 'true')
+    panel.setAttribute('aria-label', opts.title)
     panel.style.animation = 'pop-in 0.14s ease-out'
     panel.innerHTML = `
       <div class="flex items-start gap-3">

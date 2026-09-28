@@ -131,7 +131,12 @@ export class SelectionPin {
       }
     })
     window.addEventListener('resize', () => this.reanchor())
-    document.addEventListener('scroll', () => this.reanchor(), true)
+    document.addEventListener('scroll', (e) => {
+      // 卡片内部的滚动（快捷语横滑、textarea 滚动）不是视口变化：
+      // 此时选区已因 input.focus() 交出，重锚定会把展开态误判为失效而关卡
+      if (e.target instanceof Node && this.card.contains(e.target)) return
+      this.reanchor()
+    }, true)
   }
 
   /** mouseup 入口：选区稳定后亮出小点 */
@@ -304,7 +309,11 @@ export class SelectionPin {
       return
     }
     const draft = this.drafts.get(this.draftKey)
-    if (draft && draft.text.trim() !== '') {
+    // 「正被使用」的卡片不因选区丢失而关闭：有草稿，或输入框仍持有焦点
+    //（展开即 focus，用户可能还没输入就开始滚快捷语/挪视口）
+    const input = this.card.querySelector('#pin-composer-input') as HTMLTextAreaElement | null
+    const engaged = (draft !== undefined && draft.text.trim() !== '') || (input !== null && document.activeElement === input)
+    if (engaged) {
       this.pin.classList.add('hidden')
       return
     }
