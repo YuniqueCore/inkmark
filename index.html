@@ -66,7 +66,7 @@
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
             <span class="hidden lg:inline">编辑原文</span>
           </button>
-          <button id="btn-diff" class="btn btn-outline btn-sm" title="对照 AI 改稿：贴入改稿生成原文 vs 改稿 diff，两侧均可划选写批注">
+          <button id="btn-diff" class="btn btn-outline btn-sm hidden sm:inline-flex" title="对照 AI 改稿：贴入改稿生成原文 vs 改稿 diff，两侧均可划选写批注">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M11 18H8a2 2 0 0 1-2-2V9"/></svg>
             <span class="hidden lg:inline">对照</span>
           </button>
@@ -105,16 +105,14 @@
 
     <main id="layout" class="flex h-[calc(100vh-57px)] h-[calc(100dvh-57px)] overflow-hidden">
       <aside id="filetree" class="theme-side shrink-0 overflow-y-auto py-2" style="width: var(--tree-w, 240px)" aria-label="文档树"></aside>
-      <div id="handle-left" class="resize-handle shrink-0 max-lg:hidden" role="separator" aria-orientation="vertical" data-side="left">
-        <button type="button" class="resize-thumb" data-collapse="tree" title="收起/展开文档树（拖拽其余部分调节宽度）" aria-label="收起或展开文档树"></button>
-      </div>
+      <div id="handle-left" class="resize-handle shrink-0 max-lg:hidden" role="separator" aria-orientation="vertical"></div>
       <div id="editor-wrap" class="relative min-w-0 flex-1">
         <section id="editor" class="editor absolute inset-0 overflow-y-auto px-4 py-6 sm:px-12 sm:py-10" aria-label="批注文本区"></section>
+        <button type="button" id="collapse-left" class="edge-collapse max-lg:hidden" data-collapse="tree" title="收起/展开文档树" aria-label="收起或展开文档树"></button>
+        <button type="button" id="collapse-right" class="edge-collapse max-lg:hidden" data-collapse="sidebar" title="收起/展开批注栏" aria-label="收起或展开批注栏"></button>
         <div id="reading-fab"></div>
       </div>
-      <div id="handle-right" class="resize-handle shrink-0 max-lg:hidden" role="separator" aria-orientation="vertical" data-side="right">
-        <button type="button" class="resize-thumb" data-collapse="sidebar" title="收起/展开批注栏（拖拽其余部分调节宽度）" aria-label="收起或展开批注栏"></button>
-      </div>
+      <div id="handle-right" class="resize-handle shrink-0 max-lg:hidden" role="separator" aria-orientation="vertical"></div>
       <aside id="sidebar" class="theme-side shrink-0 overflow-y-auto p-4" style="width: var(--side-w, 380px)" aria-label="批注列表"></aside>
     </main>
 

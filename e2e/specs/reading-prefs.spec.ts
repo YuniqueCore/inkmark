@@ -35,8 +35,8 @@ test.describe('悬浮快捷设置', () => {
     await expect(dialog.locator('[data-set-theme]')).toHaveCount(12)
     await dialog.locator('[data-set-texture="grid"]').click()
     await expect(page.locator('#editor')).toHaveAttribute('data-texture', 'grid')
-    await dialog.locator('[data-set-font="serif"]').click()
-    await expect(page.locator('#editor')).toHaveAttribute('data-font', 'serif')
+    await dialog.locator('[data-set-font="song"]').click()
+    await expect(page.locator('#editor')).toHaveAttribute('data-font', 'song')
     await dialog.locator('[data-set-size]').fill('19')
     await expect
       .poll(() =>

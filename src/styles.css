@@ -613,38 +613,56 @@
   inset: 0 -3px;
 }
 .resize-thumb {
-  @apply relative z-10 flex h-14 w-3.5 cursor-pointer items-center justify-center rounded-full border
-    opacity-0 transition-opacity duration-150 text-muted-foreground bg-card shadow-sm;
-  border-color: var(--border);
-  font-size: 10px;
-  line-height: 1;
-  user-select: none;
+  @apply flex h-14 w-1 items-center justify-center rounded-full opacity-0 transition-opacity duration-150
+    text-muted-foreground bg-border;
 }
 .resize-handle:hover .resize-thumb,
-.resize-thumb:focus-visible,
-.resize-handle.is-collapsed .resize-thumb {
+.resize-handle.dragging .resize-thumb {
   @apply opacity-100;
 }
 .resize-handle.dragging .resize-thumb {
   @apply bg-ring h-24;
 }
-.resize-handle.is-collapsed .resize-thumb {
-  @apply h-10;
+/* ---------------------------------------------------------------- 边缘折叠竖条
+   独立于分隔拖拽条的固定 affordance：贴编辑区左右缘、垂直居中，任何状态
+   都可见可点（floating edge pill 模式）；收起后位置不变、仅字形翻转。 */
+.edge-collapse {
+  @apply absolute top-1/2 z-20 flex h-14 w-4 -translate-y-1/2 items-center justify-center border bg-card text-muted-foreground shadow-sm;
+  border-color: var(--border);
+  font-size: 11px;
+  line-height: 1;
+  user-select: none;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.15s ease-out, color 0.12s;
 }
-/* 折叠小白条字形：展开态指向外侧（点击=收起），收起态指向内侧（点击=展开） */
-.resize-thumb::before {
+.edge-collapse:hover,
+.edge-collapse:focus-visible {
+  opacity: 1;
+  color: var(--foreground);
+}
+#collapse-left {
+  left: 0;
+  border-left: 0;
+  border-radius: 0 8px 8px 0;
+}
+#collapse-right {
+  right: 0;
+  border-right: 0;
+  border-radius: 8px 0 0 8px;
+}
+#collapse-left::before {
   content: '‹';
 }
-.resize-handle[data-side='right'] .resize-thumb::before {
+#collapse-right::before {
   content: '›';
 }
-.resize-handle.is-collapsed[data-side='left'] .resize-thumb::before {
+#collapse-left.is-collapsed::before {
   content: '›';
 }
-.resize-handle.is-collapsed[data-side='right'] .resize-thumb::before {
+#collapse-right.is-collapsed::before {
   content: '‹';
 }
-/* 拖拽仍在 handle 空白处：按钮之上的区域才是拖拽热区——按钮阻止冒泡区分二者 */
 body.select-none {
   user-select: none;
 }
@@ -764,6 +782,10 @@ body.select-none {
 [data-font='serif'] { font-family: var(--font-doc-serif); }
 [data-font='kai'] { font-family: var(--font-doc-kai); }
 [data-font='mono'] { font-family: var(--font-doc-mono); }
+[data-font='hei'] { font-family: 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif; }
+[data-font='fangsong'] { font-family: 'FangSong', 'STFangsong', 'FangSong_GB2312', var(--font-doc-serif); }
+[data-font='yuan'] { font-family: 'Yuanti SC', 'YouYuan', 'HYWenHei-85W', 'PingFang SC', sans-serif; }
+[data-font='lishu'] { font-family: 'LiSu', 'STLibian', 'Libian SC', var(--font-doc-kai); }
 
 /* ---------------------------------------------------------------- 设置控件（设置弹层与悬浮球共用） */
 

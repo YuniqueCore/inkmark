@@ -881,11 +881,11 @@ function togglePanel(which: 'tree' | 'sidebar'): void {
   }
   if (which === 'tree') {
     const off = $('#filetree').classList.toggle('hidden')
-    // 折叠按钮长在 handle 上：handle 保留，仅翻转小白条状态（字形由 CSS 切换）
-    $('#handle-left').classList.toggle('is-collapsed', off)
+    // 边缘竖条位置固定，收起后仅翻字形（CSS 由 is-collapsed 驱动）
+    $('#collapse-left').classList.toggle('is-collapsed', off)
   } else {
     const off = $('#sidebar').classList.toggle('hidden')
-    $('#handle-right').classList.toggle('is-collapsed', off)
+    $('#collapse-right').classList.toggle('is-collapsed', off)
   }
 }
 
@@ -928,7 +928,7 @@ wireHeaderMenu($('#btn-view'), [
 $('#btn-tree-drawer').addEventListener('click', () => togglePanel('tree'))
 $('#btn-sidebar-drawer').addEventListener('click', () => togglePanel('sidebar'))
 
-// 侧栏折叠小白条：长在 resize handle 上，点击收起/展开（拖拽走 handle 其余区域）
+// 边缘折叠竖条：贴编辑区左右缘垂直居中，与分隔拖拽条彻底分离
 document.querySelectorAll<HTMLElement>('[data-collapse]').forEach((btn) => {
   btn.addEventListener('click', (e) => {
     e.stopPropagation()

@@ -31,7 +31,7 @@ export type TextureId =
   | 'vintage'
   | 'grain'
   | 'checker'
-export type FontId = 'sans' | 'serif' | 'kai' | 'mono'
+export type FontId = 'sans' | 'hei' | 'song' | 'kai' | 'fangsong' | 'yuan' | 'lishu' | 'mono'
 export type FontWeightId = 'light' | 'regular' | 'medium' | 'bold'
 
 export interface ReadingPrefs {
@@ -96,8 +96,12 @@ export const TEXTURE_META: Record<TextureId, {label: string}> = {
 
 export const FONT_META: Record<FontId, {label: string}> = {
   sans: {label: '默认'},
-  serif: {label: '宋体'},
+  hei: {label: '黑体'},
+  song: {label: '宋体'},
   kai: {label: '楷体'},
+  fangsong: {label: '仿宋'},
+  yuan: {label: '圆体'},
+  lishu: {label: '隶书'},
   mono: {label: '等宽'},
 }
 
@@ -133,6 +137,13 @@ export function flipPolarity(theme: ThemeId): ThemeId {
 
 const clampSize = (v: number): number => Math.min(FONT_SIZE.max, Math.max(FONT_SIZE.min, v))
 
+/** 字体归一：旧版 'serif' 键迁移为 'song'（标签同为宋体，族链不变） */
+function normalizeFont(v: unknown): FontId {
+  if (typeof v !== 'string') return DEFAULT_PREFS.font
+  if (v === 'serif') return 'song'
+  return v in FONT_META ? (v as FontId) : DEFAULT_PREFS.font
+}
+
 /** 自定义色校验：仅收 #rgb / #rrggbb；缺省/非法一律 null（跟随主题） */
 const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i
 function normalizeColor(v: unknown): string | null {
@@ -148,7 +159,7 @@ export function normalizePrefs(raw: unknown): ReadingPrefs {
       typeof r.texture === 'string' && r.texture in TEXTURE_META
         ? (r.texture as TextureId)
         : DEFAULT_PREFS.texture,
-    font: typeof r.font === 'string' && r.font in FONT_META ? (r.font as FontId) : DEFAULT_PREFS.font,
+    font: normalizeFont(r.font),
     fontSize:
       typeof r.fontSize === 'number' && Number.isFinite(r.fontSize)
         ? clampSize(r.fontSize)
