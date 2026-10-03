@@ -25,9 +25,16 @@ describe('normalizePrefs · localStorage 脏数据安全', () => {
       texture: 'grid',
       font: 'kai',
       fontSize: 18,
+      fontWeight: 'regular',
     })
     // 部分字段缺失：缺失项回落，合法项保留
     expect(normalizePrefs({texture: 'paper'})).toEqual({...DEFAULT_PREFS, texture: 'paper'})
+  })
+
+  it('字重：未知值回落 regular，合法值保留', () => {
+    expect(normalizePrefs({fontWeight: 'bold'}).fontWeight).toBe('bold')
+    expect(normalizePrefs({fontWeight: 'ultra'}).fontWeight).toBe('regular')
+    expect(normalizePrefs({}).fontWeight).toBe('regular')
   })
 
   it('字号钳制到 [13, 22]，非有限数回落默认', () => {

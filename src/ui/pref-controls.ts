@@ -2,8 +2,8 @@
  * 控件无状态（.on 由调用方按当前偏好同步），改动通过 bindPrefControls 的 patch 回调上抛。
  */
 
-import { FONT_META, FONT_SIZE, TEXTURE_META, THEME_META } from '../core/prefs'
-import type { FontId, TextureId, ThemeId } from '../core/prefs'
+import { FONT_META, FONT_SIZE, FONT_WEIGHT_META, TEXTURE_META, THEME_META } from '../core/prefs'
+import type { FontId, FontWeightId, TextureId, ThemeId } from '../core/prefs'
 import type { ReadingPrefs } from '../core/prefs'
 
 /** 主题缩略示意：迷你界面直接用真实 token 上色（深色主题补 .dark 驱动中区 token） */
@@ -59,6 +59,19 @@ export function fontOptionsHtml(active: FontId): string {
     .join('')
 }
 
+export function fontWeightOptionsHtml(active: FontWeightId): string {
+  return (Object.keys(FONT_WEIGHT_META) as FontWeightId[])
+    .map(
+      (id) => `
+      <button type="button" class="font-card${id === active ? ' on' : ''}" data-set-weight="${id}"
+        title="${FONT_WEIGHT_META[id].label}（${FONT_WEIGHT_META[id].value}）" aria-pressed="${id === active}">
+        <span class="font-sample text-[15px] leading-6" style="font-weight:${FONT_WEIGHT_META[id].value}">字Aa</span>
+        <span class="mt-0.5 block text-[11px] text-muted-foreground">${FONT_WEIGHT_META[id].label}</span>
+      </button>`,
+    )
+    .join('')
+}
+
 export function fontSizeControlHtml(value: number): string {
   return `
     <div class="flex items-center gap-3">
@@ -74,11 +87,12 @@ export function bindPrefControls(
   onChange: (patch: Partial<ReadingPrefs>) => void,
 ): void {
   root.addEventListener('click', (e) => {
-    const t = (e.target as HTMLElement).closest<HTMLElement>('[data-set-theme],[data-set-texture],[data-set-font]')
+    const t = (e.target as HTMLElement).closest<HTMLElement>('[data-set-theme],[data-set-texture],[data-set-font],[data-set-weight]')
     if (!t) return
     if (t.dataset.setTheme) onChange({theme: t.dataset.setTheme as ThemeId})
     else if (t.dataset.setTexture) onChange({texture: t.dataset.setTexture as TextureId})
     else if (t.dataset.setFont) onChange({font: t.dataset.setFont as FontId})
+    else if (t.dataset.setWeight) onChange({fontWeight: t.dataset.setWeight as FontWeightId})
   })
   root.addEventListener('input', (e) => {
     const t = e.target as HTMLInputElement
@@ -99,5 +113,8 @@ export function syncPrefControls(root: HTMLElement, prefs: ReadingPrefs): void {
   )
   root.querySelectorAll<HTMLElement>('[data-set-font]').forEach((el) =>
     el.classList.toggle('on', el.dataset.setFont === prefs.font),
+  )
+  root.querySelectorAll<HTMLElement>('[data-set-weight]').forEach((el) =>
+    el.classList.toggle('on', el.dataset.setWeight === prefs.fontWeight),
   )
 }

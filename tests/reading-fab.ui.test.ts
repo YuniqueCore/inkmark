@@ -38,16 +38,18 @@ const expand = (): void => {
 }
 
 describe('ReadingFab · 展开与收起', () => {
-  it('初始收起；点主钮展开五个子项并标记 aria-expanded，再点收起', () => {
+  it('初始收起；点主钮展开六个子项并标记 aria-expanded，再点收起', () => {
     expect(root.classList.contains('open')).toBe(false)
     expand()
     expect(root.classList.contains('open')).toBe(true)
-    expect(root.querySelectorAll('[data-fab-item]')).toHaveLength(5)
+    expect(root.querySelectorAll('[data-fab-item]')).toHaveLength(6)
     expect(root.querySelector('.fab-btn')?.getAttribute('aria-expanded')).toBe('true')
-    // 子项沿 1/4 圆弧（右/下偏移均为正的行内定位）
+    // 子项沿右上 1/4 圆弧（左/下偏移均为正的行内定位，锚定编辑区左下角）
     const first = root.querySelector('[data-fab-item="theme"]') as HTMLElement
-    expect(first.style.right).toBeTruthy()
+    expect(first.style.left).toBeTruthy()
     expect(first.style.bottom).toBeTruthy()
+    // 标签气泡数据就位（hover 时浮出）
+    expect(first.dataset.label).toBe('主题')
     expand()
     expect(root.classList.contains('open')).toBe(false)
   })
@@ -114,5 +116,19 @@ describe('ReadingFab · 二级选项', () => {
     ;(root.querySelector('[data-fab-item="settings"]') as HTMLElement).click()
     expect(settingsOpened).toBe(1)
     expect(root.classList.contains('open')).toBe(false)
+  })
+})
+
+describe('ReadingFab · 字重面板', () => {
+  it('悬停字重子项弹出四档面板；点选上抛 fontWeight patch', () => {
+    expand()
+    ;(root.querySelector('[data-fab-item="weight"]') as HTMLElement).dispatchEvent(new Event('mouseenter'))
+    const panel = root.querySelector('[data-fab-flyout]') as HTMLElement
+    expect(panel.hidden).toBe(false)
+    expect(panel.querySelectorAll('[data-set-weight]')).toHaveLength(4)
+    expect(panel.querySelector('.fab-flyout-head')?.textContent).toContain('字重')
+    ;(panel.querySelector('[data-set-weight="bold"]') as HTMLButtonElement).click()
+    expect(patches.at(-1)).toEqual({fontWeight: 'bold'})
+    expect(panel.querySelector('[data-set-weight="bold"]')?.classList.contains('on')).toBe(true)
   })
 })

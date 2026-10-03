@@ -2,7 +2,7 @@
  * 状态所有者是 main（单一数据源），本模块只提供读 / 存 / 画三个动作。
  */
 
-import { isDarkContent, normalizePrefs } from '../core/prefs'
+import { FONT_WEIGHT_META, isDarkContent, normalizePrefs } from '../core/prefs'
 import type { ReadingPrefs } from '../core/prefs'
 import { icon } from './icons'
 
@@ -31,6 +31,7 @@ export function applyPrefs(p: ReadingPrefs): void {
   el.dataset.theme = p.theme
   el.classList.toggle('dark', isDarkContent(p.theme))
   el.style.setProperty('--doc-font-size', `${p.fontSize}px`)
+  el.style.setProperty('--doc-font-weight', String(FONT_WEIGHT_META[p.fontWeight].value))
   const editor = document.querySelector('#editor')
   editor?.setAttribute('data-texture', p.texture)
   editor?.setAttribute('data-font', p.font)

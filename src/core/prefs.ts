@@ -1,4 +1,4 @@
-/** 阅读偏好模型：主题 / 纹理 / 字体 / 字号。纯数据与纯函数，无 DOM。
+/** 阅读偏好模型：主题 / 纹理 / 字体 / 字号 / 字重。纯数据与纯函数，无 DOM。
  *
  * 主题分两类：
  * - 整面主题（light / sepia / dark）：整个应用同一套明暗；
@@ -8,8 +8,9 @@
  */
 
 export type ThemeId = 'light' | 'sepia' | 'dark' | 'panda' | 'panda-inverse'
-export type TextureId = 'none' | 'paper' | 'grid' | 'ruled' | 'linen'
+export type TextureId = 'none' | 'paper' | 'grid' | 'ruled' | 'linen' | 'dots' | 'diagonal' | 'vintage' | 'grain'
 export type FontId = 'sans' | 'serif' | 'kai' | 'mono'
+export type FontWeightId = 'light' | 'regular' | 'medium' | 'bold'
 
 export interface ReadingPrefs {
   theme: ThemeId
@@ -19,6 +20,8 @@ export interface ReadingPrefs {
   font: FontId
   /** 正文字号 px（.editor-blk / .diff-blk） */
   fontSize: number
+  /** 正文字重 */
+  fontWeight: FontWeightId
 }
 
 export const THEME_META: Record<ThemeId, {label: string; hint: string; dark: boolean}> = {
@@ -35,6 +38,10 @@ export const TEXTURE_META: Record<TextureId, {label: string}> = {
   grid: {label: '方格'},
   ruled: {label: '横线'},
   linen: {label: '织物'},
+  dots: {label: '点阵'},
+  diagonal: {label: '斜纹'},
+  vintage: {label: '旧纸'},
+  grain: {label: '颗粒'},
 }
 
 export const FONT_META: Record<FontId, {label: string}> = {
@@ -46,11 +53,20 @@ export const FONT_META: Record<FontId, {label: string}> = {
 
 export const FONT_SIZE = {min: 13, max: 22, step: 0.5, default: 16.5} as const
 
+/** 字重档位与 CSS 数值的单一映射：样式变量与控件渲染都从这里取 */
+export const FONT_WEIGHT_META: Record<FontWeightId, {label: string; value: number}> = {
+  light: {label: '细', value: 300},
+  regular: {label: '常规', value: 400},
+  medium: {label: '中等', value: 500},
+  bold: {label: '粗', value: 700},
+}
+
 export const DEFAULT_PREFS: ReadingPrefs = {
   theme: 'light',
   texture: 'none',
   font: 'sans',
   fontSize: FONT_SIZE.default,
+  fontWeight: 'regular',
 }
 
 /** 主题的中区（正文 / 弹层）是否深色：html .dark 类的单一判定来源 */
@@ -89,5 +105,9 @@ export function normalizePrefs(raw: unknown): ReadingPrefs {
       typeof r.fontSize === 'number' && Number.isFinite(r.fontSize)
         ? clampSize(r.fontSize)
         : DEFAULT_PREFS.fontSize,
+    fontWeight:
+      typeof r.fontWeight === 'string' && r.fontWeight in FONT_WEIGHT_META
+        ? (r.fontWeight as FontWeightId)
+        : DEFAULT_PREFS.fontWeight,
   }
 }

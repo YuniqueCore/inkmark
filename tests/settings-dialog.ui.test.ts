@@ -25,11 +25,12 @@ beforeEach(() => {
 })
 
 describe('settingsDialog · 渲染', () => {
-  it('主题/纹理/字体/字号按 META 渲染齐全，当前项 on', () => {
+  it('主题/纹理/字体/字重/字号按 META 渲染齐全，当前项 on', () => {
     open({...DEFAULT_PREFS, theme: 'panda', texture: 'grid', font: 'serif'})
     expect(panel.querySelectorAll('[data-set-theme]')).toHaveLength(Object.keys(THEME_META).length)
     expect(panel.querySelectorAll('[data-set-texture]')).toHaveLength(Object.keys(TEXTURE_META).length)
     expect(panel.querySelectorAll('[data-set-font]')).toHaveLength(Object.keys(FONT_META).length)
+    expect(panel.querySelectorAll('[data-set-weight]')).toHaveLength(4)
     expect(panel.querySelector('[data-set-theme="panda"]')?.classList.contains('on')).toBe(true)
     expect(panel.querySelector('[data-set-texture="grid"]')?.classList.contains('on')).toBe(true)
     expect(panel.querySelector('[data-set-font="serif"]')?.classList.contains('on')).toBe(true)

@@ -372,6 +372,7 @@
 .editor-blk {
   @apply mb-5 leading-[2.05] tracking-[0.01em];
   font-size: var(--doc-font-size, 16.5px);
+  font-weight: var(--doc-font-weight, 400);
 }
 .seg-hl {
   @apply rounded-[4px] cursor-pointer transition-shadow duration-300;
@@ -427,6 +428,7 @@
 .diff-blk {
   @apply mb-0 min-w-0 flex-1 leading-[2.05] tracking-[0.01em];
   font-size: var(--doc-font-size, 16.5px);
+  font-weight: var(--doc-font-weight, 400);
 }
 .diff-blk.editor-blk { margin: 0; }
 
@@ -552,6 +554,31 @@ body.select-none {
     repeating-linear-gradient(45deg, var(--texture-line) 0, var(--texture-line) 1px, transparent 1px, transparent 6px),
     repeating-linear-gradient(-45deg, var(--texture-line) 0, var(--texture-line) 1px, transparent 1px, transparent 6px);
 }
+[data-texture='dots'] {
+  background-image: radial-gradient(var(--texture-line) 1px, transparent 1.5px);
+  background-size: 18px 18px;
+}
+[data-texture='diagonal'] {
+  background-image: repeating-linear-gradient(45deg, var(--texture-line) 0, var(--texture-line) 1px, transparent 1px, transparent 9px);
+}
+[data-texture='vintage'] {
+  background-image:
+    radial-gradient(ellipse at 20% 10%, rgba(180, 140, 60, 0.09), transparent 55%),
+    radial-gradient(ellipse at 85% 90%, rgba(150, 100, 40, 0.08), transparent 50%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.dark [data-texture='vintage'] {
+  background-image:
+    radial-gradient(ellipse at 20% 10%, rgba(255, 220, 160, 0.05), transparent 55%),
+    radial-gradient(ellipse at 85% 90%, rgba(255, 200, 140, 0.04), transparent 50%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.06 0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+[data-texture='grain'] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.08 0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.dark [data-texture='grain'] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.09 0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
 
 /* 正文字体：[data-font] 挂在 #editor 上生效，同时供字体样例复用同一族定义 */
 [data-font='serif'] { font-family: var(--font-doc-serif); }
@@ -612,21 +639,46 @@ body.select-none {
 }
 
 .texture-swatch {
-  @apply block h-9 w-full rounded-md border bg-card;
+  @apply block h-12 w-full rounded-md border bg-card;
   border-color: var(--border);
+}
+/* 选中态对勾角标：主题/纹理/字体卡共用（右下角小圆标，主色底 + 白勾） */
+.theme-card,
+.texture-card,
+.font-card {
+  position: relative;
+}
+.theme-card.on::after,
+.texture-card.on::after,
+.font-card.on::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: var(--primary) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center/9px no-repeat;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
+}
+.theme-card:not(.on):hover,
+.texture-card:not(.on):hover,
+.font-card:not(.on):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.08);
 }
 .font-sample {
   @apply block text-[15px] leading-6;
 }
 
-/* ---------------------------------------------------------------- 右下悬浮阅读设置
-   闲置 40% 透明、hover/展开不透明；展开后子项沿左上 1/4 圆弧铺开
-   （三角函数定位 + 交错过渡），悬停子项再展开二级选项/滑杆。触摸点按等效。 */
+/* ---------------------------------------------------------------- 左下悬浮阅读设置
+   锚定编辑区左下角；展开后子项沿右上 1/4 圆弧铺开（镜像于旧右下布局），
+   二级面板挂子项右侧向右展开。子项玻璃拟态 + 标签气泡；触摸点按等效。 */
 
 #reading-fab {
   position: absolute;
-  right: 20px;
-  bottom: 20px;
+  left: 16px;
+  bottom: 16px;
   z-index: 30;
 }
 .fab-bridge {
@@ -642,7 +694,10 @@ body.select-none {
   @apply flex size-11 items-center justify-center rounded-full border bg-card text-card-foreground shadow-lg;
   border-color: var(--border);
   opacity: 0.4;
-  transition: opacity 0.2s ease-out, transform 0.2s ease-out;
+  transition: opacity 0.2s ease-out, transform 0.2s ease-out, box-shadow 0.2s ease-out;
+}
+#reading-fab.open .fab-btn {
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.18);
 }
 .fab-btn svg {
   transition: transform 0.25s ease-out;
@@ -655,12 +710,17 @@ body.select-none {
   transform: rotate(30deg);
 }
 .fab-item {
-  @apply absolute flex size-9 items-center justify-center rounded-full border bg-card text-card-foreground shadow-md;
+  @apply absolute flex size-9 items-center justify-center rounded-full border bg-card text-card-foreground;
   border-color: var(--border);
+  background-color: color-mix(in oklab, var(--card) 88%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 2px 10px rgb(0 0 0 / 0.12);
   opacity: 0;
   transform: scale(0.6);
   pointer-events: none;
-  transition: opacity 0.16s ease-out, transform 0.16s ease-out, background-color 0.12s;
+  transition: opacity 0.16s ease-out, transform 0.16s ease-out, background-color 0.12s,
+    box-shadow 0.16s ease-out, color 0.12s;
 }
 #reading-fab.open .fab-item {
   opacity: 1;
@@ -670,11 +730,60 @@ body.select-none {
 .fab-item:hover,
 .fab-item.on {
   @apply bg-secondary text-secondary-foreground;
+  transform: scale(1.08);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.18);
+}
+/* 标签气泡：hover 时在子项上方浮出（原生 title 太慢）；展开前不显示 */
+.fab-item::after {
+  content: attr(data-label);
+  position: absolute;
+  top: -26px;
+  left: 50%;
+  transform: translateX(-50%) translateY(3px);
+  padding: 2px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease-out, transform 0.12s ease-out;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.12);
+}
+.fab-item:hover::after,
+.fab-item.on::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.fab-item[data-fab-item='theme']::after,
+.fab-item[data-fab-item='texture']::after {
+  /* 弧上靠右的子项气泡靠右对齐，避免超出编辑区左缘 */
+  left: auto;
+  right: -6px;
+  transform: translateY(3px);
+}
+.fab-item[data-fab-item='theme']:hover::after,
+.fab-item[data-fab-item='texture']:hover::after,
+.fab-item[data-fab-item='theme'].on::after,
+.fab-item[data-fab-item='texture'].on::after {
+  transform: translateY(0);
 }
 .fab-flyout {
-  @apply absolute rounded-lg border bg-popover p-2 text-popover-foreground shadow-lg;
+  @apply absolute rounded-xl border bg-popover p-2.5 text-popover-foreground;
   border-color: var(--border);
+  background-color: color-mix(in oklab, var(--popover) 94%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 8px 30px rgb(0 0 0 / 0.16), 0 2px 8px rgb(0 0 0 / 0.08);
   animation: pop-in 0.12s ease-out;
+}
+/* 面板标题行：小标签 + 分隔线，让二级面板有可扫读的结构 */
+.fab-flyout-head {
+  @apply mb-2 flex items-center justify-between border-b px-0.5 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground;
+  border-color: var(--border);
 }
 .fab-flyout[hidden] {
   display: none;

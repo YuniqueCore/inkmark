@@ -7,6 +7,7 @@ import type { ReadingPrefs } from '../core/prefs'
 import {
   bindPrefControls,
   fontOptionsHtml,
+  fontWeightOptionsHtml,
   fontSizeControlHtml,
   syncPrefControls,
   textureOptionsHtml,
@@ -47,6 +48,10 @@ export function settingsDialog(
         <section>
           <h3 class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">字体</h3>
           <div class="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4" data-part="font">${fontOptionsHtml(prefs.font)}</div>
+        </section>
+        <section>
+          <h3 class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">字重</h3>
+          <div class="mt-2 grid grid-cols-4 gap-2" data-part="weight">${fontWeightOptionsHtml(prefs.fontWeight)}</div>
         </section>
         <section>
           <h3 class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">字号</h3>
