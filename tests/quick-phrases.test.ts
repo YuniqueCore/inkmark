@@ -11,7 +11,7 @@ describe('QUICK_PHRASES 词表', () => {
     for (const k of MANUAL_KINDS) {
       const phrases = QUICK_PHRASES[k]!
       expect(phrases.length).toBeGreaterThanOrEqual(4)
-      expect(phrases.length).toBeLessThanOrEqual(16)
+      expect(phrases.length).toBeLessThanOrEqual(24)
       expect(new Set(phrases).size).toBe(phrases.length)
       for (const p of phrases) expect(p.trim()).toBe(p)
     }

@@ -32,6 +32,12 @@ export const QUICK_PHRASES: Partial<Record<AnnotationKind, readonly string[]>> =
     '省略过多，语义不完整',
     '语句结构有问题',
     '套话空话',
+    '表述居高临下，教导语气',
+    '段首总结性开场，句式太工整',
+    '用词过于激烈和激进',
+    '句间缺少衔接，读起来冲击',
+    '生僻概念建议括号内联解释',
+    '标题省略过多，读者无法理解',
   ],
   question: [
     '依据是什么？',
