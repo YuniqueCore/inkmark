@@ -153,7 +153,7 @@ export class ReadingFab {
     if (!id || id === 'settings') return
     const prefs = this.callbacks.getPrefs()
     const content = {
-      theme: `<div class="grid grid-cols-2 gap-1.5">${themeOptionsHtml(prefs.theme)}</div>`,
+      theme: `<div class="grid grid-cols-3 gap-1.5">${themeOptionsHtml(prefs.theme)}</div>`,
       texture: `<div class="grid grid-cols-5 gap-1.5">${textureOptionsHtml(prefs.texture)}</div>`,
       size: `<div class="px-1 py-0.5">${fontSizeControlHtml(prefs.fontSize)}</div>`,
       font: `<div class="grid grid-cols-2 gap-1.5">${fontOptionsHtml(prefs.font)}</div>`,

@@ -50,6 +50,8 @@ function setupHandle(
   let active: {pointerId: number; startX: number; startW: number} | null = null
 
   handle.addEventListener('pointerdown', (e) => {
+    // 折叠小白条是按钮：pointerdown 不启动拖拽，click 才是折叠动作
+    if ((e.target as HTMLElement).closest('[data-collapse]')) return
     e.preventDefault()
     active = {pointerId: e.pointerId, startX: e.clientX, startW: which === 'tree' ? widths.treeW : widths.sideW}
     try {

@@ -56,6 +56,160 @@
   --ring: #a8a29e;
 }
 
+/* 豆沙绿（护眼浅绿）：整面浅色 */
+[data-theme='mint'] {
+  --background: #edf2e8;
+  --foreground: #30352b;
+  --card: #f4f8ef;
+  --card-foreground: #30352b;
+  --popover: #f4f8ef;
+  --popover-foreground: #30352b;
+  --primary: #3f5340;
+  --primary-foreground: #f2f7ee;
+  --secondary: #e0e9d8;
+  --secondary-foreground: #30352b;
+  --muted: #e2ead7;
+  --muted-foreground: #6c7561;
+  --accent: #e0e9d8;
+  --accent-foreground: #30352b;
+  --destructive: #b91c1c;
+  --border: #d3dfc6;
+  --input: #d3dfc6;
+  --ring: #94a788;
+}
+
+/* 樱粉纸（柔和粉底）：整面浅色 */
+[data-theme='rose'] {
+  --background: #f8eff1;
+  --foreground: #3c2f34;
+  --card: #fdf5f6;
+  --card-foreground: #3c2f34;
+  --popover: #fdf5f6;
+  --popover-foreground: #3c2f34;
+  --primary: #6d3a48;
+  --primary-foreground: #fdf4f6;
+  --secondary: #f0e1e4;
+  --secondary-foreground: #3c2f34;
+  --muted: #f0e2e6;
+  --muted-foreground: #877078;
+  --accent: #f0e1e4;
+  --accent-foreground: #3c2f34;
+  --destructive: #b91c1c;
+  --border: #e5d2d7;
+  --input: #e5d2d7;
+  --ring: #c39aa6;
+}
+
+/* 日光（明快米黄）：整面浅色 */
+[data-theme='solar'] {
+  --background: #faf3dd;
+  --foreground: #3b3524;
+  --card: #fdf8ea;
+  --card-foreground: #3b3524;
+  --popover: #fdf8ea;
+  --popover-foreground: #3b3524;
+  --primary: #6b5b1e;
+  --primary-foreground: #fdf9ee;
+  --secondary: #f1e7c6;
+  --secondary-foreground: #3b3524;
+  --muted: #f0e5c8;
+  --muted-foreground: #837a58;
+  --accent: #f1e7c6;
+  --accent-foreground: #3b3524;
+  --destructive: #b91c1c;
+  --border: #e4d8b4;
+  --input: #e4d8b4;
+  --ring: #b3a26c;
+}
+
+/* 极夜（北欧蓝灰）：整面深色 */
+[data-theme='nord'] {
+  --background: #2e3440;
+  --foreground: #eceff4;
+  --card: #353c4a;
+  --card-foreground: #eceff4;
+  --popover: #353c4a;
+  --popover-foreground: #eceff4;
+  --primary: #88c0d0;
+  --primary-foreground: #2e3440;
+  --secondary: #3f4859;
+  --secondary-foreground: #eceff4;
+  --muted: #3b4252;
+  --muted-foreground: #aeb8ca;
+  --accent: #3f4859;
+  --accent-foreground: #eceff4;
+  --destructive: #bf616a;
+  --border: #434c5e;
+  --input: #434c5e;
+  --ring: #88c0d0;
+}
+
+/* 深咖（烘焙暖棕）：整面深色 */
+[data-theme='coffee'] {
+  --background: #2b241d;
+  --foreground: #f0e8dc;
+  --card: #352c23;
+  --card-foreground: #f0e8dc;
+  --popover: #352c23;
+  --popover-foreground: #f0e8dc;
+  --primary: #d9a866;
+  --primary-foreground: #2b241d;
+  --secondary: #42372b;
+  --secondary-foreground: #f0e8dc;
+  --muted: #3d3328;
+  --muted-foreground: #bba98f;
+  --accent: #42372b;
+  --accent-foreground: #f0e8dc;
+  --destructive: #e05252;
+  --border: #4a3e30;
+  --input: #4a3e30;
+  --ring: #d9a866;
+}
+
+/* 深海（沉静蓝黑）：整面深色 */
+[data-theme='ocean'] {
+  --background: #16222e;
+  --foreground: #e2ecf4;
+  --card: #1d2b39;
+  --card-foreground: #e2ecf4;
+  --popover: #1d2b39;
+  --popover-foreground: #e2ecf4;
+  --primary: #6cb2d0;
+  --primary-foreground: #16222e;
+  --secondary: #24374a;
+  --secondary-foreground: #e2ecf4;
+  --muted: #20313f;
+  --muted-foreground: #9db2c4;
+  --accent: #24374a;
+  --accent-foreground: #e2ecf4;
+  --destructive: #e06c75;
+  --border: #2b4056;
+  --input: #2b4056;
+  --ring: #6cb2d0;
+}
+
+/* 深梅（醇紫暗底）：整面深色 */
+[data-theme='plum'] {
+  --background: #261f2b;
+  --foreground: #efe6f0;
+  --card: #2f2735;
+  --card-foreground: #efe6f0;
+  --popover: #2f2735;
+  --popover-foreground: #efe6f0;
+  --primary: #c99ad4;
+  --primary-foreground: #261f2b;
+  --secondary: #3a3040;
+  --secondary-foreground: #efe6f0;
+  --muted: #352c3b;
+  --muted-foreground: #b6a4bd;
+  --accent: #3a3040;
+  --accent-foreground: #efe6f0;
+  --destructive: #e06c75;
+  --border: #443950;
+  --input: #443950;
+  --ring: #c99ad4;
+}
+
 /* 分面主题：边栏与中区明暗相反。.theme-side 同时挂在真实侧栏与
    设置里的主题缩略图上，作用域内覆盖 token 即可整体换装 */
 [data-theme='panda'] {
@@ -459,16 +613,38 @@
   inset: 0 -3px;
 }
 .resize-thumb {
-  @apply flex h-14 w-1 items-center justify-center rounded-full opacity-0 transition-opacity duration-150
-    text-muted-foreground bg-border;
+  @apply relative z-10 flex h-14 w-3.5 cursor-pointer items-center justify-center rounded-full border
+    opacity-0 transition-opacity duration-150 text-muted-foreground bg-card shadow-sm;
+  border-color: var(--border);
+  font-size: 10px;
+  line-height: 1;
+  user-select: none;
 }
 .resize-handle:hover .resize-thumb,
-.resize-handle.dragging .resize-thumb {
+.resize-thumb:focus-visible,
+.resize-handle.is-collapsed .resize-thumb {
   @apply opacity-100;
 }
 .resize-handle.dragging .resize-thumb {
   @apply bg-ring h-24;
 }
+.resize-handle.is-collapsed .resize-thumb {
+  @apply h-10;
+}
+/* 折叠小白条字形：展开态指向外侧（点击=收起），收起态指向内侧（点击=展开） */
+.resize-thumb::before {
+  content: '‹';
+}
+.resize-handle[data-side='right'] .resize-thumb::before {
+  content: '›';
+}
+.resize-handle.is-collapsed[data-side='left'] .resize-thumb::before {
+  content: '›';
+}
+.resize-handle.is-collapsed[data-side='right'] .resize-thumb::before {
+  content: '‹';
+}
+/* 拖拽仍在 handle 空白处：按钮之上的区域才是拖拽热区——按钮阻止冒泡区分二者 */
 body.select-none {
   user-select: none;
 }
@@ -578,6 +754,10 @@ body.select-none {
 }
 .dark [data-texture='grain'] {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.09 0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+[data-texture='checker'] {
+  background-image: repeating-conic-gradient(var(--texture-line) 0% 25%, transparent 0% 50%);
+  background-size: 18px 18px;
 }
 
 /* 正文字体：[data-font] 挂在 #editor 上生效，同时供字体样例复用同一族定义 */

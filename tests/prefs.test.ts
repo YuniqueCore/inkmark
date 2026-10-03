@@ -26,9 +26,18 @@ describe('normalizePrefs · localStorage 脏数据安全', () => {
       font: 'kai',
       fontSize: 18,
       fontWeight: 'regular',
+      customText: null,
+      customBg: null,
     })
     // 部分字段缺失：缺失项回落，合法项保留
     expect(normalizePrefs({texture: 'paper'})).toEqual({...DEFAULT_PREFS, texture: 'paper'})
+  })
+
+  it('自定义色：仅收合法 hex，缺省/非法回落 null', () => {
+    expect(normalizePrefs({customText: '#1D4ED8', customBg: '#F0F'}).customText).toBe('#1d4ed8')
+    expect(normalizePrefs({customText: '#F0F'}).customBg).toBeNull()
+    expect(normalizePrefs({customBg: 'red'}).customBg).toBeNull()
+    expect(normalizePrefs({}).customText).toBeNull()
   })
 
   it('字重：未知值回落 regular，合法值保留', () => {
@@ -55,10 +64,15 @@ describe('中区极性', () => {
     expect(isDarkContent('panda-inverse')).toBe(true)
   })
 
-  it('flipPolarity：整面主题亮暗互换，panda 家族内互换', () => {
+  it('flipPolarity：按 THEME_FLIP 成对互换（浅色家族 ↔ 深色家族）', () => {
     expect(flipPolarity('light')).toBe('dark')
     expect(flipPolarity('dark')).toBe('light')
-    expect(flipPolarity('sepia')).toBe('dark')
+    expect(flipPolarity('sepia')).toBe('coffee')
+    expect(flipPolarity('coffee')).toBe('sepia')
+    expect(flipPolarity('mint')).toBe('nord')
+    expect(flipPolarity('nord')).toBe('mint')
+    expect(flipPolarity('rose')).toBe('plum')
+    expect(flipPolarity('solar')).toBe('ocean')
     expect(flipPolarity('panda')).toBe('panda-inverse')
     expect(flipPolarity('panda-inverse')).toBe('panda')
   })

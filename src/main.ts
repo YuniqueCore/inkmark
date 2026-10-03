@@ -881,10 +881,11 @@ function togglePanel(which: 'tree' | 'sidebar'): void {
   }
   if (which === 'tree') {
     const off = $('#filetree').classList.toggle('hidden')
-    $('#handle-left').classList.toggle('hidden', off)
+    // 折叠按钮长在 handle 上：handle 保留，仅翻转小白条状态（字形由 CSS 切换）
+    $('#handle-left').classList.toggle('is-collapsed', off)
   } else {
     const off = $('#sidebar').classList.toggle('hidden')
-    $('#handle-right').classList.toggle('hidden', off)
+    $('#handle-right').classList.toggle('is-collapsed', off)
   }
 }
 
@@ -913,25 +914,32 @@ $('#btn-edit').addEventListener('click', toggleEdit)
 $('#btn-diff').addEventListener('click', () => void toggleDiff())
 $('#btn-diff-clear').addEventListener('click', () => void clearRevised())
 $('#btn-export').addEventListener('click', maybeExport)
-$('#btn-tree').addEventListener('click', () => togglePanel('tree'))
 
 // 视图组：明暗翻转 / 完整阅读设置 / 批注栏开关
 wireHeaderMenu($('#btn-view'), [
-  {id: 'polarity', label: '切换明暗', icon: icon('moon'), hint: '当前家族内翻转'},
+  {id: 'polarity', label: '切换明暗', icon: icon('moon'), hint: '成对主题互换'},
   {id: 'settings', label: '阅读设置', icon: icon('settings'), hint: '主题 · 纹理 · 字体'},
-  {id: 'sidebar', label: '收起/展开批注栏', icon: icon('panelRight')},
 ], (id) => {
   if (id === 'polarity') setPrefs({...prefs, theme: flipPolarity(prefs.theme)})
   if (id === 'settings') void openSettings()
-  if (id === 'sidebar') togglePanel('sidebar')
+})
+
+// 移动端抽屉开关（<lg）：桌面折叠走 handle 小白条，抽屉按钮移动端专属
+$('#btn-tree-drawer').addEventListener('click', () => togglePanel('tree'))
+$('#btn-sidebar-drawer').addEventListener('click', () => togglePanel('sidebar'))
+
+// 侧栏折叠小白条：长在 resize handle 上，点击收起/展开（拖拽走 handle 其余区域）
+document.querySelectorAll<HTMLElement>('[data-collapse]').forEach((btn) => {
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation()
+    togglePanel(btn.dataset.collapse as 'tree' | 'sidebar')
+  })
 })
 
 // 更多：GitHub / 移除当前文档（低频与破坏性归拢）
 wireHeaderMenu($('#btn-more'), [
-  {id: 'github', label: 'GitHub 仓库', icon: icon('github'), hint: '新窗口打开'},
-  {id: 'clear', label: '移除当前文档', icon: icon('trash'), danger: true, separatorBefore: true, hint: '二次确认'},
+  {id: 'clear', label: '移除当前文档', icon: icon('trash'), danger: true, hint: '二次确认'},
 ], (id) => {
-  if (id === 'github') window.open('https://github.com/YuniqueCore/inkmark', '_blank', 'noopener')
   if (id === 'clear') void clearCurrent()
 })
 

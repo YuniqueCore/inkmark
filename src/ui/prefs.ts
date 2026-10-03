@@ -3,6 +3,7 @@
  */
 
 import { FONT_WEIGHT_META, isDarkContent, normalizePrefs } from '../core/prefs'
+import { ensureReadable } from '../core/contrast'
 import type { ReadingPrefs } from '../core/prefs'
 import { icon } from './icons'
 
@@ -32,9 +33,10 @@ export function applyPrefs(p: ReadingPrefs): void {
   el.classList.toggle('dark', isDarkContent(p.theme))
   el.style.setProperty('--doc-font-size', `${p.fontSize}px`)
   el.style.setProperty('--doc-font-weight', String(FONT_WEIGHT_META[p.fontWeight].value))
-  const editor = document.querySelector('#editor')
+  const editor = document.querySelector<HTMLElement>('#editor')
   editor?.setAttribute('data-texture', p.texture)
   editor?.setAttribute('data-font', p.font)
+  applyEditorColors(editor, p)
   const btn = document.querySelector('#btn-theme')
   if (btn) btn.innerHTML = icon(isDarkContent(p.theme) ? 'sun' : 'moon', 'size-4')
 }
@@ -46,4 +48,24 @@ function parsePrefs(raw: string | null): ReadingPrefs {
   } catch {
     return normalizePrefs(null)
   }
+}
+
+/** 编辑区自定义文字/背景色：对比度不足 4.5:1 时在用户色相内自动矫正文字亮度；
+ * 纹理线色随矫正后的文字色重算（与 --texture-line 的 root 定义同式）。 */
+function applyEditorColors(editor: HTMLElement | null, p: ReadingPrefs): void {
+  if (!editor) return
+  if (!p.customBg && !p.customText) {
+    editor.style.removeProperty('--foreground')
+    editor.style.removeProperty('--background')
+    editor.style.removeProperty('--texture-line')
+    return
+  }
+  const rootStyle = getComputedStyle(document.documentElement)
+  const themeBg = rootStyle.getPropertyValue('--background').trim() || '#ffffff'
+  const themeFg = rootStyle.getPropertyValue('--foreground').trim() || '#000000'
+  const bg = p.customBg ?? themeBg
+  const {text} = ensureReadable(p.customText ?? themeFg, bg)
+  editor.style.setProperty('--foreground', text)
+  editor.style.setProperty('--background', bg)
+  editor.style.setProperty('--texture-line', `color-mix(in oklab, ${text} 8%, transparent)`)
 }

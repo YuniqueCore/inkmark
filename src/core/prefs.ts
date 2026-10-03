@@ -7,8 +7,30 @@
  *   作用域内的 token 覆盖实现（样式在 styles.css）。
  */
 
-export type ThemeId = 'light' | 'sepia' | 'dark' | 'panda' | 'panda-inverse'
-export type TextureId = 'none' | 'paper' | 'grid' | 'ruled' | 'linen' | 'dots' | 'diagonal' | 'vintage' | 'grain'
+export type ThemeId =
+  | 'light'
+  | 'sepia'
+  | 'mint'
+  | 'rose'
+  | 'solar'
+  | 'dark'
+  | 'nord'
+  | 'coffee'
+  | 'ocean'
+  | 'plum'
+  | 'panda'
+  | 'panda-inverse'
+export type TextureId =
+  | 'none'
+  | 'paper'
+  | 'grid'
+  | 'ruled'
+  | 'linen'
+  | 'dots'
+  | 'diagonal'
+  | 'vintage'
+  | 'grain'
+  | 'checker'
 export type FontId = 'sans' | 'serif' | 'kai' | 'mono'
 export type FontWeightId = 'light' | 'regular' | 'medium' | 'bold'
 
@@ -22,14 +44,41 @@ export interface ReadingPrefs {
   fontSize: number
   /** 正文字重 */
   fontWeight: FontWeightId
+  /** 自定义正文文字色（hex）；null = 跟随主题 */
+  customText: string | null
+  /** 自定义编辑区背景色（hex）；null = 跟随主题 */
+  customBg: string | null
 }
 
 export const THEME_META: Record<ThemeId, {label: string; hint: string; dark: boolean}> = {
   light: {label: '亮色', hint: '标准浅色', dark: false},
   sepia: {label: '纸黄', hint: '暖纸底色', dark: false},
+  mint: {label: '豆沙绿', hint: '护眼浅绿', dark: false},
+  rose: {label: '樱粉纸', hint: '柔和粉底', dark: false},
+  solar: {label: '日光', hint: '明快米黄', dark: false},
   dark: {label: '暗色', hint: '标准深色', dark: true},
+  nord: {label: '极夜', hint: '北欧蓝灰', dark: true},
+  coffee: {label: '深咖', hint: '烘焙暖棕', dark: true},
+  ocean: {label: '深海', hint: '沉静蓝黑', dark: true},
+  plum: {label: '深梅', hint: '醇紫暗底', dark: true},
   panda: {label: '熊猫', hint: '深边栏 · 浅正文', dark: false},
   'panda-inverse': {label: '熊猫·反色', hint: '浅边栏 · 深正文', dark: true},
+}
+
+/** 顶栏明暗翻转的成对目标：浅色家族 ↔ 深色家族一一对应 */
+export const THEME_FLIP: Record<ThemeId, ThemeId> = {
+  light: 'dark',
+  dark: 'light',
+  sepia: 'coffee',
+  coffee: 'sepia',
+  mint: 'nord',
+  nord: 'mint',
+  rose: 'plum',
+  plum: 'rose',
+  solar: 'ocean',
+  ocean: 'solar',
+  panda: 'panda-inverse',
+  'panda-inverse': 'panda',
 }
 
 export const TEXTURE_META: Record<TextureId, {label: string}> = {
@@ -42,6 +91,7 @@ export const TEXTURE_META: Record<TextureId, {label: string}> = {
   diagonal: {label: '斜纹'},
   vintage: {label: '旧纸'},
   grain: {label: '颗粒'},
+  checker: {label: '棋盘'},
 }
 
 export const FONT_META: Record<FontId, {label: string}> = {
@@ -67,6 +117,8 @@ export const DEFAULT_PREFS: ReadingPrefs = {
   font: 'sans',
   fontSize: FONT_SIZE.default,
   fontWeight: 'regular',
+  customText: null,
+  customBg: null,
 }
 
 /** 主题的中区（正文 / 弹层）是否深色：html .dark 类的单一判定来源 */
@@ -74,22 +126,18 @@ export function isDarkContent(theme: ThemeId): boolean {
   return THEME_META[theme].dark
 }
 
-/** 顶栏明暗按钮：在当前主题家族内翻转中区极性（panda 家族内互换） */
+/** 顶栏明暗按钮：按 THEME_FLIP 成对翻转（浅色家族 ↔ 深色家族） */
 export function flipPolarity(theme: ThemeId): ThemeId {
-  switch (theme) {
-    case 'light':
-    case 'sepia':
-      return 'dark'
-    case 'dark':
-      return 'light'
-    case 'panda':
-      return 'panda-inverse'
-    case 'panda-inverse':
-      return 'panda'
-  }
+  return THEME_FLIP[theme]
 }
 
 const clampSize = (v: number): number => Math.min(FONT_SIZE.max, Math.max(FONT_SIZE.min, v))
+
+/** 自定义色校验：仅收 #rgb / #rrggbb；缺省/非法一律 null（跟随主题） */
+const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i
+function normalizeColor(v: unknown): string | null {
+  return typeof v === 'string' && HEX_COLOR.test(v.trim()) ? v.trim().toLowerCase() : null
+}
 
 /** 宽松归一化：未知值回落默认、字号钳制——localStorage 旧/脏数据的安全入口 */
 export function normalizePrefs(raw: unknown): ReadingPrefs {
@@ -109,5 +157,7 @@ export function normalizePrefs(raw: unknown): ReadingPrefs {
       typeof r.fontWeight === 'string' && r.fontWeight in FONT_WEIGHT_META
         ? (r.fontWeight as FontWeightId)
         : DEFAULT_PREFS.fontWeight,
+    customText: normalizeColor(r.customText),
+    customBg: normalizeColor(r.customBg),
   }
 }

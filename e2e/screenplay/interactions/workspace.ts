@@ -29,10 +29,12 @@ export const RunSlopScan = (): Interaction =>
     await Workbench.headerButton(BrowseTheWorkbench.as(actor).page, /词库预扫描/).click()
   })
 
-/** 点顶栏「示例」 */
+/** 点顶栏「导入 ▾」菜单里的「载入示例」（悬停展开菜单后选择） */
 export const ClickSampleButton = (): Interaction =>
-  Interaction.where('点顶栏「示例」', async (actor) => {
-    await Workbench.headerButton(BrowseTheWorkbench.as(actor).page, /载入一段带 AI 味的示例文档/).click()
+  Interaction.where('点顶栏导入菜单里的载入示例', async (actor) => {
+    const page = BrowseTheWorkbench.as(actor).page
+    await Workbench.headerButton(page, /导入：打开文件/).hover()
+    await page.getByRole('menuitem', { name: '载入示例' }).click()
   })
 
 /** 导入一个内存中的 .txt 文件（不经真实文件选择器） */
@@ -66,12 +68,12 @@ export const SaveSourceEdit = (): Interaction =>
 /** 切换文档树抽屉 / 批注栏抽屉（移动端语义） */
 export const ToggleTreeDrawer = (): Interaction =>
   Interaction.where('切换文档树抽屉', async (actor) => {
-    await Workbench.headerButton(BrowseTheWorkbench.as(actor).page, /收起\/展开文档树/).click()
+    await Workbench.headerButton(BrowseTheWorkbench.as(actor).page, /文档树抽屉/).click()
   })
 
 export const ToggleSidebarDrawer = (): Interaction =>
   Interaction.where('切换批注栏抽屉', async (actor) => {
-    await Workbench.headerButton(BrowseTheWorkbench.as(actor).page, /收起\/展开批注栏/).click()
+    await Workbench.headerButton(BrowseTheWorkbench.as(actor).page, /批注栏抽屉/).click()
   })
 
 /** 点击抽屉背板 */

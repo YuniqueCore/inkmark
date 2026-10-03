@@ -6,6 +6,7 @@
 import type { ReadingPrefs } from '../core/prefs'
 import {
   bindPrefControls,
+  colorControlsHtml,
   fontOptionsHtml,
   fontWeightOptionsHtml,
   fontSizeControlHtml,
@@ -52,6 +53,11 @@ export function settingsDialog(
         <section>
           <h3 class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">字重</h3>
           <div class="mt-2 grid grid-cols-4 gap-2" data-part="weight">${fontWeightOptionsHtml(prefs.fontWeight)}</div>
+        </section>
+        <section>
+          <h3 class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">文字与背景</h3>
+          <div class="mt-2" data-color-controls>${colorControlsHtml(prefs)}</div>
+          <p class="mt-1.5 text-xs text-muted-foreground">自定义只作用于正文区；对比度不足 4.5:1 时自动矫正文字亮度。</p>
         </section>
         <section>
           <h3 class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">字号</h3>

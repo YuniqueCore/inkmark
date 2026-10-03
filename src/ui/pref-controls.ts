@@ -3,6 +3,7 @@
  */
 
 import { FONT_META, FONT_SIZE, FONT_WEIGHT_META, TEXTURE_META, THEME_META } from '../core/prefs'
+import { contrastRatio } from '../core/contrast'
 import type { FontId, FontWeightId, TextureId, ThemeId } from '../core/prefs'
 import type { ReadingPrefs } from '../core/prefs'
 
@@ -81,6 +82,39 @@ export function fontSizeControlHtml(value: number): string {
     </div>`
 }
 
+export function colorControlsHtml(p: ReadingPrefs): string {
+  const rootStyle = getComputedStyle(document.documentElement)
+  const fg = p.customText ?? (rootStyle.getPropertyValue('--foreground').trim() || '#000000')
+  const bg = p.customBg ?? (rootStyle.getPropertyValue('--background').trim() || '#ffffff')
+  const ratio = contrastRatio(p.customText ?? fg, p.customBg ?? bg)
+  const ok = ratio >= 4.5
+  return `
+    <div class="flex flex-wrap items-center gap-3">
+      <label class="flex items-center gap-1.5 text-xs text-muted-foreground">
+        文字
+        <input type="color" data-set-text value="${fg}" class="h-7 w-9 cursor-pointer rounded-md border bg-card p-0.5" aria-label="自定义文字颜色"/>
+      </label>
+      <label class="flex items-center gap-1.5 text-xs text-muted-foreground">
+        背景
+        <input type="color" data-set-bg value="${bg}" class="h-7 w-9 cursor-pointer rounded-md border bg-card p-0.5" aria-label="自定义背景颜色"/>
+      </label>
+      <span class="ml-auto font-mono text-xs ${ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'}" data-contrast-label title="正文字色与背景的 WCAG 对比度（AA 正文 ≥ 4.5:1）">${ratio.toFixed(1)}:1 ${ok ? '✓' : '→ 自动矫正'}</span>
+      <button type="button" class="btn btn-ghost btn-sm h-7 px-2 text-xs" data-clear-colors${!p.customText && !p.customBg ? ' disabled' : ''}>跟随主题</button>
+    </div>`
+}
+
+/** 颜色控件的对比度标签刷新（input 高频触发，不重渲染整块） */
+export function syncContrastLabel(root: HTMLElement, fg: string, bg: string): void {
+  const label = root.querySelector('[data-contrast-label]')
+  if (!label) return
+  const ratio = contrastRatio(fg, bg)
+  const ok = ratio >= 4.5
+  label.textContent = `${ratio.toFixed(1)}:1 ${ok ? '✓' : '→ 自动矫正'}`
+  label.classList.toggle('text-emerald-600', ok)
+  label.classList.toggle('dark:text-emerald-400', ok)
+  label.classList.toggle('text-destructive', !ok)
+}
+
 /** 控件容器统一的事件委托：data-set-* 点击与字号滑杆 input，上抛 patch */
 export function bindPrefControls(
   root: HTMLElement,
@@ -96,10 +130,20 @@ export function bindPrefControls(
   })
   root.addEventListener('input', (e) => {
     const t = e.target as HTMLInputElement
-    if (!t.matches('[data-set-size]')) return
-    const label = t.parentElement?.querySelector('[data-size-label]')
-    if (label) label.textContent = `${t.value}px`
-    onChange({fontSize: Number(t.value)})
+    if (t.matches('[data-set-size]')) {
+      const label = t.parentElement?.querySelector('[data-size-label]')
+      if (label) label.textContent = `${t.value}px`
+      onChange({fontSize: Number(t.value)})
+      return
+    }
+    if (t.matches('[data-set-text],[data-set-bg]')) {
+      const root2 = t.closest('[data-color-controls]') ?? t.parentElement?.parentElement
+      const fg = (root2?.querySelector('[data-set-text]') as HTMLInputElement | null)?.value ?? '#000000'
+      const bg = (root2?.querySelector('[data-set-bg]') as HTMLInputElement | null)?.value ?? '#ffffff'
+      syncContrastLabel(root, fg, bg)
+      if (t.matches('[data-set-text]')) onChange({customText: t.value})
+      else onChange({customBg: t.value})
+    }
   })
 }
 

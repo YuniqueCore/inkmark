@@ -16,8 +16,10 @@ import { Interaction, Task } from '../support/kernel'
 export const OpenSampleDocument = (): Task =>
   Task.where(
     '#actor 载入示例文档',
-    Interaction.where('点顶栏「示例」', async (actor) => {
-      await Workbench.headerButton(BrowseTheWorkbench.as(actor).page, /载入一段带 AI 味的示例文档/).click()
+    Interaction.where('点顶栏导入菜单里的载入示例', async (actor) => {
+      const page = BrowseTheWorkbench.as(actor).page
+      await Workbench.headerButton(page, /导入：打开文件/).hover()
+      await page.getByRole('menuitem', { name: '载入示例' }).click()
     }),
     Interaction.where('等正文首块渲染', async (actor) => {
       await Workbench.firstBlock(BrowseTheWorkbench.as(actor).page).waitFor({ state: 'visible' })
