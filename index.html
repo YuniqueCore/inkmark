@@ -40,20 +40,25 @@
           <span id="save-status" class="mr-1 flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground max-[399px]:hidden" title="自动保存到本地浏览器">
             <span id="save-dot" class="size-1.5 rounded-full bg-emerald-500"></span><span id="save-text" class="hidden sm:inline">已保存</span>
           </span>
-          <button id="btn-import-files" class="btn btn-ghost btn-sm" title="导入一个或多个 .txt / .md / 会话 .json">
+          <button id="btn-import" class="btn btn-ghost btn-sm" title="导入：打开文件 / 导入文件夹 / 载入示例" aria-haspopup="menu" aria-expanded="false">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
-            <span class="hidden lg:inline">打开文件</span>
+            <span class="hidden lg:inline">导入</span>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden size-3 lg:inline opacity-60"><path d="m6 9 6 6 6-6"/></svg>
           </button>
-          <button id="btn-import-folder" class="btn btn-ghost btn-sm hidden lg:inline-flex" title="导入整个文件夹（.txt / .md）">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/><path d="M12 10v6M9 13h6"/></svg>
-            文件夹
-          </button>
-          <span class="mx-1 hidden h-5 w-px bg-border sm:block"></span>
-          <button id="btn-sample" class="btn btn-ghost btn-sm hidden lg:inline-flex" title="载入一段带 AI 味的示例文档">示例</button>
           <button id="btn-scan" class="btn btn-outline btn-sm" title="用 anti-slop 词库预扫描套话，生成候选批注">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.34-4.34"/></svg>
             <span class="hidden lg:inline">slop 预扫描</span>
           </button>
+          <button id="btn-search" class="btn btn-ghost btn-sm" title="搜索与批量批注（⌘F）" aria-label="搜索与批量批注">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.34-4.34"/></svg>
+            <span class="hidden lg:inline">搜索</span>
+          </button>
+          <button id="btn-trash" class="btn btn-ghost btn-sm relative" title="回收站：删除的文档与批注保留 7 天，可恢复" aria-label="回收站">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            <span class="hidden lg:inline">回收站</span>
+            <span id="trash-count" class="hidden" aria-hidden="true"></span>
+          </button>
+          <span class="mx-1 hidden h-5 w-px bg-border sm:block"></span>
           <button id="btn-edit" class="btn btn-outline btn-sm" title="编辑原文：直接修改规范文本，完成后批注按引文自动重锚">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
             <span class="hidden lg:inline">编辑原文</span>
@@ -69,21 +74,15 @@
             <span class="hidden lg:inline">导出</span>
           </button>
           <span class="mx-1 hidden h-5 w-px bg-border sm:block"></span>
-          <a
-            href="https://github.com/YuniqueCore/inkmark"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="btn btn-ghost btn-sm"
-            title="GitHub 仓库"
-            aria-label="GitHub 仓库"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
-          </a>
           <button id="btn-theme" class="btn btn-ghost btn-sm" title="切换明暗主题" aria-label="切换主题"></button>
-          <button id="btn-sidebar" class="btn btn-ghost btn-sm" title="收起/展开批注栏">
+          <button id="btn-view" class="btn btn-ghost btn-sm" title="视图：明暗 / 阅读设置 / 批注栏" aria-haspopup="menu" aria-expanded="false">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg>
+            <span class="hidden lg:inline">视图</span>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden size-3 lg:inline opacity-60"><path d="m6 9 6 6 6-6"/></svg>
           </button>
-          <button id="btn-clear" class="btn btn-ghost btn-sm btn-destructive hidden lg:inline-flex" title="移除当前文档">移除</button>
+          <button id="btn-more" class="btn btn-ghost btn-sm" title="更多：GitHub / 移除文档" aria-haspopup="menu" aria-expanded="false" aria-label="更多">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+          </button>
         </div>
         <input id="file-input" type="file" accept=".txt,.md,.markdown,.json,text/plain" multiple hidden />
         <input id="folder-input" type="file" webkitdirectory hidden />

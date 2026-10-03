@@ -671,6 +671,51 @@ body.select-none {
   @apply block text-[15px] leading-6;
 }
 
+/* ---------------------------------------------------------------- Header 分组菜单
+   悬停意图展开、点击钉住；面板毛玻璃底 + 柔和阴影，项内 icon + 标签 + 右侧灰字说明 */
+
+.hdr-menu {
+  @apply absolute right-0 top-full z-50 mt-1.5 min-w-52 rounded-xl border bg-popover p-1.5 text-popover-foreground;
+  border-color: var(--border);
+  background-color: color-mix(in oklab, var(--popover) 94%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 8px 30px rgb(0 0 0 / 0.16), 0 2px 8px rgb(0 0 0 / 0.08);
+  animation: pop-in 0.12s ease-out;
+}
+.hdr-menu[hidden] {
+  display: none;
+}
+.hdr-item {
+  @apply flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors;
+}
+.hdr-item:hover {
+  @apply bg-accent/60;
+}
+.hdr-item svg {
+  @apply size-4 shrink-0 text-muted-foreground;
+}
+.hdr-item.danger {
+  @apply text-destructive;
+}
+.hdr-item.danger svg {
+  @apply text-destructive;
+}
+.hdr-item.danger:hover {
+  @apply bg-destructive/10;
+}
+.hdr-item .hint {
+  @apply ml-auto shrink-0 pl-3 text-[11px] text-muted-foreground;
+}
+.hdr-sep {
+  @apply my-1 h-px bg-border;
+}
+/* 头部回收站徽标：主钮右上角小圆标 */
+#trash-count {
+  @apply absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9.5px] font-semibold leading-none text-primary-foreground;
+  background: var(--primary);
+}
+
 /* ---------------------------------------------------------------- 左下悬浮阅读设置
    锚定编辑区左下角；展开后子项沿右上 1/4 圆弧铺开（镜像于旧右下布局），
    二级面板挂子项右侧向右展开。子项玻璃拟态 + 标签气泡；触摸点按等效。 */

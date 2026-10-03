@@ -21,6 +21,7 @@ import { SelectionPin } from './ui/selection-pin'
 import { SearchPanelView } from './ui/search-panel'
 import { choiceDialog, confirmDialog, textDialog } from './ui/confirm'
 import { TrashDialog } from './ui/trash-dialog'
+import { wireHeaderMenu } from './ui/header-menu'
 import { purgeExpired, purgeForever, restoreFromTrash, trashDocs, trashFromDoc } from './core/trash'
 import type { TrashEntry } from './core/types'
 import { flipPolarity } from './core/prefs'
@@ -30,6 +31,7 @@ import { ReadingFab } from './ui/reading-fab'
 import { settingsDialog } from './ui/settings-dialog'
 import { SidebarView } from './ui/sidebar'
 import { initResizers } from './ui/resizer'
+import { icon } from './ui/icons'
 import { initSaveStatus } from './ui/save-status'
 import { toast } from './ui/toast'
 import { rectOfAnnotation, resolveSelection } from './ui/selection-offsets'
@@ -293,8 +295,6 @@ const sidebar = new SidebarView(sidebarEl, {
   },
   onDelete: deleteAnnotation,
   onToggleStatus: toggleAnnotationStatus,
-  onOpenSearch: openSearch,
-  onOpenTrash: openTrash,
   onFilterChange: (f) => {
     sidebar.setFilter(f)
     rerender(false)
@@ -465,7 +465,6 @@ function rerender(syncPopup = true): void {
     sidebar.render(doc?.text ?? '', doc?.annotations ?? [], {
       revised: doc?.revised,
       slopHistory: doc?.slopHistory ?? [],
-      trashCount: state.trash.length,
     })
     fileTree.render(state.docs, state.activeDocId)
     return
@@ -493,7 +492,6 @@ function rerender(syncPopup = true): void {
     revised: doc?.revised,
     slop: doc ? (slopReports.get(doc.id) ?? null) : null,
     slopHistory: doc?.slopHistory ?? [],
-    trashCount: state.trash.length,
   })
   fileTree.render(state.docs, state.activeDocId)
   searchPanel.setDocs(
@@ -501,10 +499,20 @@ function rerender(syncPopup = true): void {
     state.activeDocId,
   )
   if (syncPopup && doc) annotationPopup.sync(doc.text, doc.annotations, doc.revised)
+  updateTrashBadge()
   save.markDirty()
 }
 
 // ---------------------------------------------------------------- 保存
+
+/** 头部回收站徽标：条目数 >0 时显示（99+ 封顶） */
+function updateTrashBadge(): void {
+  const el = document.querySelector('#trash-count')
+  if (!el) return
+  const n = state.trash.length
+  el.textContent = n > 99 ? '99+' : String(n)
+  el.classList.toggle('hidden', n === 0)
+}
 
 // 数据快照即时取自工作区状态；状态机与计时器归 ui/save-status 所有
 const save = initSaveStatus(() => ({
@@ -880,9 +888,16 @@ function togglePanel(which: 'tree' | 'sidebar'): void {
   }
 }
 
-$('#btn-sample').addEventListener('click', () => void loadSample())
-$('#btn-import-files').addEventListener('click', () => $('#file-input').click())
-$('#btn-import-folder').addEventListener('click', () => $('#folder-input').click())
+// 导入组：文件 / 文件夹 / 示例 归入一个悬停菜单
+wireHeaderMenu($('#btn-import'), [
+  {id: 'files', label: '打开文件', icon: icon('file'), hint: '.txt · .md · .json'},
+  {id: 'folder', label: '导入文件夹', icon: icon('folder'), hint: '整批 .txt · .md'},
+  {id: 'sample', label: '载入示例', icon: icon('plus'), hint: '带 AI 味的演示文档'},
+], (id) => {
+  if (id === 'files') $('#file-input').click()
+  if (id === 'folder') $('#folder-input').click()
+  if (id === 'sample') void loadSample()
+})
 $('#file-input').addEventListener('change', (e) => {
   const files = (e.target as HTMLInputElement).files
   if (files && files.length > 0) void importFiles(files)
@@ -898,9 +913,31 @@ $('#btn-edit').addEventListener('click', toggleEdit)
 $('#btn-diff').addEventListener('click', () => void toggleDiff())
 $('#btn-diff-clear').addEventListener('click', () => void clearRevised())
 $('#btn-export').addEventListener('click', maybeExport)
-$('#btn-clear').addEventListener('click', () => void clearCurrent())
 $('#btn-tree').addEventListener('click', () => togglePanel('tree'))
-$('#btn-sidebar').addEventListener('click', () => togglePanel('sidebar'))
+
+// 视图组：明暗翻转 / 完整阅读设置 / 批注栏开关
+wireHeaderMenu($('#btn-view'), [
+  {id: 'polarity', label: '切换明暗', icon: icon('moon'), hint: '当前家族内翻转'},
+  {id: 'settings', label: '阅读设置', icon: icon('settings'), hint: '主题 · 纹理 · 字体'},
+  {id: 'sidebar', label: '收起/展开批注栏', icon: icon('panelRight')},
+], (id) => {
+  if (id === 'polarity') setPrefs({...prefs, theme: flipPolarity(prefs.theme)})
+  if (id === 'settings') void openSettings()
+  if (id === 'sidebar') togglePanel('sidebar')
+})
+
+// 更多：GitHub / 移除当前文档（低频与破坏性归拢）
+wireHeaderMenu($('#btn-more'), [
+  {id: 'github', label: 'GitHub 仓库', icon: icon('github'), hint: '新窗口打开'},
+  {id: 'clear', label: '移除当前文档', icon: icon('trash'), danger: true, separatorBefore: true, hint: '二次确认'},
+], (id) => {
+  if (id === 'github') window.open('https://github.com/YuniqueCore/inkmark', '_blank', 'noopener')
+  if (id === 'clear') void clearCurrent()
+})
+
+// 批注工作流直出：搜索（⌘F）与回收站
+$('#btn-search').addEventListener('click', () => openSearch())
+$('#btn-trash').addEventListener('click', () => openTrash())
 $('#btn-theme').addEventListener('click', () => setPrefs({...prefs, theme: flipPolarity(prefs.theme)}))
 $('#overlay').addEventListener('click', () => exporter.close())
 document.addEventListener('keydown', (e) => {

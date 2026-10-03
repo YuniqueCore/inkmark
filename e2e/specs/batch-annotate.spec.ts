@@ -118,7 +118,7 @@ test.describe('搜索面板（⌘F）', () => {
 
   test('侧栏搜索按钮同样唤起面板；Enter 跳转到下一处命中', async ({ actor }) => {
     const page = BrowseTheWorkbench.as(actor).page
-    await page.locator('[data-op="open-search"]').click()
+    await page.locator('#btn-search').click()
     await Workbench.panelInput(page).waitFor({ state: 'visible' })
     await Workbench.panelInput(page).fill('方式')
     await page.locator('#editor .seg-search').first().waitFor({ state: 'visible' })
