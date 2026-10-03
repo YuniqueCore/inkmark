@@ -8,8 +8,8 @@
  */
 
 import { collectW3CItems, fromW3C, parseW3CSource } from './w3c'
-import { SESSION_VERSION } from './types'
-import type { Annotation, DocItem, Workspace } from './types'
+import { parseWorkspace } from './session'
+import type { Annotation, DocItem } from './types'
 
 const TEXT_SUFFIX = /\.(txt|md|markdown)$/i
 const MAX_DOC_CHARS = 400_000 // 单文档上限，超出截断
@@ -93,12 +93,12 @@ export async function importFileList(
   return outcome
 }
 
-/** 会话 JSON（v2）→ 新文档集；不是会话格式返回 false 交给 W3C 处理链 */
+/** 会话 JSON（v1/v2/v3，统一经 parseWorkspace 迁移）→ 新文档集；不是会话格式返回 false 交给 W3C 处理链 */
 async function trySessionFile(file: File, outcome: ImportOutcome): Promise<boolean> {
   try {
-    const parsed = JSON.parse(await file.text()) as Partial<Workspace>
-    if (parsed.version !== SESSION_VERSION || !Array.isArray(parsed.docs)) return false
-    outcome.sessionDocs.push(...parsed.docs)
+    const ws = parseWorkspace(await file.text())
+    if (!ws) return false
+    outcome.sessionDocs.push(...ws.docs)
     return true
   } catch {
     return false

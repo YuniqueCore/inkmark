@@ -1,6 +1,7 @@
 /** 工作区持久化：localStorage 是唯一 IO 边界。v1 旧数据自动迁移。 */
 
 import { parseWorkspace } from '../core/session'
+import { purgeExpired } from '../core/trash'
 import { SESSION_VERSION } from '../core/types'
 import type { Workspace } from '../core/types'
 
@@ -10,7 +11,9 @@ export function loadWorkspace(): Workspace {
   try {
     const raw = localStorage.getItem(KEY)
     if (!raw) return emptyWorkspace()
-    return parseWorkspace(raw) ?? emptyWorkspace()
+    const ws = parseWorkspace(raw) ?? emptyWorkspace()
+    // 启动即清理超过保留期的回收站条目（唯一的过期清理入口，会话中途不再轮询）
+    return { ...ws, trash: purgeExpired(ws.trash, Date.now()).keep }
   } catch {
     return emptyWorkspace()
   }
@@ -33,5 +36,5 @@ export function clearWorkspaceStorage(): void {
 }
 
 export function emptyWorkspace(): Workspace {
-  return { version: SESSION_VERSION, docs: [], activeDocId: '', savedAt: Date.now() }
+  return { version: SESSION_VERSION, docs: [], activeDocId: '', trash: [], savedAt: Date.now() }
 }

@@ -145,11 +145,40 @@ export interface SlopSample {
 }
 
 /** 工作区会话格式版本：构造与运行时校验共用此常量 */
-export const SESSION_VERSION = 2 as const
+export const SESSION_VERSION = 3 as const
 
-/** 工作区会话 v2：多文档。localStorage 持久化单元 */
+/** 回收站条目（批注）：7 天保留期。恢复 = 按 docId 找回文档并追加批注 */
+export interface TrashedAnnotation {
+  type: 'annotation'
+  annotation: Annotation
+  docId: string
+  docName: string
+  deletedAt: number
+}
+
+/** 回收站条目（整文档）：连文档带批注整体入站，恢复即整份找回 */
+export interface TrashedDoc {
+  type: 'doc'
+  doc: DocItem
+  deletedAt: number
+}
+
+/** 回收站两种条目类型：判别联合——恢复与彻底删除按 entryKey 定位 */
+export type TrashEntry = TrashedAnnotation | TrashedDoc
+
+/** 工作区会话 v3：多文档 + 回收站（批注/文档双类型）。localStorage 持久化单元 */
 export interface Workspace {
   version: typeof SESSION_VERSION
+  docs: DocItem[]
+  activeDocId: string
+  /** 已删除批注与文档：保留 7 天，过期自动清理；彻底删除需二次确认 */
+  trash: TrashEntry[]
+  savedAt: number
+}
+
+/** v2 旧会话（无回收站），迁移用 */
+export interface SessionV2 {
+  version: 2
   docs: DocItem[]
   activeDocId: string
   savedAt: number

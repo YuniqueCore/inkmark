@@ -20,6 +20,8 @@ export interface SidebarCallbacks {
   onDelete: (ids: string[]) => void
   onToggleStatus: (ids: string[]) => void
   onOpenSearch: () => void
+  /** 打开批注回收站（侧栏头部入口） */
+  onOpenTrash: () => void
   onFilterChange: (filter: StatusFilter) => void
   onKindFilterChange: (kinds: Set<AnnotationKind>) => void
   onHighlightModeChange: (only: boolean) => void
@@ -34,6 +36,8 @@ export interface SidebarRenderOptions {
   slop?: SlopReport | null
   /** 评分历史采样：≥2 个时统计卡展示趋势线与环比 */
   slopHistory?: SlopSample[]
+  /** 回收站条目数：>0 时头部回收站按钮带计数徽标 */
+  trashCount?: number
 }
 
 /** 分档 → 徽标配色（亮暗主题都够对比） */
@@ -194,6 +198,9 @@ export class SidebarView {
         <h3 class="text-sm font-semibold tracking-tight">批注</h3>
         <span class="flex items-center gap-1">
           <button class="btn btn-ghost btn-sm h-7 w-7 p-0 text-muted-foreground" data-op="open-search" title="搜索与批量批注（⌘F）" aria-label="搜索与批量批注">${icon('search', 'size-3.5')}</button>
+          <button class="btn btn-ghost btn-sm h-7 px-1.5 text-muted-foreground" data-op="open-trash" title="批注回收站（删除的批注保留 7 天）" aria-label="批注回收站">
+            ${icon('trash', 'size-3.5')}${(opts.trashCount ?? 0) > 0 ? `<span class="text-[10px] font-medium">${opts.trashCount}</span>` : ''}
+          </button>
           <span class="text-xs text-muted-foreground">${open} 条待处理</span>
         </span>
       </div>
@@ -227,6 +234,9 @@ export class SidebarView {
   private wireFilters(): void {
     this.root.querySelector('[data-op="open-search"]')?.addEventListener('click', () => {
       this.callbacks.onOpenSearch()
+    })
+    this.root.querySelector('[data-op="open-trash"]')?.addEventListener('click', () => {
+      this.callbacks.onOpenTrash()
     })
     this.root.querySelectorAll('[data-filter]').forEach((btn) =>
       btn.addEventListener('click', () =>

@@ -19,7 +19,10 @@ import { FileTreeView } from './ui/filetree'
 import { AnnotationPopup } from './ui/annotation-popup'
 import { SelectionPin } from './ui/selection-pin'
 import { SearchPanelView } from './ui/search-panel'
-import { confirmDialog, textDialog } from './ui/confirm'
+import { choiceDialog, confirmDialog, textDialog } from './ui/confirm'
+import { TrashDialog } from './ui/trash-dialog'
+import { purgeExpired, purgeForever, restoreFromTrash, trashDocs, trashFromDoc } from './core/trash'
+import type { TrashEntry } from './core/types'
 import { flipPolarity } from './core/prefs'
 import type { ReadingPrefs } from './core/prefs'
 import { applyPrefs, loadPrefs, savePrefs } from './ui/prefs'
@@ -43,9 +46,11 @@ const LEXICONS = [zhLexicon, enLexicon] as unknown as SlopLexicon[]
 interface AppState {
   docs: DocItem[]
   activeDocId: string
+  /** 已删除批注与文档：7 天保留，过期清理；恢复 / 彻底删除走回收站弹层 */
+  trash: TrashEntry[]
 }
 
-let state: AppState = { docs: [], activeDocId: '' }
+let state: AppState = { docs: [], activeDocId: '', trash: [] }
 /** 筛选透镜：正文高亮与侧栏列表共用 */
 let onlyHighlightFiltered = false
 /** 应用模式：批注视图 / 对照视图 / 编辑原文——三者互斥，用联合类型让
@@ -100,20 +105,104 @@ const editor = new EditorView(editorEl, {
 
 // ---------------------------------------------------------------- 批注命令
 
-/** 删除批注（二次确认，支持批量——分组卡一次删全组）。弹层与侧栏共用同一命令 */
+/** 删除批注 → 回收站（7 天保留，可恢复；彻底删除在回收站里二次确认）。
+ * 选中含失锚批注时给出「标记为已解决」引导：失锚批注的批语仍然完整，
+ * 归档比删除更有利于保留以往的标注。弹层与侧栏共用同一命令 */
 const deleteAnnotation = (ids: string[]): void => {
   void (async () => {
-    const ok = await confirmDialog({
+    const doc = activeDoc()
+    const picked = doc?.annotations.filter((a) => ids.includes(a.id)) ?? []
+    const lostCount = picked.filter((a) => a.anchorLost === true).length
+    const choice = await choiceDialog({
       title: ids.length > 1 ? `删除这 ${ids.length} 条批注？` : '删除这条批注？',
-      description: '删除后不可恢复。',
+      description:
+        '删除后进入回收站，保留 7 天，可随时恢复。' +
+        (lostCount > 0
+          ? `其中 ${lostCount} 条已失去锚点：批语仍然完整，建议改为「标记为已解决」归档，避免丢失以往的标注。`
+          : ''),
       confirmText: '删除',
       danger: true,
+      ...(lostCount > 0 ? { altText: `标记为已解决（${lostCount}）` } : {}),
     })
-    if (!ok) return
+    if (choice === 'cancel') return
+    if (choice === 'alt') {
+      // 引导路径：不删除，把所选批注全部归档为已解决
+      const altSet = new Set(ids)
+      mutateActive((doc) => ({
+        ...doc,
+        annotations: doc.annotations.map((a) =>
+          altSet.has(a.id) ? { ...a, status: 'resolved' as const, updatedAt: Date.now() } : a,
+        ),
+      }))
+      toast(`已将 ${ids.length} 条批注标记为已解决`)
+      return
+    }
+    if (!doc) return
     const idSet = new Set(ids)
-    mutateActive((doc) => ({ ...doc, annotations: doc.annotations.filter((a) => !idSet.has(a.id)) }))
-    toast(`已删除 ${ids.length} 条批注`)
+    const { doc: nextDoc, trashed } = trashFromDoc(doc, idSet, Date.now())
+    state = {
+      ...state,
+      docs: state.docs.map((d) => (d.id === doc.id ? nextDoc : d)),
+      trash: [...state.trash, ...trashed],
+    }
+    rerender()
+    toast(`已删除 ${ids.length} 条批注，可在回收站恢复`)
   })()
+}
+
+// ---------------------------------------------------------------- 回收站
+
+const trashDialog = new TrashDialog({
+  onRestore: (ids) => {
+    const r = restoreFromTrash(state.trash, state.docs, new Set(ids))
+    state = { ...state, trash: r.trash, docs: r.docs }
+    rerender()
+    toast(
+      r.stranded > 0
+        ? `已恢复 ${r.restored} 项；${r.stranded} 条批注原文档已删除，无法恢复`
+        : `已恢复 ${r.restored} 项`,
+    )
+    trashDialog.update(state.trash, Date.now())
+  },
+  onPurge: (ids) => {
+    void (async () => {
+      const ok = await confirmDialog({
+        title: ids.length > 1 ? `彻底删除这 ${ids.length} 条批注？` : '彻底删除这条批注？',
+        description: '彻底删除后不可恢复。',
+        confirmText: '彻底删除',
+        danger: true,
+      })
+      if (!ok) return
+      state = { ...state, trash: purgeForever(state.trash, new Set(ids)) }
+      rerender()
+      trashDialog.update(state.trash, Date.now())
+      toast(`已彻底删除 ${ids.length} 条批注`)
+    })()
+  },
+  onClearAll: () => {
+    void (async () => {
+      const ok = await confirmDialog({
+        title: '清空回收站？',
+        description: `将彻底删除回收站里的 ${state.trash.length} 条批注，不可恢复。`,
+        confirmText: '清空',
+        danger: true,
+      })
+      if (!ok) return
+      state = { ...state, trash: [] }
+      rerender()
+      trashDialog.update([], Date.now())
+      toast('回收站已清空')
+    })()
+  },
+  onClose: () => trashDialog.close(),
+})
+
+/** 打开回收站：进入前顺手清一次过期条目（长会话期间 7 天窗口会自然过期） */
+function openTrash(): void {
+  const { keep, purged } = purgeExpired(state.trash, Date.now())
+  if (purged.length > 0) state = { ...state, trash: keep }
+  trashDialog.open(keep, Date.now())
+  if (purged.length > 0) rerender()
 }
 
 /** 解决 / 重开批注（支持批量）：组内有未解决就全部解决，否则全部重开 */
@@ -205,6 +294,7 @@ const sidebar = new SidebarView(sidebarEl, {
   onDelete: deleteAnnotation,
   onToggleStatus: toggleAnnotationStatus,
   onOpenSearch: openSearch,
+  onOpenTrash: openTrash,
   onFilterChange: (f) => {
     sidebar.setFilter(f)
     rerender(false)
@@ -305,13 +395,15 @@ async function removeDoc(id: string): Promise<void> {
   const ok = await confirmDialog({
     title: `移除「${doc.name}」？`,
     description:
-      count > 0 ? `其中 ${count} 条批注会一并删除，删除后不可恢复。` : '删除后不可恢复。',
+      count > 0
+        ? `其中 ${count} 条批注会一并移入回收站，保留 7 天，可随时恢复。`
+        : '移入回收站后保留 7 天，可随时恢复。',
     confirmText: '移除',
     danger: true,
   })
   if (!ok) return
   await removeDocsConfirmed([id])
-  toast(`已移除 ${doc.name}`)
+  toast(`已移除 ${doc.name}，可在回收站恢复`)
 }
 
 /** 多选移除入口：先统一确认，再落盘 */
@@ -324,7 +416,7 @@ async function removeDocs(ids: string[]): Promise<void> {
   const names = docs.length > 3 ? `${shown} 等 ${docs.length} 份文档` : shown
   const ok = await confirmDialog({
     title: `移除 ${docs.length} 个文档？`,
-    description: `${names}${count > 0 ? `（共 ${count} 条批注）` : ''}——删除后不可恢复。`,
+    description: `${names}${count > 0 ? `（共 ${count} 条批注）` : ''}——移入回收站，保留 7 天，可随时恢复。`,
     confirmText: '移除',
     danger: true,
   })
@@ -333,15 +425,16 @@ async function removeDocs(ids: string[]): Promise<void> {
   toast(`已移除 ${docs.length} 个文档`)
 }
 
-/** 已确认的删除落盘：清缓存、维护活动文档、重渲染 */
+/** 已确认的删除落盘：文档整份入回收站、清运行时缓存、维护活动文档、重渲染 */
 async function removeDocsConfirmed(ids: string[]): Promise<void> {
   const idSet = new Set(ids)
   state.docs.filter((d) => idSet.has(d.id)).forEach((d) => slopReports.delete(d.id))
-  const docs = state.docs.filter((d) => !idSet.has(d.id))
+  const { docs, trashed } = trashDocs(state.docs, idSet, Date.now())
   const activeRemoved = idSet.has(state.activeDocId)
   state = {
     docs,
     activeDocId: activeRemoved ? (docs[0]?.id ?? '') : state.activeDocId,
+    trash: [...state.trash, ...trashed],
   }
   if (activeRemoved) {
     // 编辑的是被移除文档的文本，随文档一起终止（与 switchDoc 同规则）
@@ -369,7 +462,11 @@ function rerender(syncPopup = true): void {
   editBtn?.classList.toggle('text-secondary-foreground', mode === 'edit')
   if (mode === 'edit') {
     // 编辑模式由 renderEditMode 独占渲染区，这里只同步侧栏
-    sidebar.render(doc?.text ?? '', doc?.annotations ?? [], { revised: doc?.revised, slopHistory: doc?.slopHistory ?? [] })
+    sidebar.render(doc?.text ?? '', doc?.annotations ?? [], {
+      revised: doc?.revised,
+      slopHistory: doc?.slopHistory ?? [],
+      trashCount: state.trash.length,
+    })
     fileTree.render(state.docs, state.activeDocId)
     return
   }
@@ -396,6 +493,7 @@ function rerender(syncPopup = true): void {
     revised: doc?.revised,
     slop: doc ? (slopReports.get(doc.id) ?? null) : null,
     slopHistory: doc?.slopHistory ?? [],
+    trashCount: state.trash.length,
   })
   fileTree.render(state.docs, state.activeDocId)
   searchPanel.setDocs(
@@ -413,6 +511,7 @@ const save = initSaveStatus(() => ({
   version: SESSION_VERSION,
   docs: state.docs,
   activeDocId: state.activeDocId,
+  trash: state.trash,
   savedAt: Date.now(),
 }))
 
@@ -630,6 +729,7 @@ async function importFiles(files: FileList | File[]): Promise<void> {
         ...newDocs,
       ],
       activeDocId: fresh[0]?.id ?? r.sessionDocs[0]?.id ?? state.activeDocId,
+      trash: state.trash,
     }
   }
   if (applied.merged > 0 || newDocs.length > 0 || overwrites.size > 0) rerender(false)
@@ -731,7 +831,7 @@ async function loadSample(): Promise<void> {
     annotations: [],
     addedAt: Date.now(),
   }
-  state = {docs: [...state.docs, doc], activeDocId: doc.id}
+  state = {docs: [...state.docs, doc], activeDocId: doc.id, trash: state.trash}
   rerender(false)
 }
 

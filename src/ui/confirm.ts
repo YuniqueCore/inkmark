@@ -15,9 +15,14 @@ export interface ConfirmOptions {
   cancelText?: string
   /** 确认按钮显示为破坏性红色 */
   danger?: boolean
+  /** 第三选择（如删除引导里的「改为标记已解决」）：提供时弹层出现三个动作 */
+  altText?: string
 }
 
-export function confirmDialog(opts: ConfirmOptions): Promise<boolean> {
+export type ConfirmChoice = 'confirm' | 'alt' | 'cancel'
+
+/** 弹层统一外壳：两键（确认/取消）或三键（+第三选择）。Promise 给出所点动作。 */
+export function choiceDialog(opts: ConfirmOptions): Promise<ConfirmChoice> {
   return new Promise((resolve) => {
     const overlay = document.createElement('div')
     overlay.className = 'fixed inset-0 z-100 bg-black/50 backdrop-blur-[2px]'
@@ -41,10 +46,11 @@ export function confirmDialog(opts: ConfirmOptions): Promise<boolean> {
       </div>
       <div class="mt-5 flex shrink-0 justify-end gap-2">
         <button class="btn btn-outline btn-sm" data-op="cancel">${opts.cancelText ?? '取消'}</button>
+        ${opts.altText ? `<button class="btn btn-outline btn-sm" data-op="alt">${escapeHtml(opts.altText)}</button>` : ''}
         <button class="btn btn-sm ${opts.danger ? 'confirm-danger' : 'btn-default'}" data-op="confirm">${opts.confirmText ?? '确认'}</button>
       </div>`
 
-    const finish = (result: boolean) => {
+    const finish = (result: ConfirmChoice) => {
       overlay.remove()
       panel.remove()
       document.removeEventListener('keydown', onKey, true)
@@ -53,21 +59,26 @@ export function confirmDialog(opts: ConfirmOptions): Promise<boolean> {
     const onKey = (e: KeyboardEvent) => {
       // 捕获阶段阻断：避免 Esc 同时收起底下的 pin / 批注卡片
       e.stopPropagation()
-      if (e.key === 'Escape') finish(false)
+      if (e.key === 'Escape') finish('cancel')
       if (e.key === 'Enter') {
         e.preventDefault()
-        finish(true)
+        finish('confirm')
       }
     }
 
-    overlay.addEventListener('mousedown', () => finish(false))
-    panel.querySelector('[data-op="cancel"]')?.addEventListener('click', () => finish(false))
-    panel.querySelector('[data-op="confirm"]')?.addEventListener('click', () => finish(true))
+    overlay.addEventListener('mousedown', () => finish('cancel'))
+    panel.querySelector('[data-op="cancel"]')?.addEventListener('click', () => finish('cancel'))
+    panel.querySelector('[data-op="alt"]')?.addEventListener('click', () => finish('alt'))
+    panel.querySelector('[data-op="confirm"]')?.addEventListener('click', () => finish('confirm'))
     document.addEventListener('keydown', onKey, true)
 
     document.body.append(overlay, panel)
     ;(panel.querySelector('[data-op="confirm"]') as HTMLButtonElement).focus()
   })
+}
+
+export function confirmDialog(opts: ConfirmOptions): Promise<boolean> {
+  return choiceDialog(opts).then((c) => c === 'confirm')
 }
 
 export interface TextDialogOptions {
