@@ -167,7 +167,7 @@ const trashDialog = new TrashDialog({
   onPurge: (ids) => {
     void (async () => {
       const ok = await confirmDialog({
-        title: ids.length > 1 ? `彻底删除这 ${ids.length} 条批注？` : '彻底删除这条批注？',
+        title: ids.length > 1 ? `彻底删除这 ${ids.length} 项？` : '彻底删除这条批注？',
         description: '彻底删除后不可恢复。',
         confirmText: '彻底删除',
         danger: true,
@@ -176,7 +176,7 @@ const trashDialog = new TrashDialog({
       state = { ...state, trash: purgeForever(state.trash, new Set(ids)) }
       rerender()
       trashDialog.update(state.trash, Date.now())
-      toast(`已彻底删除 ${ids.length} 条批注`)
+      toast(`已彻底删除 ${ids.length} 项`)
     })()
   },
   onClearAll: () => {

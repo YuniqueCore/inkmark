@@ -119,3 +119,80 @@ describe('TrashDialog', () => {
     expect(dialog.isOpen).toBe(false)
   })
 })
+
+describe('TrashDialog · 搜索与批量', () => {
+  const openThree = (): void => {
+    dialog.open(
+      [
+        entry('a1'), // 批语含 "批注 a1"，出处 文档一
+        entry('a2', { annotation: ann('a2', { kind: 'question', comment: '依据是什么？' }) }),
+        entry('a3', { docName: '会议记录', annotation: ann('a3', { comment: '金句摘录待跟进' }) }),
+      ],
+      NOW,
+    )
+  }
+
+  it('搜索按批语/出处/类型过滤，无结果显示空态', () => {
+    openThree()
+    const input = document.querySelector('[data-role="search"]') as HTMLInputElement
+    input.value = '会议'
+    input.dispatchEvent(new Event('input'))
+    expect(document.body.querySelectorAll('[data-entry]')).toHaveLength(1)
+    expect(document.body.textContent).toContain('会议记录')
+
+    input.value = '不存在的词'
+    input.dispatchEvent(new Event('input'))
+    expect(document.body.querySelectorAll('[data-entry]')).toHaveLength(0)
+    expect(document.body.textContent).toContain('没有匹配')
+
+    input.value = '疑问'
+    input.dispatchEvent(new Event('input'))
+    expect(document.body.querySelectorAll('[data-entry]')).toHaveLength(1)
+  })
+
+  it('清除搜索按钮与 Esc：有词先清词不清空列表，词为空后 Esc 走关闭回调', () => {
+    openThree()
+    const input = document.querySelector('[data-role="search"]') as HTMLInputElement
+    input.value = '会议'
+    input.dispatchEvent(new Event('input'))
+    ;(document.querySelector('[data-op="clear-search"]') as HTMLButtonElement).click()
+    expect(input.value).toBe('')
+    expect(document.body.querySelectorAll('[data-entry]')).toHaveLength(3)
+
+    input.value = '会议'
+    input.dispatchEvent(new Event('input'))
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    expect(input.value).toBe('')
+    expect(callbacks.close).not.toHaveBeenCalled()
+  })
+
+  it('全选仅作用于当前筛选结果；批量恢复按选中 key 派发', () => {
+    openThree()
+    const input = document.querySelector('[data-role="search"]') as HTMLInputElement
+    input.value = '会议'
+    input.dispatchEvent(new Event('input'))
+    ;(document.querySelector('[data-select-all]') as HTMLInputElement).click()
+    ;(document.querySelector('[data-bulk-op="restore"]') as HTMLButtonElement).click()
+    expect(callbacks.restore).toHaveBeenCalledWith(['a3'])
+  })
+
+  it('逐条勾选进批量条，批量彻底删除派发全部选中 key', () => {
+    openThree()
+    const box = (k: string): HTMLInputElement => document.querySelector(`[data-select-key="${k}"]`) as HTMLInputElement
+    box('a1').click()
+    box('a2').click()
+    expect(document.body.textContent).toContain('已选 2 项')
+    ;(document.querySelector('[data-bulk-op="purge"]') as HTMLButtonElement).click()
+    expect(callbacks.purge).toHaveBeenCalledWith(['a1', 'a2'])
+  })
+
+  it('update 后剪除已消失的选中项，剩余选中仍可批量操作', () => {
+    openThree()
+    ;(document.querySelector('[data-select-key="a1"]') as HTMLInputElement).click()
+    ;(document.querySelector('[data-select-key="a2"]') as HTMLInputElement).click()
+    dialog.update([entry('a2'), entry('a3')], NOW) // a1 已被恢复
+    expect(document.body.textContent).toContain('已选 1 项')
+    ;(document.querySelector('[data-bulk-op="purge"]') as HTMLButtonElement).click()
+    expect(callbacks.purge).toHaveBeenCalledWith(['a2'])
+  })
+})
