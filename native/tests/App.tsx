@@ -1,4 +1,4 @@
-import {mount, signal, Text, View, platform} from 'nsh'
+import {mount, signal, Text, View} from 'nsh'
 import {Workspace, type FileBindings} from '../shared/App'
 import document from '../generated/e2e-web'
 import {encodeBytes, decodeBytes} from '../../src/platform/protocol'
@@ -8,8 +8,8 @@ const result = signal('running')
 let exports = 0
 const files: FileBindings = {
   pickFiles: async () => [{name: '中'.repeat(80) + '.md', type: 'text/markdown', base64: encodeBytes(new TextEncoder().encode('# Native review\n\nA **stable primitive** composes.'))}],
-  // Windows CI seeds the real OS clipboard; other platforms leave the user's clipboard untouched.
-  readClipboardImage: platform.os === 'windows' ? undefined : async () => [clipboardBitmap],
+  // nsh test owns a text-only clipboard; OS acquisition is checked by the separate Windows probe.
+  readClipboardImage: async () => [clipboardBitmap],
   saveFile: async file => {
     if (file.name === 'e2e-report.json') { result.set(new TextDecoder().decode(decodeBytes(file.base64))); return 'saved' }
     exports++

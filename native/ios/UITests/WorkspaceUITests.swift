@@ -11,7 +11,12 @@ final class WorkspaceUITests: XCTestCase {
         create.tap()
         let input = app.webViews.textViews["新文档内容"]
         XCTAssertTrue(input.waitForExistence(timeout: 5))
-        input.tap(); input.typeText("# Native iOS review\n\nA **stable primitive** composes.")
+        // A fresh simulator may show the keyboard's slide-to-type introduction on autofocus.
+        let keyboardIntroduction = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Speed up your typing")).firstMatch
+        if keyboardIntroduction.waitForExistence(timeout: 3) { app.buttons["Continue"].tap() }
+        input.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5), app.debugDescription)
+        input.typeText("# Native iOS review\n\nA **stable primitive** composes.")
         app.webViews.buttons["创建文档"].tap()
         // WebKit exposes aria-pressed buttons as accessibility switches.
         let preview = app.webViews.switches["预览"]

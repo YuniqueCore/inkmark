@@ -46,7 +46,7 @@ jobs:
           bun run nsh check native/desktop
           node scripts/native-test-prepare.mjs
           bun run nsh check native/tests
-      - name: Seed real Windows bitmap clipboard
+      - name: Test real Windows bitmap clipboard
         if: runner.os == 'Windows'
         run: powershell.exe -NoProfile -NonInteractive -STA -File native/tests/clipboard.ps1
       - name: Test actual platform WebView
@@ -76,6 +76,7 @@ jobs:
           path: |
             .local-build/native-test.xml
             .local-build/native-webview.log
+            .local-build/clipboard-host*.log
           if-no-files-found: ignore
   android:
     name: Android / APK, AAB and emulator
