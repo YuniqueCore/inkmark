@@ -309,7 +309,7 @@ export class ImageView {
     this.root.dataset.tool = tool
     if (tool === 'draw' || tool === 'pan') { this.selected = null; this.anno?.cancelSelected(); this.updateEditButton() }
     this.anno?.setDrawingEnabled(tool === 'draw')
-    if (tool === 'select' && this.draft) this.anno?.setSelected(this.draft.annotation.id)
+    if (tool === 'select' && this.draft && this.anno?.getAnnotationById(this.draft.annotation.id)) this.anno.setSelected(this.draft.annotation.id)
     for (const name of ['draw', 'select', 'pan']) {
       this.root.querySelector(`[data-image-action="${name}"]`)?.setAttribute('aria-pressed', String(name === tool))
     }

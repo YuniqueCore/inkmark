@@ -10,6 +10,7 @@ test('mixed review journey: paste, draw, refine, export, restore and continue te
   await page.setViewportSize({width: 1440, height: 1000})
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))
+  page.on('console', message => { if (message.type() === 'warning') errors.push(message.text()) })
   await page.goto('/')
   await createDoc(page, '# Release review\n\nA clear description of the next release.', true)
   await selectText(page.locator('.editor-blk').last(), 0, 7)
