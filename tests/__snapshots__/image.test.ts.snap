@@ -1,0 +1,36 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`image review primitives and portable boundaries > keeps pixels, annotation bodies and selectors separate across storage, presentation and W3C 1`] = `
+[
+  {
+    "@context": "http://www.w3.org/ns/anno.jsonld",
+    "body": [
+      {
+        "purpose": "describing",
+        "type": "TextualBody",
+        "value": "Increase contrast",
+      },
+      {
+        "purpose": "tagging",
+        "type": "TextualBody",
+        "value": "suggestion",
+      },
+    ],
+    "created": "1970-01-01T00:00:00.001Z",
+    "id": "urn:inkmark:doc:image-one#ann=a",
+    "modified": "1970-01-01T00:00:00.002Z",
+    "motivation": "commenting",
+    "target": {
+      "selector": [
+        {
+          "conformsTo": "http://www.w3.org/TR/media-frags/",
+          "type": "FragmentSelector",
+          "value": "xywh=pixel:0,0,1,1",
+        },
+      ],
+      "source": "urn:inkmark:doc:image-one#image=image-9267823ffe58f175a8a345701686015f65fa2b1f13e98eb6b97b62bc410825ee",
+    },
+    "type": "Annotation",
+  },
+]
+`;

@@ -74,7 +74,7 @@ export class EditorView {
             <button class="btn btn-default btn-sm" id="btn-empty-paste">粘贴新建文档</button>
             <button class="btn btn-outline btn-sm" id="btn-empty-sample">载入示例文本</button>
           </div>
-          <p class="mt-3 text-xs text-muted-foreground">也可以直接在空工作台粘贴文本</p>
+          <p class="mt-3 text-xs text-muted-foreground">也可以直接粘贴截图，或拖入 PNG / JPEG / WebP 图片进行区域批注</p>
         </div>`
       this.root.querySelector('#btn-empty-sample')?.addEventListener('click', () => onEmptySample?.())
       this.root.querySelector('#btn-empty-paste')?.addEventListener('click', this.onNewDocument)

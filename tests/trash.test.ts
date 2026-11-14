@@ -1,5 +1,6 @@
 /** 回收站纯函数：trashFromDoc / purgeExpired / restoreFromTrash / purgeForever。 */
 
+import { targetIdentity } from '../src/core/image'
 import { describe, expect, it } from 'vitest'
 import {
   entryKey,
@@ -48,7 +49,7 @@ describe('trashFromDoc', () => {
     const { doc: next } = trashFromDoc(d, new Set(['a1']), 1)
     expect(next).not.toBe(d)
     expect(next.annotations[0]).toBe(d.annotations[1])
-    expect(next.text).toBe(d.text)
+    expect(next).toMatchObject({text: d.text})
   })
 
   it('目标 id 都不存在时返回等价文档与空回收站', () => {
@@ -60,7 +61,7 @@ describe('trashFromDoc', () => {
 
 describe('purgeExpired', () => {
   const entry = (id: string, deletedAt: number): TrashedAnnotation => ({
-    type: 'annotation',
+    type: 'annotation', targetIdentity: targetIdentity(doc(), ann('a'))!,
     annotation: ann(id),
     docId: 'doc-1',
     docName: '文档一',
@@ -84,7 +85,7 @@ describe('purgeExpired', () => {
 
 describe('restoreFromTrash', () => {
   const trashed = (id: string, docId = 'doc-1'): TrashedAnnotation => ({
-    type: 'annotation',
+    type: 'annotation', targetIdentity: targetIdentity(doc(), ann('a'))!,
     annotation: ann(id),
     docId,
     docName: docId,
@@ -131,8 +132,8 @@ describe('restoreFromTrash', () => {
 describe('purgeForever', () => {
   it('彻底删除指定条目', () => {
     const trash: TrashedAnnotation[] = [
-      { type: 'annotation', annotation: ann('a1'), docId: 'doc-1', docName: 'x', deletedAt: 1 },
-      { type: 'annotation', annotation: ann('a2'), docId: 'doc-1', docName: 'x', deletedAt: 1 },
+      { type: 'annotation', targetIdentity: targetIdentity(doc(), ann('a'))!, annotation: ann('a1'), docId: 'doc-1', docName: 'x', deletedAt: 1 },
+      { type: 'annotation', targetIdentity: targetIdentity(doc(), ann('a'))!, annotation: ann('a2'), docId: 'doc-1', docName: 'x', deletedAt: 1 },
     ]
     const trashDoc: TrashEntry = { type: 'doc', doc: doc(), deletedAt: 1 }
     expect(purgeForever([...trash, trashDoc], new Set([entryKey(trashDoc)]))).toEqual(trash)
@@ -164,7 +165,7 @@ describe('restoreFromTrash · 文档条目', () => {
     // 场景：先删了 a1（doc-1 还在），再删了 doc-2；一次恢复两者
     const docs: DocItem[] = [{ ...doc(), annotations: [ann('a2'), ann('a3')] }]
     const entries: TrashEntry[] = [
-      { type: 'annotation', annotation: ann('a1'), docId: 'doc-1', docName: '文档一', deletedAt: 1 },
+      { type: 'annotation', targetIdentity: targetIdentity(doc(), ann('a'))!, annotation: ann('a1'), docId: 'doc-1', docName: '文档一', deletedAt: 1 },
       { type: 'doc', doc: { ...doc(), id: 'doc-2', name: '文档二', annotations: [ann('b1'), ann('b2'), ann('b3')] }, deletedAt: 2 },
     ]
     const r = restoreFromTrash(entries, docs, new Set(['annotation:a1', 'doc:doc-2']))
@@ -176,7 +177,7 @@ describe('restoreFromTrash · 文档条目', () => {
   })
 
   it('entryKey：批注条目取批注 id，文档条目取文档 id', () => {
-    expect(entryKey({ type: 'annotation', annotation: ann('a1'), docId: 'd', docName: 'n', deletedAt: 0 })).toBe('annotation:a1')
+    expect(entryKey({ type: 'annotation', targetIdentity: targetIdentity(doc(), ann('a'))!, annotation: ann('a1'), docId: 'd', docName: 'n', deletedAt: 0 })).toBe('annotation:a1')
     expect(entryKey({ type: 'doc', doc: doc(), deletedAt: 0 })).toBe('doc:doc-1')
   })
 })

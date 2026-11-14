@@ -5,7 +5,7 @@ import { BrowseTheWorkbench } from '../screenplay/abilities/BrowseTheWorkbench'
 import { Workbench } from '../screenplay/screens/Workbench'
 import { SelectBlockText, ClickPinDot, TypeComment, SubmitAnnotation } from '../screenplay/interactions/composer'
 
-import { createDoc, dragText, openNew, selectText, submitPreviewAnnotation, workspace } from '../screenplay/support/markdown'
+import { createDoc, setStoredWorkspace, storedWorkspace, dragText, openNew, selectText, submitPreviewAnnotation, workspace } from '../screenplay/support/markdown'
 
 test.describe.configure({timeout: 45_000})
 
@@ -175,12 +175,12 @@ test('存储损坏时分别导出原始数据和新工作，并在用户确认�
   await page.goto('/')
   await expect.poll(async () => page.locator('#save-text').textContent()).toBe('已保存')
   const raw = '{"version":3,"docs":"corrupt","trash":[]}'
-  await page.evaluate((value) => localStorage.setItem('inkmark:session:v1', value), raw)
+  await setStoredWorkspace(page, raw)
   await page.reload()
   await expect(page.locator('#save-error')).toBeVisible()
   await createDoc(page, '存储异常后仍须找回的新内容。', true)
   await expect(page.locator('#save-error')).toBeVisible()
-  expect(await page.evaluate(() => localStorage.getItem('inkmark:session:v1'))).toBe(raw)
+  expect(await storedWorkspace(page)).toBe(raw)
 
   let downloads = 0
   page.on('download', () => { downloads++ })

@@ -1,5 +1,6 @@
 /** 应用装配：多文档工作区状态、事件接线、持久化。UI 模块各自只管画。 */
 
+import { parseWorkspace } from './core/session'
 import { numberAnnotations } from './core/export'
 import { diffLines, diffStats } from './core/diff'
 import { importFileList, MAX_DOC_CHARS, newDocId, prepareSessionDocs } from './core/import'
@@ -12,7 +13,7 @@ import { importConflictDialog } from './ui/import-conflict-dialog'
 import { normalizeLineEndings, restoreLineEndings, splitBlocks } from './core/text'
 import { appendSample, hitsToAnnotations, scanSlopReport } from './core/slop'
 import type { SlopReport } from './core/types'
-import type { Annotation, AnnotationInput, DocItem, SlopLexicon } from './core/types'
+import type { Annotation, AnnotationInput, DocItem, SlopLexicon, ReviewDocument } from './core/types'
 import { EditorView } from './ui/editor'
 import { ExporterView } from './ui/exporter'
 import { FileTreeView } from './ui/filetree'
@@ -37,11 +38,17 @@ import { toast } from './ui/toast'
 import { rectOfAnnotation, resolveSelection } from './ui/selection-offsets'
 import { SAMPLE_TEXT } from './ui/sample'
 import { SESSION_VERSION } from './core/types'
-import { loadWorkspace, replaceUnreadableWorkspace, unreadableWorkspaceData } from './ui/storage'
+import { loadWorkspace, replaceWorkspace, unreadableWorkspaceData } from './ui/storage'
 import { availableId, newId, stableId } from './core/identity'
 import { MarkdownPreviewView, resolvePreviewSelection } from './ui/markdown-preview'
 import { markdownSyntaxRanges } from './ui/markdown-syntax'
 import type { TextStyleRange } from './ui/render-text'
+import { isImageDocument, isTextDocument, isRegionAnnotation } from './core/types'
+import { annotationFits } from './core/image'
+import { appendAnnotations, patchAnnotationBodies } from './core/document'
+import { presentAnnotations } from './ui/annotation-presentation'
+import { ImageView } from './ui/image-view'
+import { readRaster, verifyRaster } from './ui/image-input'
 import zhLexicon from '../skill/references/anti-slop-kit/scripts/data/zh.json'
 import enLexicon from '../skill/references/anti-slop-kit/scripts/data/en.json'
 
@@ -50,7 +57,7 @@ const LEXICONS = [zhLexicon, enLexicon] as unknown as SlopLexicon[]
 // ---------------------------------------------------------------- 状态
 
 interface AppState {
-  docs: DocItem[]
+  docs: ReviewDocument[]
   activeDocId: string
   /** 已删除批注与文档：7 天保留，过期清理；恢复 / 彻底删除走回收站弹层 */
   trash: TrashEntry[]
@@ -74,6 +81,7 @@ let prefs: ReadingPrefs = loadPrefs()
 const setPrefs = (next: ReadingPrefs): void => {
   prefs = next
   applyPrefs(prefs)
+  imageView.refreshStyle()
   savePrefs(prefs)
 }
 
@@ -85,7 +93,11 @@ function editorAnnotations(): Annotation[] {
   return sidebar.visibleOf(doc.annotations)
 }
 
-const activeDoc = (): DocItem | undefined => state.docs.find((d) => d.id === state.activeDocId)
+const activeItem = (): ReviewDocument | undefined => state.docs.find((d) => d.id === state.activeDocId)
+const activeDoc = (): DocItem | undefined => { const doc = activeItem(); return doc && isTextDocument(doc) ? doc : undefined }
+let ready = false
+let resolveWorkspaceReady: () => void
+const workspaceReady = new Promise<void>((resolve) => { resolveWorkspaceReady = resolve })
 
 const $ = <T extends HTMLElement>(sel: string): T => {
   const el = document.querySelector(sel)
@@ -99,6 +111,32 @@ const previewBody = previewEl.querySelector<HTMLElement>('.markdown-body')!
 const markdownPreview = new MarkdownPreviewView(previewBody)
 const sidebarEl = $('#sidebar')
 const treeEl = $('#filetree')
+
+const imageView = new ImageView($('#image-view'), {
+  onSave: (docId, annotation, expected) => {
+    const doc = activeItem()
+    if (!doc || !isImageDocument(doc) || doc.id !== docId || !annotationFits(doc, annotation)) return false
+    const current = doc.annotations.find((a) => a.id === annotation.id)
+    if ((expected && current !== expected) || (!expected && (current || state.trash.some((t) => t.type === 'annotation' ? t.annotation.id === annotation.id : t.doc.annotations.some((a) => a.id === annotation.id))))) {
+      toast('批注已变化，请取消草稿后重新编辑')
+      return false
+    }
+    const existing = Boolean(current)
+    state = {...state, docs: state.docs.map((d) => d.id !== docId ? d : {...doc,
+      annotations: existing ? doc.annotations.map((a) => a.id === annotation.id ? annotation : a) : [...doc.annotations, annotation],
+    })}
+    if (onlyHighlightFiltered) sidebar.setKindFilter(sidebar.includeKind(annotation.kind))
+    sidebar.setActive(annotation.id)
+    rerender(false)
+    return true
+  },
+  onFocus: (id) => {
+    sidebar.setActive(id)
+    const doc = activeItem()
+    if (doc) sidebar.render(presentAnnotations(doc), {image: true})
+  },
+  onNotify: toast,
+})
 
 // ---------------------------------------------------------------- 视图
 
@@ -151,10 +189,11 @@ previewEl.addEventListener('click', (event) => {
  * 选中含失锚批注时给出「标记为已解决」引导：失锚批注的批语仍然完整，
  * 归档比删除更有利于保留以往的标注。弹层与侧栏共用同一命令 */
 const deleteAnnotation = (ids: string[]): void => {
+  if (imageView.hasDraft()) { toast('请先保存或取消当前区域批注'); return }
   void (async () => {
-    const doc = activeDoc()
+    const doc = activeItem()
     const picked = doc?.annotations.filter((a) => ids.includes(a.id)) ?? []
-    const lostCount = picked.filter((a) => a.anchorLost === true).length
+    const lostCount = picked.filter((a) => !isRegionAnnotation(a) && a.anchorLost === true).length
     const choice = await choiceDialog({
       title: ids.length > 1 ? `删除这 ${ids.length} 条批注？` : '删除这条批注？',
       description:
@@ -170,12 +209,7 @@ const deleteAnnotation = (ids: string[]): void => {
     if (choice === 'alt') {
       // 引导路径：不删除，把所选批注全部归档为已解决
       const altSet = new Set(ids)
-      mutateActive((doc) => ({
-        ...doc,
-        annotations: doc.annotations.map((a) =>
-          altSet.has(a.id) ? { ...a, status: 'resolved' as const, updatedAt: Date.now() } : a,
-        ),
-      }))
+      mutateItem((doc) => patchAnnotationBodies(doc, altSet, {status: 'resolved', updatedAt: Date.now()}))
       toast(`已将 ${ids.length} 条批注标记为已解决`)
       return
     }
@@ -204,7 +238,7 @@ const trashDialog = new TrashDialog({
     rerender()
     toast(
       r.stranded > 0
-        ? `已恢复 ${r.restored} 项；${r.stranded} 项因原文档不存在或 ID 冲突未恢复`
+        ? `已恢复 ${r.restored} 项；${r.stranded} 项因原文档不存在、内容已变化或 ID 冲突未恢复`
         : `已恢复 ${r.restored} 项`,
     )
     trashDialog.update(state.trash, Date.now())
@@ -277,14 +311,10 @@ function openTrash(): void {
 
 /** 解决 / 重开批注（支持批量）：组内有未解决就全部解决，否则全部重开 */
 const toggleAnnotationStatus = (ids: string[]): void => {
+  if (imageView.hasDraft()) { toast('请先保存或取消当前区域批注'); return }
   const idSet = new Set(ids)
-  const anyOpen = activeDoc()?.annotations.some((a) => idSet.has(a.id) && a.status === 'open') ?? false
-  mutateActive((doc) => ({
-    ...doc,
-    annotations: doc.annotations.map((a) =>
-      idSet.has(a.id) ? { ...a, status: anyOpen ? 'resolved' : 'open', updatedAt: Date.now() } : a,
-    ),
-  }))
+  const anyOpen = activeItem()?.annotations.some((a) => idSet.has(a.id) && a.status === 'open') ?? false
+  mutateItem((doc) => patchAnnotationBodies(doc, idSet, {status: anyOpen ? 'resolved' : 'open', updatedAt: Date.now()}))
   toast(anyOpen ? `已解决 ${ids.length} 条批注` : `已重开 ${ids.length} 条批注`)
 }
 
@@ -293,6 +323,8 @@ const toggleAnnotationStatus = (ids: string[]): void => {
 /** 打开批注编辑弹层：摘录与弹出内容按锚定侧取文本。
  * rect 缺省时从高亮元素实时查询（侧栏编辑入口；高亮可能刚被重渲染）。 */
 const openAnnotationEditor = (id: string, rect?: DOMRect, root?: HTMLElement): void => {
+  const item = activeItem()
+  if (item && isImageDocument(item)) { imageView.edit(id); return }
   const doc = activeDoc()
   if (!doc) return
   const anchorRect = rect ?? (readingMode === 'preview' && mode === 'annotate'
@@ -390,6 +422,7 @@ const fileTree = new FileTreeView(treeEl, {
   },
   onRemove: (id) => void removeDoc(id),
   onExportDoc: (id) => {
+    if (!canLeaveEdit()) return
     const doc = state.docs.find((d) => d.id === id)
     if (!doc) return
     if (doc.annotations.length === 0) {
@@ -399,6 +432,7 @@ const fileTree = new FileTreeView(treeEl, {
     exporter.open([doc])
   },
   onBulkExport: (ids) => {
+    if (!canLeaveEdit()) return
     const idSet = new Set(ids)
     const docs = state.docs.filter((d) => idSet.has(d.id) && d.annotations.length > 0)
     if (docs.length === 0) {
@@ -439,6 +473,13 @@ function addAnnotation(input: AnnotationInput): void {
   }
 }
 
+function mutateItem(fn: (doc: ReviewDocument) => ReviewDocument): void {
+  const doc = activeItem()
+  if (!doc) return
+  state = {...state, docs: state.docs.map((d) => d.id === doc.id ? fn(doc) : d)}
+  rerender()
+}
+
 /** 当前文档的不可变更新；无文档时静默忽略 */
 function mutateActive(fn: (doc: DocItem) => DocItem): void {
   const doc = activeDoc()
@@ -451,6 +492,9 @@ function mutateActive(fn: (doc: DocItem) => DocItem): void {
 }
 
 function canLeaveEdit(): boolean {
+  if (!ready) { toast('工作区正在载入，请稍候'); return false }
+  if (imageView.hasDraft()) { toast('请先保存或取消当前区域批注'); return false }
+  imageView.flushGeometry()
   if (mode === 'edit') {
     toast('请先完成或取消原文编辑')
     return false
@@ -558,6 +602,7 @@ async function removeDocsConfirmed(ids: string[]): Promise<void> {
 /** 侧栏中的批注始终定位到它所属的源文本，而非渲染后的 Markdown。 */
 function revealAnnotation(id: string): boolean {
   if (!canLeaveEdit()) return false
+  if (activeItem()?.kind === 'image') return true
   const doc = activeDoc()
   const ann = doc?.annotations.find((a) => a.id === id)
   if (ann?.target === 'revised' && doc?.revised) mode = 'diff'
@@ -569,6 +614,7 @@ function revealAnnotation(id: string): boolean {
 }
 
 function focusAnnotation(id: string): void {
+  if (activeItem()?.kind === 'image') { imageView.focus(id); return }
   if (mode !== 'annotate' || readingMode !== 'preview') {
     editor.focusAnnotation(id)
     return
@@ -583,7 +629,16 @@ function focusAnnotation(id: string): void {
 // ---------------------------------------------------------------- 渲染
 
 function rerender(syncPopup = true): void {
+  const item = activeItem()
   const doc = activeDoc()
+  const image = item && isImageDocument(item) ? item : null
+  imageView.render(image, image ? (onlyHighlightFiltered ? sidebar.visibleOf(image.annotations) : image.annotations) : undefined)
+  $('#reading-panes').hidden = Boolean(image)
+  $('#reading-fab').hidden = Boolean(image)
+  for (const id of ['btn-scan', 'btn-edit', 'btn-diff', 'btn-search']) {
+    const button = $<HTMLButtonElement>(`#${id}`)
+    button.disabled = Boolean(image)
+  }
   // 模式归一：切到没有改稿的文档时对照模式无处落脚，回落批注视图
   if (mode === 'diff' && !doc?.revised) mode = 'annotate'
   // 顶栏按钮状态始终跟随模式（原实现在编辑分支提前 return，编辑按钮从不高亮）
@@ -607,8 +662,7 @@ function rerender(syncPopup = true): void {
   })
   if (mode === 'edit') {
     // 编辑模式由 renderEditMode 独占渲染区，这里只同步侧栏
-    sidebar.render(doc?.text ?? '', doc?.annotations ?? [], {
-      revised: doc?.revised,
+    sidebar.render(doc ? presentAnnotations(doc) : [], {
       slopHistory: doc?.slopHistory ?? [],
     })
     fileTree.render(state.docs, state.activeDocId)
@@ -622,7 +676,7 @@ function rerender(syncPopup = true): void {
     editor.renderDiff(rows, editorAnnotations())
     const { added, removed } = diffStats(rows)
     stats = `+${added} / −${removed}`
-  } else {
+  } else if (!image) {
     const text = doc?.text ?? ''
     if (syntaxText !== text) {
       syntaxRanges = markdownSyntaxRanges(text)
@@ -647,14 +701,14 @@ function rerender(syncPopup = true): void {
     diffStatsEl.textContent = stats
     diffStatsEl.classList.toggle('hidden', !inDiff)
   }
-  sidebar.render(doc?.text ?? '', doc?.annotations ?? [], {
-    revised: doc?.revised,
+  sidebar.render(item ? presentAnnotations(item) : [], {
+    image: item?.kind === 'image',
     slop: doc ? (slopReports.get(doc.id) ?? null) : null,
     slopHistory: doc?.slopHistory ?? [],
   })
   fileTree.render(state.docs, state.activeDocId)
   searchPanel.setDocs(
-    state.docs.map((d) => ({ id: d.id, name: d.name, text: d.text })),
+    state.docs.filter(isTextDocument).map((d) => ({ id: d.id, name: d.name, text: d.text })),
     state.activeDocId,
   )
   if (syncPopup && doc) annotationPopup.sync(doc.text, doc.annotations, doc.revised)
@@ -688,6 +742,45 @@ function downloadDocumentBackup(): void {
   const data = JSON.stringify({...workspaceSnapshot(), trash: []}, null, 2)
   downloadJson(data, 'inkmark-documents.json')
   toast(selectionPin.hasDrafts() ? '备份已下载，未提交的划词草稿不包含在内' : '已下载文档与批注备份')
+}
+
+function downloadRecoveryBackup(): void {
+  if (!canLeaveEdit()) return
+  downloadJson(JSON.stringify(workspaceSnapshot(), null, 2), 'inkmark-workspace.json')
+  toast('已下载完整工作区（含原图和回收站）；未提交的草稿不包含在内')
+}
+
+async function restoreWorkspaceFile(file: File): Promise<void> {
+  if (!canLeaveEdit()) return
+  const initial = state
+  try {
+    const restored = parseWorkspace(await file.text())
+    if (!restored) { toast('工作区备份格式无效，当前数据保持不变'); return }
+    const docs = [...restored.docs, ...restored.trash.flatMap((t) => t.type === 'doc' ? [t.doc] : [])]
+    for (const doc of docs) if (isImageDocument(doc)) await verifyRaster(doc.image)
+    const ok = await confirmDialog({title: '恢复完整工作区？', description: `将以备份中的 ${restored.docs.length} 份文档和 ${restored.trash.length} 项回收站记录替换当前工作区。请先备份当前内容。恢复会放弃所有未提交的批注草稿；备份不包含草稿。`, confirmText: '恢复工作区', danger: true})
+    if (!ok || !canLeaveEdit()) return
+    if (state !== initial) { toast('工作区在恢复期间发生变化，请重试'); return }
+    if (!await commitWorkspaceReplacement(restored, initial)) return
+    selectionPin.discardDrafts(new Set([...initial.docs.map((d) => d.id), ...trashedDocIds(initial.trash)]))
+    selectionPin.dismiss(); annotationPopup.close()
+    toast('完整工作区已恢复')
+  } catch (error) { toast(error instanceof Error ? error.message : '备份读取失败') }
+}
+
+/** Explicit replacement shares the save queue and excludes concurrent UI mutations. */
+async function commitWorkspaceReplacement(restored: ReturnType<typeof workspaceSnapshot>, initial: AppState): Promise<boolean> {
+  document.body.inert = true
+  try {
+    await save.settle()
+    if (state !== initial) { toast('工作区在恢复期间发生变化，请重试'); return false }
+    if (!await replaceWorkspace(restored)) { toast('无法恢复：请先下载当前完整备份，再刷新页面后重试'); return false }
+    state = restored
+    mode = 'annotate'
+    save.initialize()
+    rerender(false)
+    return true
+  } finally { document.body.inert = false }
 }
 
 function downloadJson(data: string, name: string): void {
@@ -892,19 +985,36 @@ async function readImport(files: FileList | File[], context: ImportContext): Pro
 /** 文件导入编排：管线（分类/解析）在 core/import.ts，冲突判定在 core/import-conflict.ts，
  * 这里只做诊断弹出、状态应用与提示。工作区为空 → 直接导入；存在同名冲突 → 先弹
  * 诊断树（取消 = 整次导入作废，W3C/会话也一并作废），确认后一次性落盘。 */
-async function importFiles(files: FileList | File[]): Promise<void> {
+async function importFiles(inputFiles: FileList | File[]): Promise<void> {
+  const files = Array.from(inputFiles)
+  await workspaceReady
   if (!canLeaveEdit()) return
   const initialDocs = state.docs
   const initialActiveId = state.activeDocId
-  const r = await readImport(files, { docs: initialDocs, currentDoc: activeDoc() })
+  const imageFiles = Array.from(files).filter((file) => file.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg)$/i.test(file.name))
+  const imageDocs: ReviewDocument[] = []
+  const imageErrors: string[] = []
+  for (const file of imageFiles) {
+    try {
+      const image = await readRaster(file)
+      const rel = file.webkitRelativePath || ''
+      const path = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : ''
+      imageDocs.push({kind: 'image', id: newDocId(), name: uniqueDocumentName(file.name || '粘贴的图片.png', path, [...initialDocs, ...imageDocs]), path, image, annotations: [], addedAt: Date.now()})
+    } catch (error) { imageErrors.push(`${file.name}: ${error instanceof Error ? error.message : '图片读取失败'}`) }
+  }
+  if (imageErrors.length > 0) toast(imageErrors.join('；'))
+  const r = await readImport(Array.from(files).filter((file) => !imageFiles.includes(file)), { docs: initialDocs, currentDoc: activeItem() })
   if (!r) return
+  try {
+    for (const doc of r.sessionDocs) if (isImageDocument(doc)) await verifyRaster(doc.image)
+  } catch (error) { toast(error instanceof Error ? error.message : '备份中的图片无效'); return }
   const plan = buildImportPlan(
     r.textDocs.map((d) => ({name: d.name, path: d.path, text: d.text})),
-    state.docs,
+    state.docs.filter(isTextDocument),
   )
   let rows = plan.rows
   if (plan.hasConflicts) {
-    const decided = await importConflictDialog(plan, state.docs)
+    const decided = await importConflictDialog(plan, state.docs.filter(isTextDocument))
     if (!decided) return
     rows = decided
   }
@@ -944,10 +1054,10 @@ async function importFiles(files: FileList | File[]): Promise<void> {
   }
 
   const applied = applyW3C(r.w3cRouted)
-  const sessionDocs = prepareSessionDocs(r.sessionDocs, [...state.docs, ...fresh], state.trash)
-  const newDocs = [...fresh, ...sessionDocs]
+  const sessionDocs = prepareSessionDocs(r.sessionDocs, [...state.docs, ...imageDocs, ...fresh], state.trash)
+  const newDocs = [...imageDocs, ...fresh, ...sessionDocs]
   if (overwrites.size > 0 || newDocs.length > 0) {
-    const nextActiveId = fresh[0]?.id ?? sessionDocs[0]?.id ?? state.activeDocId
+    const nextActiveId = imageDocs[0]?.id ?? fresh[0]?.id ?? sessionDocs[0]?.id ?? state.activeDocId
     if (nextActiveId !== state.activeDocId || overwrites.has(state.activeDocId)) {
       selectionPin.dismiss()
       annotationPopup.close()
@@ -956,7 +1066,7 @@ async function importFiles(files: FileList | File[]): Promise<void> {
       docs: [
         ...state.docs.map((d) => {
           const text = overwrites.get(d.id)
-          if (text === undefined) return d
+          if (text === undefined || !isTextDocument(d)) return d
           const preview = reanchorAnnotations(d.text, text, d.annotations)
           reanchored += preview.moved
           lost += preview.clamped
@@ -974,11 +1084,13 @@ async function importFiles(files: FileList | File[]): Promise<void> {
   } else if (r.w3cFiles > 0 && newDocs.length === 0 && overwrites.size === 0) {
     toast('这些批注已导入')
   } else if (newDocs.length === 0 && overwrites.size === 0 && r.w3cFiles === 0) {
-    toast(r.skipped > 0 ? `没有可导入的文本文件（跳过 ${r.skipped} 个）` : '没有可导入的文件')
+    if (imageErrors.length === 0) toast(r.skipped > 0 ? `没有可导入的文本文件（跳过 ${r.skipped} 个）` : '没有可导入的文件')
   }
   if (newDocs.length > 0 || overwrites.size > 0) {
     const action = (a: string): number => rows.filter((row) => row.action === a).length
     const parts: string[] = []
+    if (imageErrors.length) parts.push(`${imageErrors.length} 张图片导入失败`)
+    if (imageDocs.length) parts.push(`导入 ${imageDocs.length} 张图片`)
     const imported = action('direct') + action('rename')
     if (imported > 0) parts.push(`导入 ${imported} 个文档`)
     if (overwrites.size > 0) {
@@ -999,7 +1111,7 @@ async function importW3CFile(file: File): Promise<void> {
   if (!canLeaveEdit()) return
   const initialDocs = state.docs
   const initialActiveId = state.activeDocId
-  const r = await readImport([file], { docs: state.docs, currentDoc: activeDoc() })
+  const r = await readImport([file], { docs: state.docs, currentDoc: activeItem() })
   if (!r) return
   if (state.docs !== initialDocs || state.activeDocId !== initialActiveId || !canLeaveEdit()) {
     toast('工作区在导入期间发生变化，请重新导入')
@@ -1022,7 +1134,7 @@ async function importW3CFile(file: File): Promise<void> {
 function applyW3C(routed: W3CRouted[]): { merged: number; unmatched: number; routed: number } {
   if (routed.length === 0) return { merged: 0, unmatched: 0, routed: 0 }
   let merged = 0
-  let unmatched = routed.filter((g) => g.docId === null && !activeDoc()).reduce((count, g) => count + g.unmatched, 0)
+  let unmatched = routed.filter((g) => g.docId === null && !activeItem()).reduce((count, g) => count + g.unmatched, 0)
   let routedDocs = 0
   const usedIds = new Set([
     ...state.docs.flatMap((d) => d.annotations.map((a) => a.id)),
@@ -1049,7 +1161,7 @@ function applyW3C(routed: W3CRouted[]): { merged: number; unmatched: number; rou
       merged += anns.length
       routedDocs +=
         anns.length > 0 && groups.some((g) => g.docId !== null && g.docId !== state.activeDocId) ? 1 : 0
-      return { ...d, annotations: [...d.annotations, ...anns] }
+      return appendAnnotations(d, anns.filter((a) => annotationFits(d, a)))
     }),
   }
   return { merged, unmatched, routed: routedDocs }
@@ -1058,7 +1170,7 @@ function applyW3C(routed: W3CRouted[]): { merged: number; unmatched: number; rou
 /** W3C 导入结果提示：分发到多个文档时注明 */
 function w3cToast(merged: number, unmatched: number, routed: number): string {
   const base = `导入 ${merged} 条批注`
-  const skip = unmatched > 0 ? `，${unmatched} 条原文中找不到锚点已跳过` : ''
+  const skip = unmatched > 0 ? `，${unmatched} 条无法匹配目标已跳过` : ''
   const dist = routed > 0 ? `（已按来源分发到 ${routed} 份文档）` : ''
   return `${base}${skip}${dist}`
 }
@@ -1139,7 +1251,8 @@ async function openNewDocument(): Promise<void> {
 }
 
 function maybeExport(): void {
-  const doc = activeDoc()
+  if (!canLeaveEdit()) return
+  const doc = activeItem()
   if (!doc || doc.annotations.length === 0) {
     toast('当前文档还没有批注：划选正文文字，或运行 slop 预扫描')
     return
@@ -1148,7 +1261,7 @@ function maybeExport(): void {
 }
 
 function clearCurrent(): void {
-  const doc = activeDoc()
+  const doc = activeItem()
   if (!doc) return
   removeDoc(doc.id)
 }
@@ -1187,8 +1300,8 @@ function togglePanel(which: 'tree' | 'sidebar'): void {
 // 导入组：文件 / 文件夹 / 示例 归入一个悬停菜单
 wireHeaderMenu($('#btn-import'), [
   {id: 'paste', label: '粘贴新建文档', icon: icon('plus'), hint: '文本 · Markdown'},
-  {id: 'files', label: '打开文件', icon: icon('file'), hint: '.txt · .md · .json'},
-  {id: 'folder', label: '导入文件夹', icon: icon('folder'), hint: '整批 .txt · .md'},
+  {id: 'files', label: '打开文件', icon: icon('file'), hint: '文本 · 图片 · JSON'},
+  {id: 'folder', label: '导入文件夹', icon: icon('folder'), hint: '批量导入文本与图片'},
   {id: 'sample', label: '载入示例', icon: icon('plus'), hint: '带 AI 味的演示文档'},
 ], (id) => {
   if (id === 'paste') void openNewDocument()
@@ -1223,14 +1336,34 @@ document.querySelectorAll<HTMLButtonElement>('[data-reading-mode]').forEach((but
   })
 })
 
-// 仅空工作台接收直接粘贴；输入框、对话框和已有文档的粘贴不被接管。
+// 图片粘贴创建独立文档；输入框保留原生粘贴。空工作台也接受直接粘贴文本。
 document.addEventListener('paste', (event) => {
-  if (state.docs.length > 0 || !event.clipboardData) return
+  if (!event.clipboardData) return
   const target = event.target as HTMLElement | null
   if (!target || target.closest('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="alertdialog"]')) return
-  if (!event.clipboardData.types.includes('text/plain')) return
+  const images = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith('image/'))
+  if (images.length > 0) {
+    event.preventDefault()
+    void workspaceReady.then(() => importFiles(images))
+    return
+  }
+  if (state.docs.length > 0 || !event.clipboardData.types.includes('text/plain')) return
   event.preventDefault()
-  createPastedDocument(event.clipboardData.getData('text/plain'))
+  const text = event.clipboardData.getData('text/plain')
+  void workspaceReady.then(() => {
+    if (state.docs.length === 0) createPastedDocument(text)
+    else toast('工作区已载入；请使用“粘贴新建文档”添加文本')
+  })
+})
+
+const isEditableTarget = (target: EventTarget | null): boolean => target instanceof Element && Boolean(target.closest('input, textarea, [contenteditable="true"], [role="dialog"], [role="alertdialog"]'))
+document.addEventListener('dragover', (event) => {
+  if (!isEditableTarget(event.target) && event.dataTransfer?.types.includes('Files')) event.preventDefault()
+})
+document.addEventListener('drop', (event) => {
+  if (isEditableTarget(event.target) || !event.dataTransfer?.files.length) return
+  event.preventDefault()
+  void importFiles(event.dataTransfer.files)
 })
 
 // 视图组：明暗翻转 / 完整阅读设置 / 批注栏开关
@@ -1256,9 +1389,13 @@ document.querySelectorAll<HTMLElement>('[data-collapse]').forEach((btn) => {
 
 // 更多：GitHub / 移除当前文档（低频与破坏性归拢）
 wireHeaderMenu($('#btn-more'), [
+  {id: 'recovery', label: '下载完整工作区备份', icon: icon('download'), hint: '含原图和回收站'},
+  {id: 'restore', label: '恢复完整工作区备份', icon: icon('folderOpen'), hint: '替换当前工作区'},
   {id: 'backup', label: '下载文档与批注备份', icon: icon('download'), hint: '不含回收站和草稿'},
   {id: 'clear', label: '移除当前文档', icon: icon('trash'), danger: true, hint: '二次确认'},
 ], (id) => {
+  if (id === 'recovery') downloadRecoveryBackup()
+  if (id === 'restore' && canLeaveEdit()) $('#workspace-input').click()
   if (id === 'backup') downloadDocumentBackup()
   if (id === 'clear') void clearCurrent()
 })
@@ -1266,7 +1403,13 @@ wireHeaderMenu($('#btn-more'), [
 // 批注工作流直出：搜索（⌘F）与回收站
 $('#btn-search').addEventListener('click', () => openSearch())
 $('#btn-trash').addEventListener('click', () => openTrash())
-$('#btn-recovery-backup').addEventListener('click', downloadDocumentBackup)
+$('#btn-recovery-backup').addEventListener('click', downloadRecoveryBackup)
+$('#workspace-input').addEventListener('change', (event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (file) void restoreWorkspaceFile(file)
+})
 $('#btn-raw-backup').addEventListener('click', () => {
   const raw = unreadableWorkspaceData()
   if (raw === null) return
@@ -1282,11 +1425,7 @@ $('#btn-reset-storage').addEventListener('click', () => void (async () => {
     danger: true,
   })
   if (!ok) return
-  if (!replaceUnreadableWorkspace(workspaceSnapshot())) {
-    toast('重置失败，请检查浏览器存储')
-    return
-  }
-  save.markDirty()
+  if (!await commitWorkspaceReplacement(workspaceSnapshot(), state)) return
   toast('已用当前工作区重置本地数据')
 })())
 $('#btn-theme').addEventListener('click', () => setPrefs({...prefs, theme: flipPolarity(prefs.theme)}))
@@ -1325,7 +1464,7 @@ const searchPanel = new SearchPanelView({
         if (!target) return d
         const anns = buildBatchAnnotations(target.matches, { kind, comment, replacement })
         total += anns.length
-        return { ...d, annotations: [...d.annotations, ...anns] }
+        return appendAnnotations(d, anns.filter((a) => annotationFits(d, a)))
       }),
     }
     sidebar.includeKind(kind)
@@ -1353,16 +1492,18 @@ function openSearch(): void {
     rerender(false)
   }
   searchPanel.toggle(
-    state.docs.map((d) => ({ id: d.id, name: d.name, text: d.text })),
+    state.docs.filter(isTextDocument).map((d) => ({ id: d.id, name: d.name, text: d.text })),
     state.activeDocId,
   )
 }
 
 // ---------------------------------------------------------------- 启动
 
-function bootstrap(): void {
+async function bootstrap(): Promise<void> {
   applyPrefs(prefs) // 首渲染前应用阅读偏好（防闪烁脚本已先行设置主题，这里补齐其余维度）
-  state = loadWorkspace()
+  state = await loadWorkspace()
+  ready = true
+  save.initialize()
   rerender(false)
   // header 版本号（构建期由 vite define 注入 package.json version）
   const versionEl = document.querySelector('#app-version')
@@ -1388,7 +1529,7 @@ function bootstrap(): void {
   window.matchMedia('(max-width: 1023.98px)').addEventListener('change', closeDrawers)
   window.addEventListener('beforeunload', (event) => {
     const doc = activeDoc()
-    if ((mode === 'edit' && doc && editor.editValue() !== normalizeLineEndings(doc.text)) || annotationPopup.hasDraft() || selectionPin.hasDrafts()) {
+    if ((mode === 'edit' && doc && editor.editValue() !== normalizeLineEndings(doc.text)) || annotationPopup.hasDraft() || selectionPin.hasDrafts() || imageView.hasDraft()) {
       event.preventDefault()
       event.returnValue = ''
     }
@@ -1400,6 +1541,7 @@ function bootstrap(): void {
     treeEl,
     sidebarEl,
   })
+  resolveWorkspaceReady!()
   new ReadingFab($('#reading-fab'), {
     getPrefs: () => prefs,
     onChange: (patch) => setPrefs({...prefs, ...patch}),
@@ -1407,7 +1549,7 @@ function bootstrap(): void {
   })
 }
 
-bootstrap()
+void bootstrap()
 
 // 供控制台调试与将来 e2e 使用的只读视图（无可变出口）
 export const __debug = {

@@ -106,6 +106,7 @@ test('编辑保留统一换行，混合换行的实际变更先提示', async ({
   expect(windows.slice(annotation.start, annotation.end)).toBe('第二行')
   await page.locator('#btn-edit').click()
   await expect(page.locator('#edit-source')).toHaveValue('第一行\n第二行\n')
+  await expect(page.locator('#save-text')).toHaveText('已保存')
   expect(await page.evaluate(() => {
     const event = new Event('beforeunload', {cancelable: true})
     window.dispatchEvent(event)
@@ -305,6 +306,7 @@ test('草稿跨视图、覆盖和删除时保持归属，恢复后可继续批�
   await page.locator('[data-entry] [data-op="purge"]').first().click()
   await purge.getByRole('button', {name: '彻底删除', exact: true}).click()
   await page.getByRole('dialog', {name: '回收站'}).getByRole('button', {name: '关闭'}).click()
+  await expect(page.locator('#save-text')).toHaveText('已保存')
   expect(await page.evaluate(() => {
     const event = new Event('beforeunload', {cancelable: true})
     window.dispatchEvent(event)

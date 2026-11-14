@@ -284,7 +284,7 @@ export class TrashDialog {
            <span class="min-w-0 truncate text-sm font-medium" title="${escapeHtml(t.doc.name)}">${escapeHtml(t.doc.name)}</span>
            <span class="text-xs text-muted-foreground">${t.doc.annotations.length} 条批注</span>`
         : `<span class="badge border-transparent" style="color:var(--kind-${t.annotation.kind});background:var(--kind-${t.annotation.kind}-bg)">${KIND_LABEL[t.annotation.kind]}</span>
-           ${t.annotation.anchorLost ? '<span class="badge border-amber-500/40 text-amber-600 dark:text-amber-400">失锚</span>' : ''}
+           ${('anchorLost' in t.annotation && t.annotation.anchorLost) ? '<span class="badge border-amber-500/40 text-amber-600 dark:text-amber-400">失锚</span>' : ''}
            ${t.annotation.status === 'resolved' ? '<span class="badge bg-secondary text-secondary-foreground">已解决</span>' : ''}
            <span class="truncate text-xs text-muted-foreground" title="${escapeHtml(t.docName)}">${escapeHtml(t.docName)}</span>`
     const body =

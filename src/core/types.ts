@@ -122,9 +122,9 @@ export type ReviewAnnotation = Annotation | RegionAnnotation
 
 /** Self-contained immutable raster: backup and trash retain the original bytes. */
 export interface RasterImage {
-  dataUrl: string
-  width: number
-  height: number
+  readonly dataUrl: string
+  readonly width: number
+  readonly height: number
 }
 
 export interface DocumentIdentity {
@@ -168,13 +168,8 @@ export interface AnnotationInput {
 /** 工作区文档：一个可批注的文本单元 */
 export interface DocItem extends DocumentIdentity {
   kind?: 'text'
-  id: string
-  name: string
-  /** 相对路径（文件夹导入时含目录层级），单文件导入为 '' */
-  path: string
   text: string
   annotations: Annotation[]
-  addedAt: number
   /** AI 改稿全文（对照视图）：存在时可在「原文 vs 改稿」diff 视图里复核批注 */
   revised?: string
   /** slop 评分历史（每次扫描追加，保留最近 20 个采样点），侧栏趋势用 */
@@ -198,6 +193,7 @@ export interface TrashedAnnotation {
   annotation: ReviewAnnotation
   /** Snapshot identity prevents restoring onto a changed or unrelated target. */
   targetIdentity?: string
+  textQuote?: {exact: string; prefix: string; suffix: string}
   docId: string
   docName: string
   deletedAt: number
@@ -213,7 +209,7 @@ export interface TrashedDoc {
 /** 回收站两种条目类型：判别联合——恢复与彻底删除按 entryKey 定位 */
 export type TrashEntry = TrashedAnnotation | TrashedDoc
 
-/** 工作区会话 v3：多文档 + 回收站（批注/文档双类型）。localStorage 持久化单元 */
+/** 工作区会话 v3：多文档 + 回收站（批注/文档双类型）。IndexedDB 持久化单元 */
 export interface Workspace {
   version: typeof SESSION_VERSION
   docs: ReviewDocument[]

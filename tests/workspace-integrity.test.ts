@@ -1,3 +1,4 @@
+import { targetIdentity } from '../src/core/image'
 import { describe, expect, it } from 'vitest'
 import { buildBatchAnnotations } from '../src/core/batch'
 import { prepareSessionDocs } from '../src/core/import'
@@ -62,7 +63,7 @@ describe('工作区跨边界的数据契约', () => {
     expect(imported[0]!.annotations[0]!.id).not.toBe(existing.annotations[0]!.id)
 
     const trashedDoc: TrashEntry = {type: 'doc', doc: {...doc('same'), annotations: []}, deletedAt: 1}
-    const trashedAnn: TrashEntry = {type: 'annotation', annotation: ann('same'), docId: existing.id, docName: existing.name, deletedAt: 1}
+    const trashedAnn: TrashEntry = {type: 'annotation', targetIdentity: targetIdentity(existing, ann('same'))! , annotation: ann('same'), docId: existing.id, docName: existing.name, deletedAt: 1}
     expect(purgeForever([trashedDoc, trashedAnn], new Set([entryKey(trashedDoc)]))).toEqual([trashedAnn])
     const restored = restoreFromTrash([trashedAnn], [{...existing, annotations: [ann('same')]}], new Set([entryKey(trashedAnn)]))
     expect(restored.docs[0]!.annotations.map((a) => a.id)).toEqual(['same', 'same-1'])

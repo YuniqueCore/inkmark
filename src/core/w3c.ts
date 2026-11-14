@@ -9,8 +9,10 @@
 
 import { anchorQuote } from './quote-match'
 import { codePointsToUtf16, textQuoteSelector, utf16ToCodePoints } from './text'
-import type { Annotation, AnnotationKind, DocItem } from './types'
+import type { Annotation, AnnotationBody, AnnotationKind, ImageDocument, ReviewDocument, RegionAnnotation } from './types'
 import { isSafeId } from './session-schema'
+import { isImageDocument } from './types'
+import { validRegion, imageIdentity } from './image'
 import { stableId } from './identity'
 
 const ANNO_CONTEXT = 'http://www.w3.org/ns/anno.jsonld'
@@ -43,6 +45,7 @@ export interface W3CAnnotation {
     selector: Array<
       | { type: 'TextQuoteSelector'; exact: string; prefix: string; suffix: string }
       | { type: 'TextPositionSelector'; start: number; end: number }
+      | { type: 'FragmentSelector'; conformsTo: string; value: string }
     >
   }
 }
@@ -54,17 +57,23 @@ const MOTIVATION_TO_KIND: Record<string, AnnotationKind> = {
 }
 
 /** 内部批注 → W3C Annotation 数组。改稿侧批注的 target.source 带 `#revised` 标记。 */
-export function toW3C(doc: DocItem, opts?: { includeResolved?: boolean }): W3CAnnotation[] {
+export function toW3C(doc: ReviewDocument, opts?: { includeResolved?: boolean }): W3CAnnotation[] {
+  if (isImageDocument(doc)) return doc.annotations.filter((a) => opts?.includeResolved || a.status === 'open').map((a) => ({
+    '@context': ANNO_CONTEXT, id: `urn:inkmark:doc:${doc.id}#ann=${a.id}`, type: 'Annotation',
+    motivation: KIND_TO_MOTIVATION[a.kind], created: new Date(a.createdAt).toISOString(), modified: new Date(a.updatedAt).toISOString(),
+    body: annotationBodies(a), target: {source: imageW3CSource(doc), selector: [{
+      type: 'FragmentSelector', conformsTo: 'http://www.w3.org/TR/media-frags/',
+      value: `xywh=pixel:${a.selector.x},${a.selector.y},${a.selector.width},${a.selector.height}`,
+    }]},
+  }))
   const revised = doc.revised
   return doc.annotations
     .filter((a) => opts?.includeResolved || a.status === 'open')
-    .map((a) => {
+    .map((a): W3CAnnotation | null => {
       const isRevised = a.target === 'revised'
       const sourceText = isRevised ? revised : doc.text
       if (sourceText === undefined) return null
-      const bodies: TextualBody[] = [{ type: 'TextualBody', value: a.comment, purpose: 'describing' }]
-      bodies.push({ type: 'TextualBody', value: a.kind, purpose: 'tagging' })
-      if (a.status === 'resolved') bodies.push({ type: 'TextualBody', value: 'resolved', purpose: 'tagging' })
+      const bodies = annotationBodies(a)
       return {
         '@context': ANNO_CONTEXT,
         id: `urn:inkmark:doc:${doc.id}#ann=${a.id}`,
@@ -89,7 +98,7 @@ export function toW3C(doc: DocItem, opts?: { includeResolved?: boolean }): W3CAn
  * 非 inkmark 来源（外部标注工具）返回 docId null，由导入方回落到当前文档。 */
 export function parseW3CSource(source: unknown): { docId: string | null; revised: boolean } {
   const s = typeof source === 'string' ? source : ''
-  const m = s.match(/^urn:inkmark:doc:([^#]+?)(?:#revised)?$/)
+  const m = s.match(/^urn:inkmark:doc:([^#]+?)(?:#(?:revised|image=[A-Za-z0-9-]+))?$/)
   return { docId: m ? m[1]! : null, revised: s.endsWith('#revised') }
 }
 
@@ -139,8 +148,9 @@ function parseOne(item: unknown, text: string, now: number, scope: string, isRev
   if (!item || typeof item !== 'object') return null
   const obj = item as Record<string, unknown>
   const target = obj.target as Record<string, unknown> | undefined
-  if (!target) return null
+  if (!target || (typeof target.source === 'string' && target.source.includes('#image='))) return null
   const selectors = Array.isArray(target.selector) ? target.selector : []
+  if (selectors.some((s) => (s as Record<string, unknown>)?.type === 'FragmentSelector')) return null
   const quote = selectors.find((s) => (s as Record<string, unknown>)?.type === 'TextQuoteSelector') as
     | { exact?: unknown; prefix?: unknown; suffix?: unknown }
     | undefined
@@ -162,32 +172,33 @@ function parseOne(item: unknown, text: string, now: number, scope: string, isRev
   )
   if (anchor === null) return null
 
+  return {...parseW3CBody(obj, now, scope), start: anchor.start, end: anchor.end,
+    ...(isRevised ? {target: 'revised' as const} : {})}
+}
+
+function parseW3CBody(obj: Record<string, unknown>, now: number, scope: string): AnnotationBody {
   const bodies = Array.isArray(obj.body)
     ? obj.body.filter((body): body is Record<string, unknown> => Boolean(body) && typeof body === 'object')
     : []
-  const comment =
-    bodies
-      .filter((b) => b.purpose === 'describing' && typeof b.value === 'string')
-      .map((b) => b.value as string)
-      .join('\n') || '(无批注内容)'
+  const comments = bodies.filter((b) => b.purpose === 'describing' && typeof b.value === 'string').map((b) => b.value as string)
+  const comment = comments.length ? comments.join('\n') : '(无批注内容)'
   const tags = bodies.filter((b) => b.purpose === 'tagging' && typeof b.value === 'string').map((b) => b.value as string)
   const motivation = typeof obj.motivation === 'string' ? obj.motivation : ''
   const kind = tags.find((t): t is AnnotationKind => Object.hasOwn(KIND_TO_MOTIVATION, t)) ??
     (Object.hasOwn(MOTIVATION_TO_KIND, motivation) ? MOTIVATION_TO_KIND[motivation] : undefined) ?? 'highlight'
   const status = tags.includes('resolved') ? 'resolved' : 'open'
-  const created = Date.parse(asString(obj.created) ?? '') || now
-  const modified = Date.parse(asString(obj.modified) ?? '') || created
+  const parsedCreated = Date.parse(asString(obj.created) ?? '')
+  const parsedModified = Date.parse(asString(obj.modified) ?? '')
+  const created = Number.isFinite(parsedCreated) ? parsedCreated : now
+  const modified = Number.isFinite(parsedModified) ? parsedModified : created
   const idSuffix = asString(obj.id)?.split('ann=')[1]
 
   return {
     id: idSuffix && isSafeId(idSuffix) ? idSuffix : stableId('w3c', [scope, asString(obj.id) ?? obj]),
-    start: anchor.start,
-    end: anchor.end,
     kind,
     comment,
     status,
     source: 'manual',
-    ...(isRevised ? { target: 'revised' as const } : {}),
     createdAt: created,
     updatedAt: modified,
   }
@@ -195,4 +206,36 @@ function parseOne(item: unknown, text: string, now: number, scope: string, isRev
 
 function asString(v: unknown): string | undefined {
   return typeof v === 'string' ? v : undefined
+}
+
+function annotationBodies(a: AnnotationBody): TextualBody[] {
+  return [
+    {type: 'TextualBody', value: a.comment, purpose: 'describing'},
+    {type: 'TextualBody', value: a.kind, purpose: 'tagging'},
+    ...(a.status === 'resolved' ? [{type: 'TextualBody' as const, value: 'resolved', purpose: 'tagging' as const}] : []),
+  ]
+}
+
+export function imageW3CSource(doc: ImageDocument): string {
+  return `urn:inkmark:doc:${doc.id}#image=${imageIdentity(doc.image)}`
+}
+
+export function fromImageW3C(data: unknown, doc: ImageDocument): {annotations: RegionAnnotation[]; unmatched: number} {
+  const annotations: RegionAnnotation[] = []
+  const items = collectW3CItems(data)
+  const source = imageW3CSource(doc)
+  for (const item of items) {
+    if (!item || typeof item !== 'object') continue
+    const obj = item as Record<string, unknown>
+    const target = obj.target as {source?: unknown; selector?: unknown} | undefined
+    if (target?.source !== source || !Array.isArray(target.selector)) continue
+    const fragments = target.selector.filter((s) => s?.type === 'FragmentSelector')
+    if (fragments.length !== 1 || typeof fragments[0].value !== 'string' || fragments[0].conformsTo !== 'http://www.w3.org/TR/media-frags/') continue
+    const match = /^xywh=pixel:(\d+),(\d+),(\d+),(\d+)$/.exec(fragments[0].value)
+    if (!match) continue
+    const selector = {type: 'rectangle' as const, x: Number(match[1]), y: Number(match[2]), width: Number(match[3]), height: Number(match[4])}
+    if (!validRegion(selector, doc.image)) continue
+    annotations.push({...parseW3CBody(obj, Date.now(), doc.id), selector})
+  }
+  return {annotations, unmatched: items.length - annotations.length}
 }

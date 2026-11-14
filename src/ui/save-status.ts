@@ -4,7 +4,7 @@
  * 在脏状态下强制落盘一次。数据快照由调用方注入（模块不持有工作区状态）。
  */
 
-import { saveWorkspace, unreadableWorkspaceData } from './storage'
+import { saveWorkspace, unreadableWorkspaceData, storageConflict, storageReadError, needsInitialSave } from './storage'
 import type { Workspace } from '../core/types'
 
 type SaveStatus = 'saved' | 'dirty' | 'error'
@@ -16,7 +16,7 @@ const LABEL: Record<SaveStatus, {cls: string; text: string}> = {
 }
 
 const DEBOUNCE_MS = 500
-export function initSaveStatus(getPayload: () => Workspace): {markDirty: () => void} {
+export function initSaveStatus(getPayload: () => Workspace): {markDirty: () => void; initialize: () => void; settle: () => Promise<void>} {
   let status: SaveStatus = 'saved'
   let timer: ReturnType<typeof setTimeout> | undefined
 
@@ -29,13 +29,14 @@ export function initSaveStatus(getPayload: () => Workspace): {markDirty: () => v
     if (!dot || !label) return
     const s = LABEL[status]
     dot.className = `size-1.5 rounded-full ${s.cls}`
-    label.textContent = s.text
+    label.textContent = status === 'error' && storageConflict() ? '另一标签页已修改工作区，请先备份再刷新' : s.text
     document.querySelector('#save-status')?.setAttribute('title', s.text)
     if (error) error.hidden = status !== 'error'
     if (rawBackup) rawBackup.hidden = unreadableWorkspaceData() === null
     if (resetStorage) resetStorage.hidden = unreadableWorkspaceData() === null
   }
 
+  let lastPayload: Workspace | null = null
   let revision = 0
   let queue = Promise.resolve()
   const flush = (): void => {
@@ -43,6 +44,7 @@ export function initSaveStatus(getPayload: () => Workspace): {markDirty: () => v
     const saving = revision
     const snapshot = JSON.stringify(getPayload())
     queue = queue.then(async () => {
+      if (saving !== revision) return
       const ok = await saveWorkspace(snapshot)
       if (saving !== revision) return
       status = ok ? 'saved' : 'error'
@@ -63,7 +65,21 @@ export function initSaveStatus(getPayload: () => Workspace): {markDirty: () => v
   })
 
   return {
+    async settle(): Promise<void> {
+      if (status === 'dirty') flush()
+      await queue
+    },
+    initialize(): void {
+      clearTimeout(timer)
+      revision++
+      lastPayload = needsInitialSave() ? null : getPayload()
+      status = storageReadError() ? 'error' : 'saved'
+      render()
+    },
     markDirty(): void {
+      const payload = getPayload()
+      if (status !== 'error' && lastPayload && payload.docs === lastPayload.docs && payload.trash === lastPayload.trash && payload.activeDocId === lastPayload.activeDocId) return
+      lastPayload = payload
       revision++
       status = 'dirty'
       render()

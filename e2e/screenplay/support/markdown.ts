@@ -2,7 +2,36 @@
 import type { Locator, Page } from '@playwright/test'
 import { Workbench } from '../screens/Workbench'
 
-export const workspace = (page: Page) => page.evaluate(() => JSON.parse(localStorage.getItem('inkmark:session:v1') ?? 'null'))
+export const workspace = async (page: Page) => JSON.parse(await storedWorkspace(page) ?? 'null')
+
+export function storedWorkspace(page: Page): Promise<string | undefined> {
+  return page.evaluate(() => new Promise<string | undefined>((resolve, reject) => {
+    const request = indexedDB.open('inkmark-workspace')
+    request.onerror = () => reject(request.error)
+    request.onsuccess = () => {
+      const db = request.result
+      const tx = db.transaction('snapshots', 'readonly')
+      const read = tx.objectStore('snapshots').get('workspace')
+      read.onsuccess = () => resolve(read.result)
+      tx.oncomplete = () => db.close()
+    }
+  }))
+}
+
+export function setStoredWorkspace(page: Page, raw: string): Promise<void> {
+  return page.evaluate((value) => new Promise<void>((resolve, reject) => {
+    const request = indexedDB.open('inkmark-workspace')
+    request.onerror = () => reject(request.error)
+    request.onsuccess = () => {
+      const db = request.result
+      const tx = db.transaction('snapshots', 'readwrite')
+      tx.objectStore('snapshots').put(value, 'workspace')
+      tx.oncomplete = () => { db.close(); resolve() }
+      tx.onerror = () => reject(tx.error)
+    }
+  }), raw)
+}
+
 
 export async function openNew(page: Page, empty = false): Promise<void> {
   if (empty) await page.locator('#btn-empty-paste').click()

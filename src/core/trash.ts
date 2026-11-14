@@ -10,6 +10,9 @@ import type { ReviewDocument, TrashEntry, TrashedAnnotation, TrashedDoc } from '
 import { uniqueDocumentName } from './import-conflict'
 import { availableId } from './identity'
 import { annotationFits, targetIdentity } from './image'
+import { isImageDocument, isRegionAnnotation } from './types'
+import { textQuoteSelector } from './text'
+import { anchorQuote } from './quote-match'
 import { appendAnnotations, filterAnnotations, remapAnnotationIds } from './document'
 
 /** 回收站保留期：7 天 */
@@ -33,6 +36,7 @@ export function trashFromDoc(
       type: 'annotation' as const,
       annotation: a,
       targetIdentity: targetIdentity(doc, a) ?? undefined,
+      ...(!isImageDocument(doc) && !isRegionAnnotation(a) ? {textQuote: textQuoteSelector(a.target === 'revised' ? (doc.revised ?? '') : doc.text, a.start, a.end)} : {}),
       docId: doc.id,
       docName: doc.name,
       deletedAt: now,
@@ -112,15 +116,25 @@ export function restoreFromTrash(
   for (const t of picking) {
     if (t.type !== 'annotation') continue
     const target = [...docs, ...restoredDocs].find((d) => d.id === t.docId)
-    if (!target || !annotationFits(target, t.annotation) ||
-      (t.targetIdentity !== undefined && t.targetIdentity !== targetIdentity(target, t.annotation))) {
-      stranded += 1
-      continue
+    let annotation = t.annotation
+    if (target && !isImageDocument(target) && !isRegionAnnotation(annotation) && t.textQuote && t.targetIdentity !== targetIdentity(target, annotation)) {
+      const text = annotation.target === 'revised' ? target.revised : target.text
+      const anchor = text === undefined ? null : anchorQuote(text, t.textQuote)
+      const quote = t.textQuote
+      const contextMatches = anchor && text !== undefined && (quote.prefix.length > 0 || quote.suffix.length > 0) &&
+        text.slice(anchor.start, anchor.end) === quote.exact &&
+        text.slice(Math.max(0, anchor.start - quote.prefix.length), anchor.start) === quote.prefix &&
+        text.slice(anchor.end, anchor.end + quote.suffix.length) === quote.suffix
+      if (anchor && contextMatches) annotation = {...annotation, start: anchor.start, end: anchor.end, anchorLost: undefined}
+      else { stranded++; continue }
+    } else if (!target || t.targetIdentity === undefined || t.targetIdentity !== targetIdentity(target, annotation)) {
+      stranded++; continue
     }
+    if (!target || !annotationFits(target, annotation)) { stranded++; continue }
     const list = annotationsByDoc.get(t.docId) ?? []
     const id = availableId(t.annotation.id, usedIds)
     usedIds.add(id)
-    list.push(id === t.annotation.id ? t : {...t, annotation: {...t.annotation, id}})
+    list.push({...t, annotation: {...annotation, id}})
     annotationsByDoc.set(t.docId, list)
     pickedKeys.add(entryKey(t))
   }

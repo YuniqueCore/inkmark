@@ -49,7 +49,7 @@ const textDoc = v.object({
 const doc = v.union([imageDoc, textDoc])
 const trash = v.variant('type', [
   v.object({type: v.literal('doc'), doc, deletedAt: timestamp}),
-  v.object({type: v.literal('annotation'), annotation: v.union([regionAnnotation, annotation]), targetIdentity: v.optional(safeId), docId: safeId, docName: v.string(), deletedAt: timestamp}),
+  v.object({type: v.literal('annotation'), annotation: v.union([regionAnnotation, annotation]), targetIdentity: v.optional(safeId), textQuote: v.optional(v.object({exact: v.string(), prefix: v.string(), suffix: v.string()})), docId: safeId, docName: v.string(), deletedAt: timestamp}),
 ])
 const activeDocId = v.union([safeId, v.literal('')])
 export const sessionSchema = v.variant('version', [

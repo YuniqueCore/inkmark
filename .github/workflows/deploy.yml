@@ -27,6 +27,10 @@ jobs:
       - uses: oven-sh/setup-bun@v2.2.0
       - name: Install dependencies
         run: bun install --frozen-lockfile
+      - name: Install browser for business regression tests
+        run: bunx playwright install --with-deps chrome
+      - name: Typecheck, unit tests and browser workflows
+        run: bun run check
       - name: Build (typecheck + vite, /inkmark/ base)
         run: bun run build:pages
       - uses: actions/configure-pages@v6.0.0

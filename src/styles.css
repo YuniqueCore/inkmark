@@ -1159,3 +1159,39 @@ body.select-none {
     animation: none !important;
   }
 }
+
+/* Image workspace uses the same surfaces, type colors and annotation composer. */
+.image-view { position: absolute; inset: 0; display: flex; flex-direction: column; min-width: 0; background: var(--background); }
+.image-view[hidden], .image-composer[hidden], .reading-panes[hidden] { display: none; }
+.reading-toolbar:not([hidden]) ~ .reading-panes { top: 44px; }
+.image-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 10px 20px; border-bottom: 1px solid var(--border); background: var(--card); }
+.image-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.image-actions output { min-width: 3.5em; text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; }
+.image-actions [aria-pressed='true'] { background: var(--primary); color: var(--primary-foreground); }
+.image-actions [aria-pressed='false'] { background: transparent; color: var(--foreground); }
+.image-caption { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px; padding: 10px 20px; color: var(--muted-foreground); font-size: 12px; font-variant-numeric: tabular-nums; }
+.image-viewport { flex: 1; min-height: 0; overflow: auto; display: flex; padding: 24px; background: var(--muted); overscroll-behavior: contain; }
+.image-stage { flex-shrink: 0; margin: auto; background: white; line-height: 0; }
+.image-stage img { display: block; max-width: none; user-select: none; }
+.image-stage .a9s-annotationlayer { touch-action: none; }
+.image-hint { padding: 10px 20px; font-size: 12px; line-height: 1.6; color: var(--muted-foreground); border-top: 1px solid var(--border); }
+.image-composer { position: absolute; z-index: 20; right: 20px; bottom: 52px; width: min(360px, calc(100% - 32px)); max-height: calc(100% - 110px); overflow-y: auto; padding: 16px; border-radius: 12px; border: 1px solid var(--border); color: var(--popover-foreground); background: var(--popover); }
+.image-composer-title, .image-composer-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.image-composer-title { margin-bottom: 6px; font-size: 14px; }
+.image-composer-footer { margin-top: 12px; }
+.image-coordinates { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+.image-coordinates label { display: grid; gap: 4px; color: var(--muted-foreground); font-size: 11px; }
+.image-coordinates input { width: 100%; padding: 5px; font-variant-numeric: tabular-nums; font-size: 12px; }
+.image-view [data-region-error]:not(:empty) { margin-bottom: 10px; }
+.image-view :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+@media (max-width: 639px) {
+  .image-toolbar { padding: 8px 12px; }
+  .image-caption, .image-hint { padding: 8px 12px; }
+  .image-composer { right: 12px; bottom: 12px; width: calc(100% - 24px); }
+  .image-viewport { padding: 12px; }
+}
+
+/* The persisted selector is axis-aligned; rotation is not an exposed capability. */
+.image-view .a9s-rotation-handle-group { display: none; }
+.image-view[data-tool='pan'] .a9s-annotationlayer { pointer-events: none; touch-action: auto; }
+.image-view[data-tool='pan'] .image-viewport { touch-action: pan-x pan-y; }

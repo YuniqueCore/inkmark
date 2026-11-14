@@ -7,12 +7,13 @@
  * 快照」为准，避免隐式的顺序耦合。
  */
 
-import { collectW3CItems, fromW3C, parseW3CSource } from './w3c'
+import { collectW3CItems, fromImageW3C, fromW3C, parseW3CSource } from './w3c'
 import { parseWorkspace } from './session'
-import type { Annotation, DocItem, ReviewDocument } from './types'
+import type { DocItem, ReviewDocument, ReviewAnnotation } from './types'
 import type { TrashEntry } from './types'
 import { uniqueDocumentName } from './import-conflict'
 import { newId } from './identity'
+import { isImageDocument } from './types'
 import { remapAnnotationIds } from './document'
 
 const TEXT_SUFFIX = /\.(txt|md|markdown)$/i
@@ -20,15 +21,15 @@ export const MAX_DOC_CHARS = 400_000 // 单文档上限；文件导入超出时�
 
 export interface ImportContext {
   /** 工作区全部文档：W3C 按 source 分发的重锚目标池 */
-  docs: DocItem[]
+  docs: ReviewDocument[]
   /** 当前文档：无 inkmark 来源条目的回落目标 */
-  currentDoc?: DocItem
+  currentDoc?: ReviewDocument
 }
 
 export interface W3CRouted {
   /** 目标文档 id；null = 回落到当前文档 */
   docId: string | null
-  annotations: Annotation[]
+  annotations: ReviewAnnotation[]
   /** 该组锚不上被跳过的条数 */
   unmatched: number
 }
@@ -165,7 +166,7 @@ async function tryW3CFile(file: File, ctx: ImportContext, outcome: ImportOutcome
       outcome.w3cRouted.push({ docId, annotations: [], unmatched: groupItems.length })
       continue
     }
-    const result = fromW3C(groupItems, target.text, { revisedText: target.revised, identityScope: target.id })
+    const result = isImageDocument(target) ? fromImageW3C(groupItems, target) : fromW3C(groupItems, target.text, { revisedText: target.revised, identityScope: target.id })
     outcome.w3cRouted.push({ docId, annotations: result.annotations, unmatched: result.unmatched })
   }
   return true

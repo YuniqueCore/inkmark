@@ -2,7 +2,11 @@ node_modules/
 dist/
 *.local
 .DS_Store
-node_modules/
-dist/
 test-results/
 playwright-report/
+
+# Local credentials and tool artifacts
+.env
+.env.*
+!.env.example
+.local-build/

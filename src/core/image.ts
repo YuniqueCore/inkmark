@@ -5,7 +5,6 @@ import { isImageDocument, isRegionAnnotation } from './types'
 export const MAX_IMAGE_BYTES = 12 * 1024 * 1024
 export const MAX_IMAGE_PIXELS = 32_000_000
 export const MAX_IMAGE_SIDE = 16_384
-export const IMAGE_ACCEPT = 'image/png,image/jpeg,image/webp'
 
 export function rasterMediaType(bytes: Uint8Array): string | null {
   if (bytes.length >= 8 && [137, 80, 78, 71, 13, 10, 26, 10].every((b, i) => bytes[i] === b)) return 'image/png'
@@ -49,8 +48,15 @@ export function normalizeRegion(x: number, y: number, width: number, height: num
 
 export const describeRegion = (r: ImageRegion): string => `区域 (${r.x}, ${r.y}) · ${r.width} × ${r.height} px`
 
+const imageIdentities = new WeakMap<RasterImage, string>()
+export function imageIdentity(image: RasterImage): string {
+  let identity = imageIdentities.get(image)
+  if (!identity) { identity = stableId('image', [image]); imageIdentities.set(image, identity) }
+  return identity
+}
+
 export function targetIdentity(doc: ReviewDocument, ann: ReviewAnnotation): string | null {
-  if (isImageDocument(doc)) return isRegionAnnotation(ann) ? stableId('image', [doc.image]) : null
+  if (isImageDocument(doc)) return isRegionAnnotation(ann) ? imageIdentity(doc.image) : null
   if (isRegionAnnotation(ann)) return null
   const text = ann.target === 'revised' ? doc.revised : doc.text
   return text === undefined ? null : stableId('text', [ann.target ?? 'original', text])

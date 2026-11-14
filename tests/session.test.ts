@@ -46,7 +46,7 @@ describe('parseWorkspace', () => {
     expect(parsed!.version).toBe(SESSION_VERSION)
     expect(parsed!.trash).toEqual([])
     expect(parsed!.docs).toHaveLength(1)
-    expect(parsed!.docs[0]!.text).toBe('第一行\n第二行')
+    expect(parsed!.docs[0]).toMatchObject({text: '第一行\n第二行'})
     expect(parsed!.docs[0]!.annotations[0]!.id).toBe('a1')
   })
 

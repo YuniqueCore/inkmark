@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>InkMark · 划词批注工作台</title>
+    <title>InkMark · 文字与图片批注工作台</title>
     <link rel="stylesheet" href="/src/styles.css" />
     <script>
       // 防闪烁：首帧前应用阅读偏好里的主题（键与 ui/prefs.ts 镜像——改动必须两处同步）
@@ -36,7 +36,7 @@
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg>
           </button>
           <span class="hidden text-[17px] font-semibold tracking-tight sm:inline">InkMark</span>
-          <span class="hidden text-[12.5px] text-muted-foreground lg:inline">划词批注工作台</span>
+          <span class="hidden text-[12.5px] text-muted-foreground lg:inline">文字与图片批注工作台</span>
           <span id="app-version" class="hidden shrink-0 text-[11px] leading-none text-muted-foreground/60 lg:inline"></span>
         </div>
         <div class="flex items-center gap-1.5">
@@ -98,7 +98,8 @@
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
           </button>
         </div>
-        <input id="file-input" type="file" accept=".txt,.md,.markdown,.json,text/plain" multiple hidden />
+        <input id="workspace-input" type="file" accept=".json,application/json" hidden />
+        <input id="file-input" type="file" accept=".txt,.md,.markdown,.json,text/plain,image/png,image/jpeg,image/webp" multiple hidden />
         <input id="folder-input" type="file" webkitdirectory hidden />
       </div>
     </header>
@@ -115,6 +116,7 @@
           </div>
           <span id="preview-hint" class="reading-hint" hidden>预览可划选批注 · 图片点击加载</span>
         </div>
+        <section id="image-view" class="image-view" aria-label="图片批注区" hidden></section>
         <div id="reading-panes" class="reading-panes" data-layout="source">
           <section id="editor" class="editor reading-pane overflow-y-auto px-4 py-6 sm:px-12 sm:py-10" aria-label="批注文本区"></section>
           <section id="markdown-preview" class="reading-pane markdown-preview overflow-y-auto px-4 py-6 sm:px-10 sm:py-10" aria-label="Markdown 预览" tabindex="0" hidden>
@@ -130,7 +132,7 @@
     </main>
 
     <div id="save-error" class="save-error" role="alert" hidden>
-      <p>自动保存失败，请检查浏览器存储；关闭页面前可下载文档与批注备份（不含回收站和未提交的划词草稿）。</p>
+      <p>自动保存失败，请检查浏览器存储；关闭页面前可下载完整工作区备份（含原图和回收站，不含未提交草稿）；刷新后可从更多菜单恢复。</p>
       <button id="btn-recovery-backup" type="button" class="btn btn-outline btn-sm mt-2">下载备份</button>
       <button id="btn-raw-backup" type="button" class="btn btn-outline btn-sm mt-2" hidden>下载无法解析的原始数据</button>
       <button id="btn-reset-storage" type="button" class="btn btn-outline btn-sm mt-2" hidden>用当前文档重置本地数据</button>

@@ -5,6 +5,8 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest'
+import { presentAnnotations } from '../src/ui/annotation-presentation'
+import type { SidebarRenderOptions } from '../src/ui/sidebar'
 import { SidebarView } from '../src/ui/sidebar'
 import type { Annotation, DocItem, SlopSample } from '../src/core/types'
 
@@ -51,11 +53,15 @@ const doc = (annotations: Annotation[]): DocItem => ({
   addedAt: 1,
 })
 
+function render(text: string, annotations: Annotation[], opts: SidebarRenderOptions & {revised?: string} = {}): void {
+  sidebar.render(presentAnnotations({...doc(annotations), text, revised: opts.revised}), opts)
+}
+
 const sample = (score: number): SlopSample => ({ at: 1, score, band: 'light', units: 100 })
 
 describe('侧栏失锚徽标', () => {
   it('anchorLost 批注渲染「失锚」徽标，正常批注不渲染', () => {
-    sidebar.render(doc([]).text, [ann({ anchorLost: true }), ann({ id: 'a2', comment: '正常' })], {})
+    render(doc([]).text, [ann({ anchorLost: true }), ann({ id: 'a2', comment: '正常' })], {})
     const badges = [...root.querySelectorAll('.ann-card')].map(
       (c) => c.querySelector('.badge.border-amber-500\\/40')?.textContent ?? null,
     )
@@ -68,7 +74,7 @@ describe('批量批注分组卡', () => {
     const a1 = ann({ id: 'g1', start: 0, end: 3, groupId: 'batch-1' })
     const a2 = ann({ id: 'g2', start: 4, end: 6, groupId: 'batch-1' })
     const a3 = ann({ id: 'g3', start: 7, end: 9, groupId: 'batch-2' })
-    sidebar.render(doc([a1, a2, a3]).text, [a1, a2, a3], {})
+    render(doc([a1, a2, a3]).text, [a1, a2, a3], {})
     expect(root.querySelectorAll('.ann-card').length).toBe(2)
     const groupCard = root.querySelector('.ann-card[data-group="batch-1"]')!
     expect(groupCard.textContent).toContain('2 处')
@@ -84,21 +90,21 @@ describe('批量批注分组卡', () => {
 describe('侧栏评分趋势卡', () => {
   it('历史 ≥2 时渲染趋势折线与环比升降', () => {
     const history = [sample(3), sample(5), sample(2)]
-    sidebar.render(doc([ann()]).text, [ann()], { slop: { hits: [], units: 100, score: 2, band: 'light' }, slopHistory: history })
+    render(doc([ann()]).text, [ann()], { slop: { hits: [], units: 100, score: 2, band: 'light' }, slopHistory: history })
     expect(root.querySelector('svg polyline')).toBeTruthy()
     // 最新 2 分 < 上次 5 分 → 下降（emerald）
     expect(root.querySelector('.text-emerald-600')?.textContent).toContain('↓')
   })
 
   it('历史不足 2 个时不渲染趋势线与环比', () => {
-    sidebar.render(doc([ann()]).text, [ann()], { slop: { hits: [], units: 100, score: 3, band: 'light' }, slopHistory: [sample(3)] })
+    render(doc([ann()]).text, [ann()], { slop: { hits: [], units: 100, score: 3, band: 'light' }, slopHistory: [sample(3)] })
     expect(root.querySelector('svg polyline')).toBeNull()
     expect(root.querySelector('.text-emerald-600')).toBeNull()
     expect(root.querySelector('.text-destructive.text-xs')).toBeNull()
   })
 
   it('分数上升渲染为破坏性颜色（分数越高越差）', () => {
-    sidebar.render(doc([ann()]).text, [ann()], { slop: { hits: [], units: 100, score: 6, band: 'noticeable' }, slopHistory: [sample(3), sample(6)] })
+    render(doc([ann()]).text, [ann()], { slop: { hits: [], units: 100, score: 6, band: 'noticeable' }, slopHistory: [sample(3), sample(6)] })
     expect(root.querySelector('.text-destructive')?.textContent).toContain('↑')
   })
 })
@@ -112,7 +118,7 @@ const checkCard = (selector: string): void => {
 
 describe('类型 chips 与撰写卡一致', () => {
   it('人工四类常驻（含 0 计数），机器类型存在时才追加', () => {
-    sidebar.render(
+    render(
       doc([ann({ kind: 'issue' }), ann({ id: 'a2', kind: 'issue' }), ann({ id: 'a3', kind: 'praise' })]).text,
       [ann({ kind: 'issue' }), ann({ id: 'a2', kind: 'issue' }), ann({ id: 'a3', kind: 'praise' })],
       {},
@@ -128,14 +134,14 @@ describe('类型 chips 与撰写卡一致', () => {
 
   it('正被筛选的机器类型保留 0 计数 chip 以便取消', () => {
     sidebar.setKindFilter(new Set(['slop' as const]))
-    sidebar.render(doc([ann({ kind: 'issue' })]).text, [ann({ kind: 'issue' })], {})
+    render(doc([ann({ kind: 'issue' })]).text, [ann({ kind: 'issue' })], {})
     const kinds = [...root.querySelectorAll('.kind-chip')].map((c) => c.getAttribute('data-kind'))
     expect(kinds).toEqual(['suggestion', 'question', 'highlight', 'praise', 'issue', 'slop'])
     expect(root.querySelector('.kind-chip[data-kind="slop"]')?.textContent).toContain('0')
   })
 
   it('无批注时不渲染类型 chips 行', () => {
-    sidebar.render(doc([]).text, [], {})
+    render(doc([]).text, [], {})
     expect(root.querySelector('.kind-chip')).toBeNull()
   })
 })
@@ -148,7 +154,7 @@ describe('侧栏卡片多选与批量操作', () => {
   ]
 
   it('勾选出现批量簇并显示计数；再勾选累加；清除后消失', () => {
-    sidebar.render(doc(three()).text, three(), {})
+    render(doc(three()).text, three(), {})
     expect(root.querySelector('[data-bulk-actions]')).toBeNull()
     checkCard('[data-select="a1"]')
     expect(root.querySelector('[data-bulk-actions]')?.textContent).toContain('已选 1')
@@ -170,7 +176,7 @@ describe('侧栏卡片多选与批量操作', () => {
       onHighlightModeChange: () => {},
       onNotify: () => {},
     })
-    sidebar.render(doc(three()).text, three(), {})
+    render(doc(three()).text, three(), {})
     checkCard('[data-select="a1"]')
     expect(focused).toEqual([])
   })
@@ -188,7 +194,7 @@ describe('侧栏卡片多选与批量操作', () => {
       onNotify: () => {},
     })
     const anns = three()
-    sidebar.render(doc(anns).text, anns, {})
+    render(doc(anns).text, anns, {})
     checkCard('[data-select="a1"]')
     checkCard('[data-select="a3"]')
     // 全选未选中的 a2 后全量批量：解决按钮回调带全部 id
@@ -199,7 +205,7 @@ describe('侧栏卡片多选与批量操作', () => {
   })
 
   it('全选勾满、反选翻转', () => {
-    sidebar.render(doc(three()).text, three(), {})
+    render(doc(three()).text, three(), {})
     ;(root.querySelector('[data-select-all]') as HTMLInputElement).click()
     ;(root.querySelector('[data-select-all]') as HTMLInputElement).dispatchEvent(new Event('change'))
     expect(root.querySelector('[data-bulk-actions]')?.textContent).toContain('已选 3')
@@ -212,7 +218,7 @@ describe('侧栏卡片多选与批量操作', () => {
   })
 
   it('快速选中 selector：失锚 / 类型 / 无匹配反馈', () => {
-    sidebar.render(doc(three()).text, three(), {})
+    render(doc(three()).text, three(), {})
     const select = () => root.querySelector('[data-quick-select]') as HTMLSelectElement
     select().value = 'lost'
     select().dispatchEvent(new Event('change'))
@@ -242,7 +248,7 @@ describe('侧栏卡片多选与批量操作', () => {
       onHighlightModeChange: () => {},
       onNotify: () => {},
     })
-    sidebar.render(doc([a1, a2]).text, [a1, a2], {})
+    render(doc([a1, a2]).text, [a1, a2], {})
     checkCard('[data-select-group]')
     expect(root.querySelector('[data-bulk-actions]')?.textContent).toContain('已选 2')
     ;(root.querySelector('[data-bulk="resolve"]') as HTMLButtonElement).click()
@@ -263,14 +269,14 @@ describe('正文只高亮开关', () => {
       onHighlightModeChange: (only) => modes.push(only),
       onNotify: () => {},
     })
-    sidebar.render(doc([ann()]).text, [ann()], {})
+    render(doc([ann()]).text, [ann()], {})
     const sw = root.querySelector('#only-hl') as HTMLButtonElement
     expect(sw.getAttribute('role')).toBe('switch')
     expect(sw.getAttribute('aria-checked')).toBe('false')
     sw.click()
     expect(modes).toEqual([true])
     sidebar.setHighlightMode(true)
-    sidebar.render(doc([ann()]).text, [ann()], {})
+    render(doc([ann()]).text, [ann()], {})
     expect((root.querySelector('#only-hl') as HTMLButtonElement).getAttribute('aria-checked')).toBe('true')
   })
 })
