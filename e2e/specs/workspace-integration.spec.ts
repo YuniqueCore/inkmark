@@ -259,3 +259,42 @@ test('backup plus W3C replay shares remapped annotation identity and reports amb
   await saved(page)
   expect((await workspace(page)).docs.map((doc: {annotations: unknown[]}) => doc.annotations.length)).toEqual([1, 0])
 })
+
+test('a delayed import cannot steal the document owned by a revision input session', async ({page}) => {
+  await page.goto('/')
+  await page.locator('#file-input').setInputFiles({name: 'A.md', mimeType: 'text/markdown', buffer: Buffer.from('Original document A')})
+  await saved(page)
+  await page.evaluate(() => {
+    const read = File.prototype.text
+    File.prototype.text = async function () {
+      if (this.name === 'B.md') await new Promise<void>(resolve => Object.assign(window, {releaseImport: () => {File.prototype.text = read; resolve()}}))
+      return read.call(this)
+    }
+  })
+  await page.locator('#file-input').setInputFiles({name: 'B.md', mimeType: 'text/markdown', buffer: Buffer.from('Original document B')})
+  await page.waitForFunction(() => 'releaseImport' in window)
+  await page.locator('#btn-diff').click()
+  const dialog = page.getByRole('dialog', {name: '贴入「A.md」的 AI 改稿'})
+  await dialog.locator('textarea').fill('Revision intended for document A')
+  await page.evaluate(() => (window as unknown as {releaseImport: () => void}).releaseImport())
+  await expect(page.locator('.toast')).toContainText('请先提交或取消当前文本输入')
+  await expect(dialog.locator('textarea')).toHaveValue('Revision intended for document A')
+  await expect(page.locator('#editor')).toContainText('Original document A')
+  await expect(page.locator('#filetree [data-doc]')).toHaveCount(1)
+
+  await dialog.locator('textarea').fill(' ')
+  await dialog.getByRole('button', {name: '生成对照', exact: true}).click()
+  await expect(dialog.getByRole('alert')).toContainText('请输入或粘贴文本')
+  await expect(dialog.locator('textarea')).toHaveValue(' ')
+  await dialog.locator('textarea').fill('Revision intended for document A')
+  await dialog.getByRole('button', {name: '生成对照', exact: true}).click()
+  await saved(page)
+  expect((await workspace(page)).docs).toMatchObject([{name: 'A.md', revised: 'Revision intended for document A'}])
+  await page.locator('#file-input').setInputFiles({name: 'B.md', mimeType: 'text/markdown', buffer: Buffer.from('Original document B')})
+  await expect(page.locator('#filetree [data-doc]')).toHaveCount(2)
+  await saved(page)
+  await page.reload()
+  const result = await workspace(page)
+  expect(result.docs.find((doc: {name: string}) => doc.name === 'A.md').revised).toBe('Revision intended for document A')
+  expect(result.docs.find((doc: {name: string}) => doc.name === 'B.md')).not.toHaveProperty('revised')
+})

@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import {expect, test} from 'vitest'
 import {parseRequest, encodeBytes, decodeBytes, MAX_FILE_BYTES} from '../../platform/protocol'
+import {holdInput} from '../../platform/input-lock'
 
 test('bounded transfer accepts binary boundaries and rejects executable envelopes, paths and corrupt encoding', () => {
   const bytes = new Uint8Array(MAX_FILE_BYTES); bytes[0] = 255; bytes[bytes.length - 1] = 42
@@ -51,6 +52,15 @@ test('native request ownership: malformed reply, send failure, concurrency, clos
   resolutions[1]!(true); await Promise.resolve()
   expect(sent).toContain('inkmark:close-ready:2')
   respond('inkmark:resume:2'); expect(document.body.inert).toBe(false)
+  const restore = holdInput(document.body)
+  respond('inkmark:prepare-close:3')
+  resolutions[2]!(false); await Promise.resolve()
+  expect(sent).toContain('inkmark:close-cancelled:3')
+  expect(document.body.inert).toBe(true)
+  const other = holdInput(document.body)
+  restore(); restore()
+  expect(document.body.inert).toBe(true)
+  other(); expect(document.body.inert).toBe(false)
   document.body.innerHTML = '<a href="#heading">local</a><a href="https://example.org/review">external</a>'
   document.querySelectorAll('a')[0]!.click()
   expect(hostRequestPending()).toBe(false)

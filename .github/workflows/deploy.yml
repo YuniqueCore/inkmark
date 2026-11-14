@@ -36,8 +36,6 @@ jobs:
         run: bun run check
       - name: Build (typecheck + vite, /inkmark/ base)
         run: bun run build:pages
-      - name: Build shared offline native document
-        run: bun run build:native-web
       - uses: actions/upload-artifact@v7.0.2
         with:
           name: native-inputs

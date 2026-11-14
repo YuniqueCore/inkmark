@@ -5,6 +5,8 @@
 import { splitBlocks, snippet } from './text'
 import { KIND_LABEL } from './types'
 import type { Annotation, AnnotationKind } from './types'
+import sanitizeFilename from 'sanitize-filename'
+import truncateUtf8 from 'truncate-utf8-bytes'
 
 export interface ExportOptions {
   /** 默认 false：已解决的批注不出现在导出里 */
@@ -170,11 +172,13 @@ export function exportFileName(
   docName: string,
   format: ExportFormat | 'w3c',
   date = new Date(),
+  ordinal = 1,
 ): string {
-  const base =
-    docName.replace(/\.[a-z0-9]+$/i, '').replace(/[/\\:*?"<>|]/g, '-').trim() || 'untitled'
+  const base = sanitizeFilename(docName.replace(/\.[a-z0-9]+$/i, '').replace(/\u007f/g, '-'), {replacement: '-'}).trim() || 'untitled'
   const stamp = date.toISOString().slice(0, 10)
-  return `${base}-批注-${format}-${stamp}.${format === 'w3c' ? 'json' : 'md'}`
+  const suffix = `-批注-${format}-${stamp}${ordinal > 1 ? `-${ordinal}` : ''}.${format === 'w3c' ? 'json' : 'md'}`
+  // Reserve space for both the extension and collision suffix on byte-limited filesystems.
+  return truncateUtf8(base, 255 - new TextEncoder().encode(suffix).length) + suffix
 }
 
 /** 多文档 zip 的条目名：同名文档追加 -2、-3 序号，绝不互相覆盖。 */
@@ -183,11 +187,15 @@ export function zipEntryNames(
   format: ExportFormat | 'w3c',
   date = new Date(),
 ): string[] {
-  const used = new Map<string, number>()
+  const used = new Set<string>()
+  const next = new Map<string, number>()
   return docNames.map((name) => {
     const stem = exportFileName(name, format, date)
-    const n = used.get(stem) ?? 1
-    used.set(stem, n + 1)
-    return n === 1 ? stem : stem.replace(/(\.(?:md|json))$/, `-${n}$1`)
+    let ordinal = next.get(stem) ?? 1
+    let candidate = exportFileName(name, format, date, ordinal)
+    while (used.has(candidate)) candidate = exportFileName(name, format, date, ++ordinal)
+    used.add(candidate)
+    next.set(stem, ordinal + 1)
+    return candidate
   })
 }

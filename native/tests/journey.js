@@ -17,6 +17,14 @@
     name: 'e2e-report.json', type: 'application/json', base64: btoa(unescape(encodeURIComponent(JSON.stringify(value)))),
   }}))
   const saved = () => q('#save-text')?.textContent === '已保存'
+  const nextCloseRequest = () => new Promise(resolve => {
+    const receive = event => {
+      if (typeof event.data !== 'string' || !event.data.startsWith('inkmark:prepare-close:')) return
+      window.removeEventListener('message', receive)
+      resolve()
+    }
+    window.addEventListener('message', receive)
+  })
   try {
     await wait(() => q('#btn-import') && saved(), 'workspace ready')
     click('#btn-import'); click('[data-menu-id="files"]')
@@ -38,14 +46,18 @@
     if (!q('#editor .seg-hl') || !q('#markdown-preview .seg-hl')) throw new Error('Shared source/preview anchor missing')
     steps.push('preview-selection-shared-anchor')
     click('#btn-edit'); input('#edit-source', 'unsaved draft')
-    window.dispatchEvent(new MessageEvent('message', {data: 'inkmark:prepare-close:999'}))
+    const windowClose = nextCloseRequest()
+    report({status: 'window-close-ready'})
+    await windowClose
     await wait(() => document.body.innerText.includes('请先'), 'draft close refusal')
     if (q('#edit-source').value !== 'unsaved draft' || document.body.inert) throw new Error('Close lost or locked draft')
     click('[data-op="cancel-edit-text"]')
     click('#btn-search')
     input('[data-sp-composer] [data-role="composer-comment"]', 'Unsubmitted batch review')
-    window.dispatchEvent(new MessageEvent('message', {data: 'inkmark:prepare-close:1000'}))
-    await new Promise(r => setTimeout(r, 50))
+    const menuClose = nextCloseRequest()
+    report({status: 'menu-close-ready'})
+    await menuClose
+    await wait(() => !document.body.inert, 'menu close refusal')
     if (document.body.inert || q('[data-sp-composer] [data-role="composer-comment"]').value !== 'Unsubmitted batch review') throw new Error('Batch draft lost or locked')
     click('#sp-close')
     steps.push('draft-close-refused')
@@ -62,6 +74,7 @@
     steps.push('export-cancel-failure-retry')
     click('#btn-import'); click('[data-menu-id="image-paste"]')
     await wait(() => q('#image-view img')?.naturalWidth > 0 && saved(), 'clipboard image import')
+    if (!q('#image-view img').src.startsWith('data:image/png;')) throw new Error('Bitmap clipboard was not normalized')
     if (!q('#btn-edit').disabled) throw new Error('Image entered text editor')
     steps.push('native-clipboard-image')
     const db = await new Promise((resolve, reject) => { const r = indexedDB.open('inkmark-workspace'); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error) })

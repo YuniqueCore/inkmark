@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import {responseSchema, requestSchema, MAX_MESSAGE_CHARS, type HostOperation, type HostResponse} from './protocol'
+import {holdInput} from './input-lock'
 
 declare global {
   interface Window { nsh?: {postMessage: (message: string) => void} }
@@ -64,11 +65,11 @@ export function callHost(operation: HostOperation): Promise<ResponseValue> {
 /** Close is a request to the document owner, never permission to discard pending edits. */
 export function bindHostLifecycle(prepare: () => Promise<boolean>, flush: () => Promise<boolean>): void {
   if (!__NATIVE_HOST__) return
-  let closing: string | undefined
+  let closing: {id: string; release: () => void} | undefined
   window.addEventListener('message', event => {
     if (typeof event.data !== 'string') return
     if (event.data.startsWith('inkmark:resume:')) {
-      if (closing === event.data.slice('inkmark:resume:'.length)) { closing = undefined; document.body.inert = false }
+      if (closing?.id === event.data.slice('inkmark:resume:'.length)) { closing.release(); closing = undefined }
       return
     }
     if (event.data === 'inkmark:flush') {
@@ -78,16 +79,16 @@ export function bindHostLifecycle(prepare: () => Promise<boolean>, flush: () => 
     }
     const attempt = /^inkmark:prepare-close:([0-9]+)$/.exec(event.data)?.[1]
     if (!attempt || closing) return
-    closing = attempt
-    document.body.inert = true
+    const operation = {id: attempt, release: holdInput(document.body)}
+    closing = operation
     void prepare().then(ready => {
-      if (closing !== attempt) return
+      if (closing !== operation) return
       window.nsh?.postMessage(`inkmark:close-${ready ? 'ready' : 'cancelled'}:${attempt}`)
-      if (!ready) { closing = undefined; document.body.inert = false }
+      if (!ready) { operation.release(); closing = undefined }
     }).catch(() => {
-      if (closing !== attempt) return
+      if (closing !== operation) return
+      operation.release()
       closing = undefined
-      document.body.inert = false
       window.nsh?.postMessage(`inkmark:close-cancelled:${attempt}`)
     })
   })

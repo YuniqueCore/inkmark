@@ -85,7 +85,7 @@ export function Workspace(props: {document: {html: string; baseUrl: string}; fil
             const blob = await (await fetch(image.url)).blob()
             if (blob.size > 12 * 1024 * 1024) throw new Error('图片超过 12 MB，请缩小后再导入')
             const type = blob.type || 'image/png'
-            const extension = type === 'image/jpeg' ? 'jpg' : type === 'image/webp' ? 'webp' : 'png'
+            const extension = type === 'image/jpeg' ? 'jpg' : type === 'image/webp' ? 'webp' : type === 'image/bmp' ? 'bmp' : 'png'
             value.push({name: `粘贴图片.${extension}`, type, base64: encodeBytes(new Uint8Array(await blob.arrayBuffer()))})
           }
           break

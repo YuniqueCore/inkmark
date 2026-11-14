@@ -106,76 +106,81 @@ export interface TextDialogOptions {
   inputLabel?: string
   /** 校验失败时保留输入，并在输入框旁说明如何修正。 */
   validate?: (value: string) => string | null
+  /** Validate and commit in the same event turn, before another async operation can change the owner. */
+  onSubmit: (value: string) => void
 }
 
-/** 带多行输入的弹层：贴入 AI 改稿等场景。Promise<string | null>，Esc / 遮罩 / 取消 → null。 */
-export function textDialog(opts: TextDialogOptions): Promise<string | null> {
-  return new Promise((resolve) => {
-    const previousFocus = document.activeElement as HTMLElement | null
-    const overlay = document.createElement('div')
-    overlay.className = 'fixed inset-0 z-100 bg-black/50 backdrop-blur-[2px]'
-    const panel = document.createElement('div')
-    panel.className =
-      'viewport-dialog fixed left-1/2 top-1/2 z-101 flex max-h-[86vh] w-[min(720px,94vw)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border bg-card p-5 text-card-foreground shadow-2xl'
-    panel.setAttribute('role', 'dialog')
-    panel.setAttribute('aria-modal', 'true')
-    panel.setAttribute('aria-label', opts.title)
-    panel.style.animation = 'pop-in 0.14s ease-out'
-    panel.innerHTML = `
-      <h2 class="shrink-0 text-[15px] font-semibold leading-snug tracking-tight">${escapeHtml(opts.title)}</h2>
-      ${opts.description ? `<p class="mt-1.5 shrink-0 text-sm leading-relaxed text-muted-foreground">${escapeHtml(opts.description)}</p>` : ''}
-      <textarea id="text-dialog-input" rows="12" aria-label="${escapeHtml(opts.inputLabel ?? opts.title)}" aria-describedby="text-dialog-error" placeholder="${escapeHtml(opts.placeholder ?? '')}"
-        class="input-base mt-3 min-h-0 flex-1 resize-none font-mono text-[13px] leading-relaxed">${escapeHtml(opts.value ?? '')}</textarea>
-      <p id="text-dialog-error" class="mt-2 text-sm text-destructive" role="alert" hidden></p>
-      <div class="mt-4 flex shrink-0 items-center justify-between">
-        <span class="text-xs text-muted-foreground">⌘/Ctrl + Enter 确认</span>
-        <span class="flex gap-2">
-          <button class="btn btn-outline btn-sm" data-op="cancel">${opts.cancelText ?? '取消'}</button>
-          <button class="btn btn-sm ${opts.danger ? 'confirm-danger' : 'btn-default'}" data-op="confirm">${opts.confirmText ?? '确认'}</button>
-        </span>
-      </div>`
+/** null means closed; an empty string still belongs to an open input session. */
+export function textDialogDraft(): string | null {
+  return document.querySelector<HTMLTextAreaElement>('#text-dialog-input')?.value ?? null
+}
 
-    const textarea = panel.querySelector('#text-dialog-input') as HTMLTextAreaElement
-    const finish = (result: string | null) => {
-      overlay.remove()
-      panel.remove()
-      document.removeEventListener('keydown', onKey, true)
-      previousFocus?.focus()
-      resolve(result)
-    }
-    const error = panel.querySelector('#text-dialog-error') as HTMLElement
-    const confirm = () => {
-      const message = opts.validate?.(textarea.value)
-      if (message) {
-        error.textContent = message
-        error.hidden = false
-        textarea.setAttribute('aria-invalid', 'true')
-        textarea.focus()
-        return
-      }
-      finish(textarea.value)
-    }
-    textarea.addEventListener('input', () => {
-      error.hidden = true
-      textarea.removeAttribute('aria-invalid')
-    })
-    const onKey = (e: KeyboardEvent) => {
-      e.stopPropagation()
-      if (e.isComposing) return
-      if (trapTab(panel, e)) return
-      if (e.key === 'Escape') finish(null)
-      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault()
-        confirm()
-      }
-    }
+/** Multiline input with synchronous validated submission; cancellation never calls onSubmit. */
+export function textDialog(opts: TextDialogOptions): void {
+  const previousFocus = document.activeElement as HTMLElement | null
+  const overlay = document.createElement('div')
+  overlay.className = 'fixed inset-0 z-100 bg-black/50 backdrop-blur-[2px]'
+  const panel = document.createElement('div')
+  panel.className =
+    'viewport-dialog fixed left-1/2 top-1/2 z-101 flex max-h-[86vh] w-[min(720px,94vw)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border bg-card p-5 text-card-foreground shadow-2xl'
+  panel.setAttribute('role', 'dialog')
+  panel.setAttribute('aria-modal', 'true')
+  panel.setAttribute('aria-label', opts.title)
+  panel.style.animation = 'pop-in 0.14s ease-out'
+  panel.innerHTML = `
+    <h2 class="shrink-0 text-[15px] font-semibold leading-snug tracking-tight">${escapeHtml(opts.title)}</h2>
+    ${opts.description ? `<p class="mt-1.5 shrink-0 text-sm leading-relaxed text-muted-foreground">${escapeHtml(opts.description)}</p>` : ''}
+    <textarea id="text-dialog-input" rows="12" aria-label="${escapeHtml(opts.inputLabel ?? opts.title)}" aria-describedby="text-dialog-error" placeholder="${escapeHtml(opts.placeholder ?? '')}"
+      class="input-base mt-3 min-h-0 flex-1 resize-none font-mono text-[13px] leading-relaxed">${escapeHtml(opts.value ?? '')}</textarea>
+    <p id="text-dialog-error" class="mt-2 text-sm text-destructive" role="alert" hidden></p>
+    <div class="mt-4 flex shrink-0 items-center justify-between">
+      <span class="text-xs text-muted-foreground">⌘/Ctrl + Enter 确认</span>
+      <span class="flex gap-2">
+        <button class="btn btn-outline btn-sm" data-op="cancel">${opts.cancelText ?? '取消'}</button>
+        <button class="btn btn-sm ${opts.danger ? 'confirm-danger' : 'btn-default'}" data-op="confirm">${opts.confirmText ?? '确认'}</button>
+      </span>
+    </div>`
 
-    // 遮罩点击不销毁正在输入的草稿；取消或 Esc 才明确放弃。
-    panel.querySelector('[data-op="cancel"]')?.addEventListener('click', () => finish(null))
-    panel.querySelector('[data-op="confirm"]')?.addEventListener('click', confirm)
-    document.addEventListener('keydown', onKey, true)
-
-    document.body.append(overlay, panel)
-    textarea.focus()
+  const textarea = panel.querySelector('#text-dialog-input') as HTMLTextAreaElement
+  const finish = (result: string | null) => {
+    overlay.remove()
+    panel.remove()
+    document.removeEventListener('keydown', onKey, true)
+    if (result !== null) opts.onSubmit(result)
+    previousFocus?.focus()
+  }
+  const error = panel.querySelector('#text-dialog-error') as HTMLElement
+  const confirm = () => {
+    const message = opts.validate?.(textarea.value)
+    if (message) {
+      error.textContent = message
+      error.hidden = false
+      textarea.setAttribute('aria-invalid', 'true')
+      textarea.focus()
+      return
+    }
+    finish(textarea.value)
+  }
+  textarea.addEventListener('input', () => {
+    error.hidden = true
+    textarea.removeAttribute('aria-invalid')
   })
+  const onKey = (e: KeyboardEvent) => {
+    e.stopPropagation()
+    if (e.isComposing) return
+    if (trapTab(panel, e)) return
+    if (e.key === 'Escape') finish(null)
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault()
+      confirm()
+    }
+  }
+
+  // 遮罩点击不销毁正在输入的草稿；取消或 Esc 才明确放弃。
+  panel.querySelector('[data-op="cancel"]')?.addEventListener('click', () => finish(null))
+  panel.querySelector('[data-op="confirm"]')?.addEventListener('click', confirm)
+  document.addEventListener('keydown', onKey, true)
+
+  document.body.append(overlay, panel)
+  textarea.focus()
 }

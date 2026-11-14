@@ -1,5 +1,6 @@
 import {callHost} from './host'
 import {decodeBytes, encodeBytes, MAX_FILE_BYTES, type SaveReceipt} from './protocol'
+import {normalizeClipboardRaster} from './image-input'
 
 let activeFiles = 0
 export function fileOperationPending(): boolean { return activeFiles > 0 }
@@ -57,7 +58,12 @@ export async function writeClipboardText(text: string): Promise<void> {
 }
 
 export async function readClipboardImage(): Promise<File[]> {
-  const result = await callHost({operation: 'clipboard.image'})
-  if (!Array.isArray(result)) throw new Error('宿主返回了无效的图片')
-  return result.map(file => new File([decodeBytes(file.base64)], file.name, {type: file.type}))
+  const finish = beginFileOperation()
+  try {
+    const result = await callHost({operation: 'clipboard.image'})
+    if (!Array.isArray(result)) throw new Error('宿主返回了无效的图片')
+    const files: File[] = []
+    for (const file of result) files.push(await normalizeClipboardRaster(new File([decodeBytes(file.base64)], file.name, {type: file.type})))
+    return files
+  } finally { finish() }
 }

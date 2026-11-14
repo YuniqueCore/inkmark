@@ -4,8 +4,12 @@ import static org.junit.Assert.*;
 import android.content.Context;
 import android.content.ClipData;
 import android.content.ClipboardManager;
+import android.content.ContentValues;
 import android.graphics.Bitmap;
 import android.net.Uri;
+import android.os.Build;
+import android.provider.MediaStore;
+import android.view.accessibility.AccessibilityEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.WebView;
@@ -13,6 +17,8 @@ import androidx.test.core.app.ActivityScenario;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.uiautomator.UiDevice;
+import androidx.test.uiautomator.By;
+import androidx.test.uiautomator.Until;
 import com.longbridge.nsh.FilesProvider;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -88,7 +94,48 @@ public class WorkspaceTest {
             assertEquals("true", evaluate(scenario, "document.querySelector('#sidebar')?.textContent.includes('Native image review')"));
             assertEquals("2", evaluate(scenario, "document.querySelectorAll('#filetree [data-doc]').length"));
             Files.delete(image.toPath());
+            if (Build.VERSION.SDK_INT >= 29) interruptedPickerCanBeRetried(scenario, device);
         }
+    }
+
+    @androidx.annotation.RequiresApi(29)
+    private void interruptedPickerCanBeRetried(ActivityScenario<MainActivity> scenario, UiDevice device) throws Exception {
+        String name = "InkMark-picker-" + System.currentTimeMillis() + ".txt";
+        ContentValues values = new ContentValues();
+        values.put(MediaStore.Downloads.DISPLAY_NAME, name);
+        values.put(MediaStore.Downloads.MIME_TYPE, "text/plain");
+        values.put(MediaStore.Downloads.IS_PENDING, 1);
+        Uri uri = context.getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+        assertNotNull(uri);
+        try {
+            try (var output = context.getContentResolver().openOutputStream(uri)) {
+                assertNotNull(output); output.write("Recovered picker review".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            }
+            values.clear(); values.put(MediaStore.Downloads.IS_PENDING, 0);
+            context.getContentResolver().update(uri, values, null, null);
+            evaluate(scenario, "document.querySelector('#btn-import').click();document.querySelector('[data-menu-id=files]').click()");
+            assertTrue("Real system picker should show the fixture", device.wait(Until.hasObject(By.text(name)), 10000));
+            // ActivityScenario.recreate first resumes the app; the real picker deliberately owns the foreground.
+            var instrumentation = InstrumentationRegistry.getInstrumentation();
+            var monitor = instrumentation.addMonitor(MainActivity.class.getName(), null, false);
+            try {
+                scenario.onActivity(MainActivity::recreate);
+                assertNotNull("Background activity must actually be recreated", monitor.waitForActivityWithTimeout(10000));
+            } finally { instrumentation.removeMonitor(monitor); }
+            assertTrue(device.wait(Until.hasObject(By.text(name)), 10000));
+            AccessibilityEvent notice = InstrumentationRegistry.getInstrumentation().getUiAutomation().executeAndWaitForEvent(
+                () -> device.findObject(By.text(name)).click(),
+                event -> event.getEventType() == AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED
+                    && event.getText().toString().contains("文件选择因工作台重新载入而中断"), 10000);
+            assertNotNull(notice);
+            await(scenario, "document.querySelector('#save-text')?.textContent === '已保存'");
+            assertEquals("2", evaluate(scenario, "document.querySelectorAll('#filetree [data-doc]').length"));
+            evaluate(scenario, "document.querySelector('#btn-import').click();document.querySelector('[data-menu-id=files]').click()");
+            assertTrue(device.wait(Until.hasObject(By.text(name)), 10000));
+            device.findObject(By.text(name)).click();
+            await(scenario, "document.querySelector('#editor')?.textContent.includes('Recovered picker review') && document.querySelector('#save-text')?.textContent === '已保存'");
+            assertEquals("3", evaluate(scenario, "document.querySelectorAll('#filetree [data-doc]').length"));
+        } finally { context.getContentResolver().delete(uri, null, null); }
     }
 
     private static WebView web(View view) {

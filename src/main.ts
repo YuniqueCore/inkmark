@@ -20,7 +20,8 @@ import { FileTreeView } from './ui/filetree'
 import { AnnotationPopup } from './ui/annotation-popup'
 import { SelectionPin } from './ui/selection-pin'
 import { SearchPanelView } from './ui/search-panel'
-import { choiceDialog, confirmDialog, textDialog } from './ui/confirm'
+import { choiceDialog, confirmDialog, textDialog, textDialogDraft } from './ui/confirm'
+import {holdInput} from './platform/input-lock'
 import { TrashDialog } from './ui/trash-dialog'
 import { wireHeaderMenu } from './ui/header-menu'
 import { entryKey, purgeExpired, purgeForever, restoreFromTrash, trashDocs, trashFromDoc } from './core/trash'
@@ -53,7 +54,7 @@ import { annotationFits } from './core/image'
 import { appendAnnotations, filterAnnotations, patchAnnotationBodies } from './core/document'
 import { presentAnnotations } from './ui/annotation-presentation'
 import { ImageView } from './ui/image-view'
-import { readRaster, verifyRaster } from './ui/image-input'
+import { readRaster, verifyRaster } from './platform/image-input'
 import zhLexicon from '../skill/references/anti-slop-kit/scripts/data/zh.json'
 import enLexicon from '../skill/references/anti-slop-kit/scripts/data/en.json'
 
@@ -507,6 +508,7 @@ function canLeaveEdit(): boolean {
     return false
   }
   if (!ready) { toast('工作区正在载入，请稍候'); return false }
+  if (textDialogDraft() !== null) { toast('请先提交或取消当前文本输入，再重试操作'); return false }
   if (imageView.hasDraft()) { toast('请先保存或取消当前区域批注'); return false }
   imageView.flushGeometry()
   if (mode === 'edit') {
@@ -763,7 +765,7 @@ function hasUnsavedDrafts(): boolean {
   const doc = activeDoc()
   return Boolean((mode === 'edit' && doc && editor.editValue() !== normalizeLineEndings(doc.text)) ||
     searchPanel.hasDraft() || annotationPopup.hasDraft() || selectionPin.hasDrafts() || imageView.hasDraft() ||
-    document.querySelector<HTMLTextAreaElement>('#text-dialog-input')?.value)
+    textDialogDraft())
 }
 
 bindHostLifecycle(async () => {
@@ -812,7 +814,7 @@ async function restoreWorkspaceFile(file: File): Promise<void> {
 
 /** Explicit replacement shares the save queue and excludes concurrent UI mutations. */
 async function commitWorkspaceReplacement(restored: ReturnType<typeof workspaceSnapshot>, initial: AppState): Promise<boolean> {
-  document.body.inert = true
+  const release = holdInput(document.body)
   try {
     await save.settle()
     if (state !== initial) { toast('工作区在恢复期间发生变化，请重试'); return false }
@@ -822,7 +824,7 @@ async function commitWorkspaceReplacement(restored: ReturnType<typeof workspaceS
     save.initialize()
     rerender(false)
     return true
-  } finally { document.body.inert = false }
+  } finally { release() }
 }
 
 function downloadJson(data: string, name: string, detail = ''): void {
@@ -944,7 +946,7 @@ function applyTextEdit(
 
 // ---------------------------------------------------------------- 对照视图（原文 vs AI 改稿）
 
-async function toggleDiff(): Promise<void> {
+function toggleDiff(): void {
   const doc = activeDoc()
   if (!doc) {
     toast('先导入或载入一段文本')
@@ -961,18 +963,20 @@ async function toggleDiff(): Promise<void> {
     return
   }
   if (!doc.revised) {
-    const text = await textDialog({
+    textDialog({
       title: `贴入「${doc.name}」的 AI 改稿`,
       description: '粘贴 AI 改写后的全文，生成原文 vs 改稿的行级对照。两侧都可以划选写批注。',
       placeholder: '把 AI 改稿的完整文本粘贴到这里…',
       confirmText: '生成对照',
+      validate: value => activeDoc() !== doc
+        ? '原文档已发生变化。输入已保留，请先复制内容，再取消并重新打开对照。'
+        : textInputError(value),
+      onSubmit: text => {
+        mode = 'diff'
+        mutateActive((d) => ({ ...d, revised: text }))
+      },
     })
-    if (text === null) return
-    if (text.trim() === '') {
-      toast('改稿内容为空')
-      return
-    }
-    mutateActive((d) => ({ ...d, revised: text }))
+    return
   }
   mode = 'diff'
   rerender(false)
@@ -1261,15 +1265,15 @@ async function loadSample(): Promise<void> {
   switchDoc(doc.id)
 }
 
-function pasteError(text: string): string | null {
-  if (text.trim() === '') return '请输入或粘贴文本后再创建文档。'
+function textInputError(text: string): string | null {
+  if (text.trim() === '') return '请输入或粘贴文本。'
   if (text.length > MAX_DOC_CHARS) return `文本超过 ${MAX_DOC_CHARS.toLocaleString()} 个字符，请缩短后重试。`
   return null
 }
 
 function createPastedDocument(text: string): void {
   if (!canLeaveEdit()) return
-  const error = pasteError(text)
+  const error = textInputError(text)
   if (error) {
     toast(error)
     return
@@ -1287,17 +1291,17 @@ function createPastedDocument(text: string): void {
   toast('已新建文档')
 }
 
-async function openNewDocument(): Promise<void> {
+function openNewDocument(): void {
   if (!canLeaveEdit()) return
-  const text = await textDialog({
+  textDialog({
     title: '粘贴新建文档',
     description: '粘贴原文或 Markdown，创建独立文档；现有文档与批注会保留。',
     placeholder: '在这里粘贴或输入文本…',
     inputLabel: '新文档内容',
     confirmText: '创建文档',
-    validate: pasteError,
+    validate: textInputError,
+    onSubmit: createPastedDocument,
   })
-  if (text !== null) createPastedDocument(text)
 }
 
 function maybeExport(): void {

@@ -101,7 +101,10 @@ public final class MainActivity extends ComponentActivity {
     private void finishPick(List<Uri> uris) {
         NshHostReply reply = picking;
         picking = null;
-        if (reply == null) return;
+        if (reply == null) {
+            if (!uris.isEmpty()) Toast.makeText(this, "文件选择因工作台重新载入而中断，请重新打开文件", Toast.LENGTH_LONG).show();
+            return;
+        }
         files.execute(() -> {
             try { reply.resolve(DocumentPicker.read(getContentResolver(), uris)); }
             catch (Exception error) { reply.reject(error.getMessage()); }
