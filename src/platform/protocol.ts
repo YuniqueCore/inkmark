@@ -5,10 +5,17 @@ export const MAX_FILE_BYTES = 32 * 1024 * 1024
 export const MAX_MESSAGE_CHARS = Math.ceil(MAX_FILE_BYTES / 3) * 4 + 4096
 const id = v.pipe(v.string(), v.regex(/^[a-z0-9-]{1,64}$/))
 const filename = v.pipe(v.string(), v.minLength(1), v.maxLength(255), v.check(value => value !== '.' && value !== '..'), v.regex(/^[^/\\\u0000-\u001f\u007f]+$/))
+// QuickJS retains a backtracking entry per character for a greedy base64 regexp.
+// Scan for invalid characters and validate padding separately: bounded auxiliary memory.
+function validBase64(value: string): boolean {
+  if (value.length % 4 !== 0 || /[^A-Za-z0-9+/=]/.test(value)) return false
+  const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0
+  return value.indexOf('=') === (padding ? value.length - padding : -1)
+}
 const file = v.strictObject({
   name: filename,
   type: v.pipe(v.string(), v.maxLength(128)),
-  base64: v.pipe(v.string(), v.maxLength(MAX_MESSAGE_CHARS - 4096), v.check(value => value.length % 4 === 0 && /^[A-Za-z0-9+/]*={0,2}$/.test(value))),
+  base64: v.pipe(v.string(), v.maxLength(MAX_MESSAGE_CHARS - 4096), v.check(validBase64)),
   relativePath: v.optional(v.pipe(v.string(), v.maxLength(2048))),
 })
 export type TransferFile = v.InferOutput<typeof file>

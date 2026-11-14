@@ -1,4 +1,4 @@
-import {readFile, writeFile, mkdir, copyFile, readdir, access, rm} from 'node:fs/promises'
+import {readFile, writeFile, mkdir, copyFile, readdir, access, rm, stat} from 'node:fs/promises'
 import {createHash} from 'node:crypto'
 import {spawnSync} from 'node:child_process'
 
@@ -36,8 +36,14 @@ switch (target) {
     signing = 'APK: Android debug key; AAB: unsigned, requires release signing'
     break
   case 'ios':
-    zip('.local-build/ios/Build/Products/Debug-iphonesimulator/InkMark.app', `InkMark-${version}-ios-arm64-simulator.zip`)
-    zip('.local-build/ios/Build/Products/Release-iphoneos/InkMark.app', `InkMark-${version}-ios-arm64-unsigned.zip`)
+    for (const [configuration, distribution] of [['Debug-iphonesimulator', 'simulator'], ['Release-iphoneos', 'unsigned']]) {
+      const app = `.local-build/ios/Build/Products/${configuration}/InkMark.app`
+      for (const resource of ['nsh/bundle.nshc', 'nsh/app.json', 'nsh/capabilities.json', 'Assets.car']) {
+        const file = await stat(`${app}/${resource}`)
+        if (!file.isFile() || file.size === 0) throw new Error(`Missing iOS application resource: ${resource}`)
+      }
+      zip(app, `InkMark-${version}-ios-arm64-${distribution}.zip`)
+    }
     signing = 'unsigned; device installation requires an Apple identity and provisioning profile'
     break
   default: throw new Error('Unknown artifact target')

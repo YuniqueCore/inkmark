@@ -28,7 +28,7 @@ let command = 'tar', args = ['-xzf', file, '-C', destination]
 if (archive.endsWith('.zip')) {
   if (process.platform === 'darwin') { command = 'ditto'; args = ['-xk', file, destination] }
   else if (process.platform === 'win32') {
-    command = 'tar'
+    command = resolve(process.env.SystemRoot ?? 'C:/Windows', 'System32/tar.exe')
     args = ['-xf', file, '-C', destination]
   } else { command = 'unzip'; args = ['-q', '-o', file, '-d', destination] }
 }

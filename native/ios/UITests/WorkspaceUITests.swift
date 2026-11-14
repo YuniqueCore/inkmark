@@ -2,10 +2,12 @@ import XCTest
 
 final class WorkspaceUITests: XCTestCase {
     @MainActor func testOfflineMarkdownSurvivesProcessRestart() throws {
+        continueAfterFailure = false
         let app = XCUIApplication()
         app.launch()
         let create = app.webViews.buttons.matching(NSPredicate(format: "label CONTAINS %@", "粘贴新建文档")).firstMatch
-        XCTAssertTrue(create.waitForExistence(timeout: 20))
+        XCTAssertTrue(create.waitForExistence(timeout: 20), app.staticTexts["workspace-error"].exists
+            ? app.staticTexts["workspace-error"].label : app.debugDescription)
         create.tap()
         let input = app.webViews.textViews["新文档内容"]
         XCTAssertTrue(input.waitForExistence(timeout: 5))

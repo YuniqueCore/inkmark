@@ -60,14 +60,32 @@ public class WorkspaceTest {
             evaluate(scenario, "document.querySelector('#btn-import').click();document.querySelector('[data-menu-id=image-paste]').click()");
             await(scenario, "document.querySelector('#image-view img')?.naturalWidth === 240 && document.querySelector('#save-text')?.textContent === '已保存'");
             assertEquals("true", evaluate(scenario, "document.querySelector('#btn-edit').disabled"));
+            evaluate(scenario, "document.querySelector('[data-image-action=coordinates]').click()");
+            await(scenario, "!!document.querySelector('[data-image-form]')");
+            evaluate(scenario, "for(const [key,value] of Object.entries({x:20,y:20,width:9999,height:80})){const el=document.querySelector('[data-coordinate='+key+']');el.value=value;el.dispatchEvent(new Event('input',{bubbles:true}))}");
+            assertEquals("true", evaluate(scenario, "document.querySelector('[data-image-save]').disabled"));
+            evaluate(scenario, "const width=document.querySelector('[data-coordinate=width]');width.value=100;width.dispatchEvent(new Event('input',{bubbles:true}));const comment=document.querySelector('[data-image-form] textarea');comment.value='Native image review';comment.dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('[data-image-save]').click()");
+            await(scenario, "document.querySelector('#sidebar')?.textContent.includes('Native image review') && document.querySelector('#save-text')?.textContent === '已保存'");
             evaluate(scenario, "document.querySelector('#btn-export').click();document.querySelector('#export-modal [data-op=download]').click()");
             UiDevice device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
             long deadline = System.currentTimeMillis() + 10000;
             while (context.getPackageName().equals(device.getCurrentPackageName()) && System.currentTimeMillis() < deadline) Thread.sleep(100);
             assertNotEquals("System share sheet must leave the activity", context.getPackageName(), device.getCurrentPackageName());
             device.pressBack();
+            File[] shares = new File(context.getCacheDir(), "inkmark-exports").listFiles();
+            assertNotNull(shares);
+            File archive = java.util.Arrays.stream(shares).flatMap(directory -> java.util.Arrays.stream(directory.listFiles()))
+                .filter(file -> file.getName().endsWith(".zip")).findFirst().orElseThrow();
+            try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(archive)) {
+                try (var original = zip.getInputStream(zip.getEntry("image-1.png"))) { assertArrayEquals(Files.readAllBytes(image.toPath()), original.readAllBytes()); }
+                try (var backup = zip.getInputStream(zip.getEntry("inkmark-documents.json"))) {
+                    var document = new org.json.JSONObject(new String(backup.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)).getJSONArray("docs").getJSONObject(0);
+                    assertEquals("Native image review", document.getJSONArray("annotations").getJSONObject(0).getString("comment"));
+                }
+            }
             scenario.recreate();
             await(scenario, "document.querySelector('#image-view img')?.naturalWidth === 240");
+            assertEquals("true", evaluate(scenario, "document.querySelector('#sidebar')?.textContent.includes('Native image review')"));
             assertEquals("2", evaluate(scenario, "document.querySelectorAll('#filetree [data-doc]').length"));
             Files.delete(image.toPath());
         }

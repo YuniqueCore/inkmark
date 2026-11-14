@@ -26,6 +26,7 @@ final class WorkspaceScene: UIResponder, UIWindowSceneDelegate {
 /** A single document workspace; UIKit owns safe areas, keyboard avoidance and file sharing. */
 final class WorkspaceController: UIViewController, UIDocumentPickerDelegate {
     private let workspace = NshAppView()
+    private let failure = UILabel()
     private var picking: NshHostReply?
 
     override func viewDidLoad() {
@@ -38,6 +39,19 @@ final class WorkspaceController: UIViewController, UIDocumentPickerDelegate {
             workspace.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
             workspace.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
             workspace.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor),
+        ])
+        failure.translatesAutoresizingMaskIntoConstraints = false
+        failure.font = .preferredFont(forTextStyle: .body)
+        failure.adjustsFontForContentSizeCategory = true
+        failure.numberOfLines = 0
+        failure.textAlignment = .center
+        failure.accessibilityIdentifier = "workspace-error"
+        failure.isHidden = true
+        view.addSubview(failure)
+        NSLayoutConstraint.activate([
+            failure.leadingAnchor.constraint(equalTo: view.layoutMarginsGuide.leadingAnchor),
+            failure.trailingAnchor.constraint(equalTo: view.layoutMarginsGuide.trailingAnchor),
+            failure.centerYAnchor.constraint(equalTo: view.safeAreaLayoutGuide.centerYAnchor),
         ])
         workspace.onError = { [weak self] message in self?.showFailure(message) }
         workspace.handle("files.pick") { [weak self] value, reply in
@@ -102,8 +116,8 @@ final class WorkspaceController: UIViewController, UIDocumentPickerDelegate {
     }
 
     private func showFailure(_ message: String) {
-        let alert = UIAlertController(title: "工作台无法加载", message: message, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "知道了", style: .default))
-        present(alert, animated: true)
+        failure.text = "工作台无法加载\n\n\(message)"
+        failure.isHidden = false
+        workspace.isHidden = true
     }
 }

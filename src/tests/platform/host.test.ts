@@ -12,7 +12,12 @@ test('bounded transfer accepts binary boundaries and rejects executable envelope
   for (const name of ['../secret', 'a\\b', 'a\n/../b', 'x'.repeat(256)]) {
     expect(() => parseRequest(JSON.stringify({...request, file: {...file, name, base64: ''}}))).toThrow()
   }
-  expect(() => parseRequest(JSON.stringify({...request, file: {...file, base64: 'a==='}}))).toThrow()
+  for (const base64 of ['a===', '=AAA', 'AA=A', 'AAAA=', 'AAA\n', 'AAA!']) {
+    expect(() => parseRequest(JSON.stringify({...request, file: {...file, base64}}))).toThrow()
+  }
+  for (const base64 of ['', 'AA==', 'AAA=', 'AAAA']) {
+    expect(parseRequest(JSON.stringify({...request, file: {...file, base64}})).operation).toBe('files.save')
+  }
   expect(() => parseRequest(JSON.stringify({...request, eval: 'alert(1)'}))).toThrow()
   expect(() => parseRequest(JSON.stringify({id: '1', operation: 'execute', code: 'x'}))).toThrow()
 }, 15000)

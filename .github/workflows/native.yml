@@ -28,8 +28,6 @@ jobs:
           toolchain: '1.100.0'
           components: rustfmt, clippy
       - uses: jdx/mise-action@v5.2.8
-        with:
-          install_args: mr-boxington@1.24.1
       - name: Linux WebView and display dependencies
         if: runner.os == 'Linux'
         run: |
@@ -51,9 +49,9 @@ jobs:
           NATIVE_TARGET: ${{ matrix.target }}
         run: |
           if [ "$NATIVE_TARGET" = linux ]; then
-            dbus-run-session -- xvfb-run -a bun run nsh test native/tests/workspace.test.tsx --target linux --junit native-test.xml
+            dbus-run-session -- xvfb-run -a bun run nsh test native/tests --target linux --junit native-test.xml
           else
-            bun run nsh test native/tests/workspace.test.tsx --target "$NATIVE_TARGET" --junit native-test.xml
+            bun run nsh test native/tests --target "$NATIVE_TARGET" --junit native-test.xml
           fi
       - name: Package desktop application
         env:
@@ -90,7 +88,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6.4.1
       - name: Prepare Android resources
         run: |
-          sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0'
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-37.0' 'build-tools;37.0.0'
           bun run nsh check native/mobile
           bun run nsh build native/mobile --release --out native/generated/mobile-assets/nsh
           rm native/generated/mobile-assets/nsh/bundle.js.map

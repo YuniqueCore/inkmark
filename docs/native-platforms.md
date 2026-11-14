@@ -64,7 +64,7 @@ node scripts/native-artifact.mjs macos
 
 # Actual NSH WebView business journey; use windows or linux on those operating systems.
 node scripts/native-test-prepare.mjs
-bun run nsh test native/tests/workspace.test.tsx --target macos
+bun run nsh test native/tests --target macos
 
 cd native/desktop
 mbx fmt --all --check
@@ -98,13 +98,13 @@ Use an available simulator name from `xcrun simctl list devices available`. XCTe
 ## Evidence and test scope
 
 - Existing browser BDD journeys cover text and image annotations, source/preview anchors, import conflicts, W3C idempotency, backups, bulk export/delete/recovery, storage conflicts and security boundaries. Reviewed snapshots cover desktop/mobile layouts; the touch journey adds selectionchange-only input, stable focus/drafts and a keyboard-sized search panel.
-- Native protocol tests exercise a real 32 MiB payload, malformed envelopes, traversal, pending-request cleanup, external versus fragment links, and late close attempts.
+- Native protocol tests exercise a real 32 MiB payload in both the browser and NSH QuickJS (including forwarding without exceeding its 256 MiB heap), malformed envelopes, traversal, pending-request cleanup, external versus fragment links, and late close attempts.
 - Rust tests use actual temporary files for atomic overwrite/failure, bounded folder imports, relative paths and symlink exclusion.
 - The NSH journey runs the production DOM in a real platform WebView with deterministic file/clipboard bindings. It tests bridge integration, not an OS file-picker click. Its script exists only in the generated test artifact. Its separate `inkmark-tests.localhost` origin is reset before bootstrap because NSH's fresh test data directory does not isolate every engine's WebView store.
-- Android instrumentation runs the installed host, imports a real clipboard image URI, opens the real system share sheet and recreates the Activity to check persistence. Separate adapter checks read granted content URIs and reject oversized selections.
-- iOS unit tests exercise coordinated filesystem reads and bounded export/import. XCUITest creates Markdown and terminates/relaunches the app to check its WebView persistence.
+- Android instrumentation runs the installed host, imports a real clipboard image URI, validates and annotates its region, opens the real system share sheet, checks the exported ZIP bytes and recreates the Activity to check persistence. Separate adapter checks read granted content URIs and reject oversized selections.
+- iOS unit tests exercise coordinated filesystem reads and bounded export/import. XCUITest creates Markdown and terminates/relaunches the app to check its WebView persistence. Packaging also checks the actual app for its compiled NSH bundle, manifests and asset catalog; an executable without its workspace resources is not a valid artifact.
 
-Build success alone is not device execution evidence. CI reports are bound to their source commit. OS selection handles, third-party cloud-file providers, IME composition, recipient-specific share completion, accessibility readers and release signing still need device acceptance on the owner's intended devices. Tests do not pretend injected DOM selection is a physical long press. Xcode may emit its generic AppIntents metadata warning for this application, which declares no App Intents; Android Gradle Plugin 9.5.1 currently uses a Gradle API deprecated by Gradle 9.9.1. Neither is an application-source warning suppressed by the project.
+Build success alone is not device execution evidence. CI reports are bound to their source commit. OS selection handles, third-party cloud-file providers, IME composition, recipient-specific share completion, accessibility readers and release signing still need device acceptance on the owner's intended devices. Tests do not pretend injected DOM selection is a physical long press. Xcode emits its generic AppIntents metadata warning for this application, which declares no App Intents, and NSH's prebuilt iOS SDK references unavailable upstream Rust object paths during dSYM generation. Android Gradle Plugin 9.5.1 uses a Gradle API deprecated by Gradle 9.9.1. These upstream toolchain diagnostics are not hidden with application-wide warning suppression.
 
 ## Research and decisions
 
