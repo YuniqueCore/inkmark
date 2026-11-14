@@ -1,7 +1,7 @@
 {
   "name": "inkmark",
   "private": true,
-  "version": "0.11.0",
+  "version": "0.12.0",
   "engines": {
     "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
   },
@@ -12,19 +12,25 @@
     "build": "tsc --noEmit && vite build",
     "build:pages": "tsc --noEmit && vite build --base=/inkmark/",
     "preview": "vite preview",
-    "test": "vitest run",
-    "check": "tsc --noEmit && vitest run && playwright test",
-    "test:e2e": "playwright test"
+    "test": "vitest run && vitest run --config vitest.native.config.ts",
+    "check": "tsc --noEmit && bun run test && playwright test",
+    "test:e2e": "playwright test",
+    "build:native-web": "tsc --noEmit && vite build --mode native && node scripts/native-web.mjs && node scripts/native-prepare.mjs",
+    "native:setup": "node scripts/native-setup.mjs",
+    "nsh": "node scripts/nsh.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.1",
+    "@resvg/resvg-js": "^2.6.2",
     "@tailwindcss/vite": "^4.3.5",
     "@types/morphdom": "^2.4.2",
     "@types/node": "^26.6.6",
     "happy-dom": "^21.0.4",
+    "parse5": "^8.1.1",
     "tailwindcss": "^4.3.5",
     "typescript": "^7.0.2",
     "vite": "^8.3.8",
+    "vite-plugin-singlefile": "^2.3.4",
     "vitest": "^5.1.0"
   },
   "dependencies": {

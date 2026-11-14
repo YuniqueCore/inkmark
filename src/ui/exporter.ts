@@ -7,6 +7,9 @@ import { escapeHtml } from '../core/text'
 import { strToU8, zipSync } from 'fflate'
 import type { ReviewDocument } from '../core/types'
 import { isImageDocument } from '../core/types'
+import {exportFile} from './file-transfer'
+import {bindFileInput} from '../platform/files'
+import {toast} from './toast'
 
 export interface ExporterCallbacks {
   onCopy: (content: string) => void
@@ -46,7 +49,7 @@ export class ExporterView {
     // 弹层骨架类名只在这里设置一次；hidden 的显隐由 open()/close() 切换。
     // 此前 render() 每次重绘都重写整串 className（含 hidden），点 tab 会把弹层藏掉。
     this.modal.className =
-      'fixed left-1/2 top-1/2 z-100 hidden w-[min(880px,94vw)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border bg-card text-card-foreground shadow-2xl'
+      'viewport-dialog fixed left-1/2 top-1/2 z-100 hidden w-[min(880px,94vw)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border bg-card text-card-foreground shadow-2xl'
   }
 
   open(docs: ReviewDocument[], options: {includeResolved?: boolean} = {}): void {
@@ -137,29 +140,27 @@ export class ExporterView {
     this.modal.querySelector('[data-op="copy"]')?.addEventListener('click', () => {
       this.callbacks.onCopy(preview.value)
     })
-    this.modal.querySelector('[data-op="download"]')?.addEventListener('click', () => {
-      const a = document.createElement('a')
+    this.modal.querySelector('[data-op="download"]')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget as HTMLButtonElement
+      button.disabled = true
       const blob = artifact.kind === 'bundle'
         ? new Blob([zipSync(Object.fromEntries(Object.entries(artifact.entries).map(([name, data]) => [name, typeof data === 'string' ? strToU8(data) : data])))], {type: 'application/zip'})
         : new Blob([artifact.preview], {type: artifact.mediaType})
-      a.href = URL.createObjectURL(blob)
-      a.download = artifact.name
-      a.click()
-      setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+      try { await exportFile(new File([blob], artifact.name, {type: blob.type})) }
+      finally { button.disabled = false }
     })
     this.modal.querySelector('[data-op="import"]')?.addEventListener('click', () => {
       const input = document.createElement('input')
       input.type = 'file'
       input.accept = '.json,application/json'
-      input.addEventListener('change', async () => {
-        const file = input.files?.[0]
-        if (file) {
-          const exporting = this.docs
-          await this.callbacks.onImportW3C(file, exporting.length === 1 ? exporting[0]!.id : null)
-          if (this.docs === exporting) this.close()
-        }
-      })
-      input.click()
+      const exporting = this.docs
+      const choose = bindFileInput(input, async files => {
+        const file = files[0]
+        if (!file) return
+        await this.callbacks.onImportW3C(file, exporting.length === 1 ? exporting[0]!.id : null)
+        if (this.docs === exporting) this.close()
+      }, toast)
+      choose()
     })
     this.modal.querySelector('[data-op="close"]')?.addEventListener('click', () => this.close())
   }

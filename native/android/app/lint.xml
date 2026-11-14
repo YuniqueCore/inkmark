@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!-- The shared NSH AAR contains Notifications, but InkMark never grants that capability.
+         Keep the rule enabled for application code; do not request an unused OS permission. -->
+    <issue id="NotificationPermission">
+        <ignore regexp=".*usage from com\.longbridge\.nsh\.Notifications.*" />
+    </issue>
+</lint>

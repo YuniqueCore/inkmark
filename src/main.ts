@@ -35,6 +35,11 @@ import { initResizers } from './ui/resizer'
 import { icon } from './ui/icons'
 import { initSaveStatus } from './ui/save-status'
 import { toast } from './ui/toast'
+import {copyText, exportFile} from './ui/file-transfer'
+import {bindFileInput, readClipboardImage, beginFileOperation, fileOperationPending} from './platform/files'
+import {bindHostLifecycle, supportsDirectories, hostRequestPending} from './platform/host'
+import {observeTextSelection, type SelectionPoint} from './ui/text-selection'
+import {initViewport} from './ui/viewport'
 import { rectOfAnnotation, resolveSelection } from './ui/selection-offsets'
 import { SAMPLE_TEXT } from './ui/sample'
 import { SESSION_VERSION } from './core/types'
@@ -104,6 +109,7 @@ const $ = <T extends HTMLElement>(sel: string): T => {
   if (!el) throw new Error(`missing element: ${sel}`)
   return el as T
 }
+window.addEventListener('inkmark:host-error', event => toast((event as CustomEvent<string>).detail))
 
 const editorEl = $('#editor')
 const previewEl = $('#markdown-preview')
@@ -155,7 +161,7 @@ const editor = new EditorView(editorEl, {
   },
 })
 
-function previewSelection(event: MouseEvent): void {
+function previewSelection(event: SelectionPoint): void {
   const doc = activeDoc()
   if (!doc) return
   const {info, error} = resolvePreviewSelection(event, previewEl, doc)
@@ -165,14 +171,7 @@ function previewSelection(event: MouseEvent): void {
     if (error) toast(error)
   }
 }
-previewEl.addEventListener('mouseup', previewSelection)
-previewEl.addEventListener('keyup', (event) => {
-  if (!event.key.startsWith('Arrow') && event.key.toLowerCase() !== 'a') return
-  const selection = window.getSelection()
-  if (!selection || selection.rangeCount === 0) return
-  const rect = selection.getRangeAt(0).getBoundingClientRect()
-  previewSelection(new MouseEvent('keyup', {clientX: rect.left + rect.width / 2, clientY: rect.bottom}))
-})
+observeTextSelection(previewEl, previewSelection)
 previewEl.addEventListener('click', (event) => {
   const target = (event.target as HTMLElement).closest<HTMLElement>('.seg-hl')
   const id = target?.dataset.annIds?.split(' ')[0]
@@ -354,7 +353,7 @@ const annotationPopup = new AnnotationPopup({
   onDelete: (id) => deleteAnnotation([id]),
   onToggleStatus: (id) => toggleAnnotationStatus([id]),
   onCopySnippet: (text) => {
-    void navigator.clipboard.writeText(text).then(() => toast('已复制片段'))
+    void copyText(text, '已复制片段')
   },
 })
 
@@ -377,7 +376,7 @@ const selectionPin = new SelectionPin({
     return true
   },
   onCopySelection: (quoted) => {
-    void navigator.clipboard.writeText(quoted).then(() => toast('已复制选中文本'))
+    void copyText(quoted, '已复制选中文本')
   },
   onDismiss: () => {
     sidebar.setActive(null)
@@ -458,7 +457,7 @@ const fileTree = new FileTreeView(treeEl, {
 
 const exporter = new ExporterView($('#export-modal'), $('#overlay'), {
   onCopy: (content) => {
-    void navigator.clipboard.writeText(content).then(() => toast('已复制到剪贴板'))
+    void copyText(content, '已复制到剪贴板')
   },
   onClose: () => {},
   onImportW3C: (file, fallbackDocId) => importW3CFile(file, fallbackDocId),
@@ -760,35 +759,55 @@ const workspaceSnapshot = () => ({
 })
 const save = initSaveStatus(workspaceSnapshot)
 
+function hasUnsavedDrafts(): boolean {
+  const doc = activeDoc()
+  return Boolean((mode === 'edit' && doc && editor.editValue() !== normalizeLineEndings(doc.text)) ||
+    searchPanel.hasDraft() || annotationPopup.hasDraft() || selectionPin.hasDrafts() || imageView.hasDraft() ||
+    document.querySelector<HTMLTextAreaElement>('#text-dialog-input')?.value)
+}
+
+bindHostLifecycle(async () => {
+  if (!ready) return false
+  if (fileOperationPending() || hostRequestPending()) { toast('文件操作尚未完成，请稍后再关闭'); return false }
+  if (hasUnsavedDrafts()) {
+    toast('请先提交或取消当前草稿，再关闭窗口；草稿尚未保存')
+    return false
+  }
+  const saved = await save.settle()
+  if (!saved) toast('工作区尚未保存，请先导出备份并处理保存错误，再关闭窗口')
+  return saved
+}, () => save.settle())
+
 function downloadDocumentBackup(): void {
   if (!canLeaveEdit()) return
   const data = JSON.stringify({...workspaceSnapshot(), trash: []}, null, 2)
-  downloadJson(data, 'inkmark-documents.json')
-  toast(selectionPin.hasDrafts() ? '备份已下载，未提交的划词草稿不包含在内' : '已下载文档与批注备份')
+  downloadJson(data, 'inkmark-documents.json', '文档与批注备份不含未提交草稿')
 }
 
 function downloadRecoveryBackup(): void {
   if (!canLeaveEdit()) return
-  downloadJson(JSON.stringify(workspaceSnapshot(), null, 2), 'inkmark-workspace.json')
-  toast('已下载完整工作区（含原图和回收站）；未提交的草稿不包含在内')
+  downloadJson(JSON.stringify(workspaceSnapshot(), null, 2), 'inkmark-workspace.json', '完整工作区含原图和回收站，不含未提交草稿')
 }
 
 async function restoreWorkspaceFile(file: File): Promise<void> {
-  if (!canLeaveEdit()) return
-  const initial = state
+  const finish = beginFileOperation()
   try {
-    const restored = parseWorkspace(await file.text())
-    if (!restored) { toast('工作区备份格式无效，当前数据保持不变'); return }
-    const docs = [...restored.docs, ...restored.trash.flatMap((t) => t.type === 'doc' ? [t.doc] : [])]
-    for (const doc of docs) if (isImageDocument(doc)) await verifyRaster(doc.image)
-    const ok = await confirmDialog({title: '恢复完整工作区？', description: `将以备份中的 ${restored.docs.length} 份文档和 ${restored.trash.length} 项回收站记录替换当前工作区。请先备份当前内容。恢复会放弃所有未提交的批注草稿；备份不包含草稿。`, confirmText: '恢复工作区', danger: true})
-    if (!ok || !canLeaveEdit()) return
-    if (state !== initial) { toast('工作区在恢复期间发生变化，请重试'); return }
-    if (!await commitWorkspaceReplacement(restored, initial)) return
-    selectionPin.discardDrafts(new Set([...initial.docs.map((d) => d.id), ...trashedDocIds(initial.trash)]))
-    selectionPin.dismiss(); annotationPopup.close()
-    toast('完整工作区已恢复')
-  } catch (error) { toast(error instanceof Error ? error.message : '备份读取失败') }
+    if (!canLeaveEdit()) return
+    const initial = state
+    try {
+      const restored = parseWorkspace(await file.text())
+      if (!restored) { toast('工作区备份格式无效，当前数据保持不变'); return }
+      const docs = [...restored.docs, ...restored.trash.flatMap((t) => t.type === 'doc' ? [t.doc] : [])]
+      for (const doc of docs) if (isImageDocument(doc)) await verifyRaster(doc.image)
+      const ok = await confirmDialog({title: '恢复完整工作区？', description: `将以备份中的 ${restored.docs.length} 份文档和 ${restored.trash.length} 项回收站记录替换当前工作区。请先备份当前内容。恢复会放弃所有未提交的批注草稿；备份不包含草稿。`, confirmText: '恢复工作区', danger: true})
+      if (!ok || !canLeaveEdit()) return
+      if (state !== initial) { toast('工作区在恢复期间发生变化，请重试'); return }
+      if (!await commitWorkspaceReplacement(restored, initial)) return
+      selectionPin.discardDrafts(new Set([...initial.docs.map((d) => d.id), ...trashedDocIds(initial.trash)]))
+      selectionPin.dismiss(); annotationPopup.close()
+      toast('完整工作区已恢复')
+    } catch (error) { toast(error instanceof Error ? error.message : '备份读取失败') }
+  } finally { finish() }
 }
 
 /** Explicit replacement shares the save queue and excludes concurrent UI mutations. */
@@ -806,13 +825,8 @@ async function commitWorkspaceReplacement(restored: ReturnType<typeof workspaceS
   } finally { document.body.inert = false }
 }
 
-function downloadJson(data: string, name: string): void {
-  const url = URL.createObjectURL(new Blob([data], {type: 'application/json;charset=utf-8'}))
-  const link = document.createElement('a')
-  link.href = url
-  link.download = name
-  link.click()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
+function downloadJson(data: string, name: string, detail = ''): void {
+  void exportFile(new File([data], name, {type: 'application/json;charset=utf-8'}), detail)
 }
 
 // ---------------------------------------------------------------- slop 预扫描
@@ -1009,155 +1023,161 @@ async function readImport(files: FileList | File[], context: ImportContext): Pro
  * 这里只做诊断弹出、状态应用与提示。工作区为空 → 直接导入；存在同名冲突 → 先弹
  * 诊断树（取消 = 整次导入作废，W3C/会话也一并作废），确认后一次性落盘。 */
 async function importFiles(inputFiles: FileList | File[]): Promise<void> {
-  const files = Array.from(inputFiles)
-  await workspaceReady
-  if (!canLeaveEdit()) return
-  const initialDocs = state.docs
-  const initialActiveId = state.activeDocId
-  const imageFiles = Array.from(files).filter((file) => file.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg)$/i.test(file.name))
-  const imageDocs: ReviewDocument[] = []
-  const imageErrors: string[] = []
-  for (const file of imageFiles) {
-    try {
-      const image = await readRaster(file)
-      const rel = file.webkitRelativePath || ''
-      const path = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : ''
-      imageDocs.push({kind: 'image', id: newDocId(), name: uniqueDocumentName(file.name || '粘贴的图片.png', path, [...initialDocs, ...imageDocs]), path, image, annotations: [], addedAt: Date.now()})
-    } catch (error) { imageErrors.push(`${file.name}: ${error instanceof Error ? error.message : '图片读取失败'}`) }
-  }
-  if (imageErrors.length > 0) toast(imageErrors.join('；'))
-  const r = await readImport(Array.from(files).filter((file) => !imageFiles.includes(file)), { docs: initialDocs, currentDoc: activeItem() })
-  if (!r) return
+  const finish = beginFileOperation()
   try {
-    for (const doc of r.sessionDocs) if (isImageDocument(doc)) await verifyRaster(doc.image)
-  } catch (error) { toast(error instanceof Error ? error.message : '备份中的图片无效'); return }
-  const plan = buildImportPlan(
-    r.textDocs.map((d) => ({name: d.name, path: d.path, text: d.text})),
-    state.docs.filter(isTextDocument),
-  )
-  let rows = plan.rows
-  if (plan.hasConflicts) {
-    const decided = await importConflictDialog(plan, state.docs.filter(isTextDocument))
-    if (!decided) return
-    rows = decided
-  }
-  if (!canLeaveEdit()) return
-  if (state.docs !== initialDocs || state.activeDocId !== initialActiveId) {
-    toast('工作区在导入期间发生变化，请重新导入')
-    return
-  }
+    const files = Array.from(inputFiles)
+    await workspaceReady
+    if (!canLeaveEdit()) return
+    const initialDocs = state.docs
+    const initialActiveId = state.activeDocId
+    const imageFiles = Array.from(files).filter((file) => file.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg)$/i.test(file.name))
+    const imageDocs: ReviewDocument[] = []
+    const imageErrors: string[] = []
+    for (const file of imageFiles) {
+      try {
+        const image = await readRaster(file)
+        const rel = file.webkitRelativePath || ''
+        const path = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : ''
+        imageDocs.push({kind: 'image', id: newDocId(), name: uniqueDocumentName(file.name || '粘贴的图片.png', path, [...initialDocs, ...imageDocs]), path, image, annotations: [], addedAt: Date.now()})
+      } catch (error) { imageErrors.push(`${file.name}: ${error instanceof Error ? error.message : '图片读取失败'}`) }
+    }
+    if (imageErrors.length > 0) toast(imageErrors.join('；'))
+    const r = await readImport(Array.from(files).filter((file) => !imageFiles.includes(file)), { docs: initialDocs, currentDoc: activeItem() })
+    if (!r) return
+    try {
+      for (const doc of r.sessionDocs) if (isImageDocument(doc)) await verifyRaster(doc.image)
+    } catch (error) { toast(error instanceof Error ? error.message : '备份中的图片无效'); return }
+    const plan = buildImportPlan(
+      r.textDocs.map((d) => ({name: d.name, path: d.path, text: d.text})),
+      state.docs.filter(isTextDocument),
+    )
+    let rows = plan.rows
+    if (plan.hasConflicts) {
+      const decided = await importConflictDialog(plan, state.docs.filter(isTextDocument))
+      if (!decided) return
+      rows = decided
+    }
+    if (!canLeaveEdit()) return
+    if (state.docs !== initialDocs || state.activeDocId !== initialActiveId) {
+      toast('工作区在导入期间发生变化，请重新导入')
+      return
+    }
 
-  // 落盘：direct/rename 建新文档；overwrite 覆盖文本并重锚已有批注（编辑原文同款管线）
-  const now = Date.now()
-  const fresh: DocItem[] = []
-  const overwrites = new Map<string, string>()
-  let reanchored = 0
-  let lost = 0
-  for (const row of rows) {
-    if (row.action === 'direct' || row.action === 'rename') {
-      fresh.push({
-        id: newDocId(),
-        name: row.renameTo ?? row.incoming.name,
-        path: row.incoming.path,
-        text: row.incoming.text,
-        annotations: [],
-        addedAt: now,
-      })
-    } else if (row.action === 'overwrite' && row.existing) {
-      overwrites.set(row.existing.id, row.incoming.text)
+    // 落盘：direct/rename 建新文档；overwrite 覆盖文本并重锚已有批注（编辑原文同款管线）
+    const now = Date.now()
+    const fresh: DocItem[] = []
+    const overwrites = new Map<string, string>()
+    let reanchored = 0
+    let lost = 0
+    for (const row of rows) {
+      if (row.action === 'direct' || row.action === 'rename') {
+        fresh.push({
+          id: newDocId(),
+          name: row.renameTo ?? row.incoming.name,
+          path: row.incoming.path,
+          text: row.incoming.text,
+          annotations: [],
+          addedAt: now,
+        })
+      } else if (row.action === 'overwrite' && row.existing) {
+        overwrites.set(row.existing.id, row.incoming.text)
+      }
     }
-  }
 
-  if (!await confirmDraftsForTextChange(new Set(overwrites.keys()), 'a', () =>
-    state.docs === initialDocs && state.activeDocId === initialActiveId && canLeaveEdit(),
-  )) return
-  if (state.docs !== initialDocs || state.activeDocId !== initialActiveId || !canLeaveEdit()) {
-    toast('工作区在导入期间发生变化，请重新导入')
-    return
-  }
+    if (!await confirmDraftsForTextChange(new Set(overwrites.keys()), 'a', () =>
+      state.docs === initialDocs && state.activeDocId === initialActiveId && canLeaveEdit(),
+    )) return
+    if (state.docs !== initialDocs || state.activeDocId !== initialActiveId || !canLeaveEdit()) {
+      toast('工作区在导入期间发生变化，请重新导入')
+      return
+    }
 
-  // Existing-document imports join the same overwrite/reanchor operation. New documents
-  // receive their anchors after identity allocation, without changing the input-order contract.
-  const existingIds = new Set(state.docs.map((doc) => doc.id))
-  const applied = applyW3C(r.w3cRouted.filter((route) => route.docId === null || existingIds.has(route.docId)))
-  const sessionDocs = prepareSessionDocs(r.sessionDocs, [...state.docs, ...imageDocs, ...fresh], state.trash)
-  const newDocs = [...imageDocs, ...fresh, ...sessionDocs]
-  if (overwrites.size > 0 || newDocs.length > 0) {
-    const nextActiveId = imageDocs[0]?.id ?? fresh[0]?.id ?? sessionDocs[0]?.id ?? state.activeDocId
-    if (nextActiveId !== state.activeDocId || overwrites.has(state.activeDocId)) {
-      selectionPin.dismiss()
-      annotationPopup.close()
+    // Existing-document imports join the same overwrite/reanchor operation. New documents
+    // receive their anchors after identity allocation, without changing the input-order contract.
+    const existingIds = new Set(state.docs.map((doc) => doc.id))
+    const applied = applyW3C(r.w3cRouted.filter((route) => route.docId === null || existingIds.has(route.docId)))
+    const sessionDocs = prepareSessionDocs(r.sessionDocs, [...state.docs, ...imageDocs, ...fresh], state.trash)
+    const newDocs = [...imageDocs, ...fresh, ...sessionDocs]
+    if (overwrites.size > 0 || newDocs.length > 0) {
+      const nextActiveId = imageDocs[0]?.id ?? fresh[0]?.id ?? sessionDocs[0]?.id ?? state.activeDocId
+      if (nextActiveId !== state.activeDocId || overwrites.has(state.activeDocId)) {
+        selectionPin.dismiss()
+        annotationPopup.close()
+      }
+      state = {
+        docs: [
+          ...state.docs.map((d) => {
+            const text = overwrites.get(d.id)
+            if (text === undefined || !isTextDocument(d)) return d
+            const preview = reanchorAnnotations(d.text, text, d.annotations)
+            reanchored += preview.moved
+            lost += preview.clamped
+            return {...d, text, annotations: preview.annotations}
+          }),
+          ...newDocs,
+        ],
+        activeDocId: nextActiveId,
+        trash: state.trash,
+      }
     }
-    state = {
-      docs: [
-        ...state.docs.map((d) => {
-          const text = overwrites.get(d.id)
-          if (text === undefined || !isTextDocument(d)) return d
-          const preview = reanchorAnnotations(d.text, text, d.annotations)
-          reanchored += preview.moved
-          lost += preview.clamped
-          return {...d, text, annotations: preview.annotations}
-        }),
-        ...newDocs,
-      ],
-      activeDocId: nextActiveId,
-      trash: state.trash,
+    const incomingApplied = applyW3C(r.w3cRouted.filter((route) => route.docId !== null && !existingIds.has(route.docId)))
+    applied.merged += incomingApplied.merged
+    applied.unmatched += incomingApplied.unmatched
+    applied.routed += incomingApplied.routed
+    if (applied.merged > 0 || newDocs.length > 0 || overwrites.size > 0) rerender(false)
+    const parts: string[] = []
+    if (applied.merged > 0 || applied.unmatched > 0) parts.push(w3cToast(applied.merged, applied.unmatched, applied.routed))
+    else if (r.w3cFiles > 0 && newDocs.length === 0 && overwrites.size === 0) {
+      toast('这些批注已导入')
+    } else if (newDocs.length === 0 && overwrites.size === 0 && r.w3cFiles === 0) {
+      if (imageErrors.length === 0) toast(r.skipped > 0 ? `没有可导入的文本文件（跳过 ${r.skipped} 个）` : '没有可导入的文件')
     }
-  }
-  const incomingApplied = applyW3C(r.w3cRouted.filter((route) => route.docId !== null && !existingIds.has(route.docId)))
-  applied.merged += incomingApplied.merged
-  applied.unmatched += incomingApplied.unmatched
-  applied.routed += incomingApplied.routed
-  if (applied.merged > 0 || newDocs.length > 0 || overwrites.size > 0) rerender(false)
-  const parts: string[] = []
-  if (applied.merged > 0 || applied.unmatched > 0) parts.push(w3cToast(applied.merged, applied.unmatched, applied.routed))
-  else if (r.w3cFiles > 0 && newDocs.length === 0 && overwrites.size === 0) {
-    toast('这些批注已导入')
-  } else if (newDocs.length === 0 && overwrites.size === 0 && r.w3cFiles === 0) {
-    if (imageErrors.length === 0) toast(r.skipped > 0 ? `没有可导入的文本文件（跳过 ${r.skipped} 个）` : '没有可导入的文件')
-  }
-  if (newDocs.length > 0 || overwrites.size > 0) {
-    const action = (a: string): number => rows.filter((row) => row.action === a).length
-    if (imageErrors.length) parts.push(`${imageErrors.length} 张图片导入失败`)
-    if (imageDocs.length) parts.push(`导入 ${imageDocs.length} 张图片`)
-    const imported = action('direct') + action('rename')
-    if (imported > 0) parts.push(`导入 ${imported} 个文档`)
-    if (overwrites.size > 0) {
-      let p = `覆盖 ${overwrites.size}`
-      if (reanchored > 0 || lost > 0) p += `（重锚 ${reanchored}${lost > 0 ? ` · 失锚 ${lost}` : ''}）`
-      parts.push(p)
+    if (newDocs.length > 0 || overwrites.size > 0) {
+      const action = (a: string): number => rows.filter((row) => row.action === a).length
+      if (imageErrors.length) parts.push(`${imageErrors.length} 张图片导入失败`)
+      if (imageDocs.length) parts.push(`导入 ${imageDocs.length} 张图片`)
+      const imported = action('direct') + action('rename')
+      if (imported > 0) parts.push(`导入 ${imported} 个文档`)
+      if (overwrites.size > 0) {
+        let p = `覆盖 ${overwrites.size}`
+        if (reanchored > 0 || lost > 0) p += `（重锚 ${reanchored}${lost > 0 ? ` · 失锚 ${lost}` : ''}）`
+        parts.push(p)
+      }
+      if (r.sessionDocs.length > 0) parts.push(`会话已合并（${r.sessionDocs.length} 个文档）`)
+      if (action('identical') > 0) parts.push(`${action('identical')} 个内容相同已跳过`)
+      if (r.skipped > 0) parts.push(`跳过 ${r.skipped}`)
+      if (r.truncated > 0) parts.push(`${r.truncated} 个超大文件已截断`)
     }
-    if (r.sessionDocs.length > 0) parts.push(`会话已合并（${r.sessionDocs.length} 个文档）`)
-    if (action('identical') > 0) parts.push(`${action('identical')} 个内容相同已跳过`)
-    if (r.skipped > 0) parts.push(`跳过 ${r.skipped}`)
-    if (r.truncated > 0) parts.push(`${r.truncated} 个超大文件已截断`)
-  }
-  if (r.omittedTrash > 0) parts.push(`${r.omittedTrash} 项回收站记录未合并；请用更多菜单中的「恢复完整工作区」恢复全部数据`)
-  if (parts.length > 0) toast(parts.join('，'))
+    if (r.omittedTrash > 0) parts.push(`${r.omittedTrash} 项回收站记录未合并；请用更多菜单中的「恢复完整工作区」恢复全部数据`)
+    if (parts.length > 0) toast(parts.join('，'))
+  } finally { finish() }
 }
 
 /** 导出弹层的 W3C 导入入口：单文件按来源分发 */
 async function importW3CFile(file: File, fallbackDocId: string | null): Promise<void> {
-  if (!canLeaveEdit()) return
-  const initialDocs = state.docs
-  const initialActiveId = state.activeDocId
-  const r = await readImport([file], { docs: state.docs, currentDoc: state.docs.find((doc) => doc.id === fallbackDocId) })
-  if (!r) return
-  if (state.docs !== initialDocs || state.activeDocId !== initialActiveId || !canLeaveEdit()) {
-    toast('工作区在导入期间发生变化，请重新导入')
-    return
-  }
-  const applied = applyW3C(r.w3cRouted)
-  if (r.w3cFiles === 0) {
-    toast('不是可导入的 W3C 批注文件')
-    return
-  }
-  if (applied.merged === 0 && applied.unmatched === 0) {
-    toast('这些批注已导入')
-    return
-  }
-  if (applied.merged > 0) rerender(false)
-  toast(w3cToast(applied.merged, applied.unmatched, applied.routed))
+  const finish = beginFileOperation()
+  try {
+    if (!canLeaveEdit()) return
+    const initialDocs = state.docs
+    const initialActiveId = state.activeDocId
+    const r = await readImport([file], { docs: state.docs, currentDoc: state.docs.find((doc) => doc.id === fallbackDocId) })
+    if (!r) return
+    if (state.docs !== initialDocs || state.activeDocId !== initialActiveId || !canLeaveEdit()) {
+      toast('工作区在导入期间发生变化，请重新导入')
+      return
+    }
+    const applied = applyW3C(r.w3cRouted)
+    if (r.w3cFiles === 0) {
+      toast('不是可导入的 W3C 批注文件')
+      return
+    }
+    if (applied.merged === 0 && applied.unmatched === 0) {
+      toast('这些批注已导入')
+      return
+    }
+    if (applied.merged > 0) rerender(false)
+    toast(w3cToast(applied.merged, applied.unmatched, applied.routed))
+  } finally { finish() }
 }
 
 /** 把按来源分组的 W3C 批注折叠进工作区（一次不可变更新），返回汇总 */
@@ -1331,24 +1351,21 @@ function togglePanel(which: 'tree' | 'sidebar'): void {
 wireHeaderMenu($('#btn-import'), [
   {id: 'paste', label: '粘贴新建文档', icon: icon('plus'), hint: '文本 · Markdown'},
   {id: 'files', label: '打开文件', icon: icon('file'), hint: '文本 · 图片 · JSON'},
-  {id: 'folder', label: '导入文件夹', icon: icon('folder'), hint: '批量导入文本与图片'},
+  ...(supportsDirectories() ? [{id: 'folder', label: '导入文件夹', icon: icon('folder'), hint: '批量导入文本与图片'}] : []),
+  ...(__NATIVE_HOST__ ? [{id: 'image-paste', label: '从剪贴板粘贴图片', icon: icon('plus'), hint: '系统剪贴板'}] : []),
   {id: 'sample', label: '载入示例', icon: icon('plus'), hint: '带 AI 味的演示文档'},
 ], (id) => {
   if (id === 'paste') void openNewDocument()
-  if (id === 'files' && canLeaveEdit()) $('#file-input').click()
-  if (id === 'folder' && canLeaveEdit()) $('#folder-input').click()
+  if (id === 'files' && canLeaveEdit()) pickDocuments()
+  if (id === 'folder' && canLeaveEdit()) pickFolder()
+  if (id === 'image-paste' && canLeaveEdit()) void readClipboardImage().then(files => files.length ? importFiles(files) : toast('剪贴板中没有可导入的图片')).catch(error => toast(error.message))
   if (id === 'sample') void loadSample()
 })
-$('#file-input').addEventListener('change', (e) => {
-  const files = (e.target as HTMLInputElement).files
-  if (files && files.length > 0) void importFiles(files)
-  ;(e.target as HTMLInputElement).value = ''
-})
-$('#folder-input').addEventListener('change', (e) => {
-  const files = (e.target as HTMLInputElement).files
-  if (files && files.length > 0) void importFiles(files)
-  ;(e.target as HTMLInputElement).value = ''
-})
+const pickDocuments = bindFileInput($('#file-input') as HTMLInputElement, importFiles, toast)
+const pickFolder = bindFileInput($('#folder-input') as HTMLInputElement, importFiles, toast)
+const pickWorkspace = bindFileInput($('#workspace-input') as HTMLInputElement, async files => {
+  if (files[0]) await restoreWorkspaceFile(files[0])
+}, toast)
 $('#btn-scan').addEventListener('click', runSlopScan)
 $('#btn-edit').addEventListener('click', toggleEdit)
 $('#btn-diff').addEventListener('click', () => void toggleDiff())
@@ -1425,7 +1442,7 @@ wireHeaderMenu($('#btn-more'), [
   {id: 'clear', label: '移除当前文档', icon: icon('trash'), danger: true, hint: '二次确认'},
 ], (id) => {
   if (id === 'recovery') downloadRecoveryBackup()
-  if (id === 'restore' && canLeaveEdit()) $('#workspace-input').click()
+  if (id === 'restore' && canLeaveEdit()) pickWorkspace()
   if (id === 'backup') downloadDocumentBackup()
   if (id === 'clear') void clearCurrent()
 })
@@ -1444,17 +1461,10 @@ $('#btn-legacy-backup').addEventListener('click', () => {
 })
 window.addEventListener('storage', renderLegacyRecovery)
 window.addEventListener('focus', renderLegacyRecovery)
-$('#workspace-input').addEventListener('change', (event) => {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (file) void restoreWorkspaceFile(file)
-})
 $('#btn-raw-backup').addEventListener('click', () => {
   const raw = unreadableWorkspaceData()
   if (raw === null) return
-  downloadJson(raw, 'inkmark-unreadable-workspace.json')
-  toast('已下载无法解析的原始工作区数据')
+  downloadJson(raw, 'inkmark-unreadable-workspace.json', '保留了无法解析的原始数据')
 })
 $('#btn-reset-storage').addEventListener('click', () => void (async () => {
   if (!canLeaveEdit() || unreadableWorkspaceData() === null) return
@@ -1569,8 +1579,7 @@ async function bootstrap(): Promise<void> {
   })
   window.matchMedia('(max-width: 1023.98px)').addEventListener('change', closeDrawers)
   window.addEventListener('beforeunload', (event) => {
-    const doc = activeDoc()
-    if ((mode === 'edit' && doc && editor.editValue() !== normalizeLineEndings(doc.text)) || annotationPopup.hasDraft() || selectionPin.hasDrafts() || imageView.hasDraft()) {
+    if (hasUnsavedDrafts()) {
       event.preventDefault()
       event.returnValue = ''
     }
@@ -1582,7 +1591,9 @@ async function bootstrap(): Promise<void> {
     treeEl,
     sidebarEl,
   })
+  initViewport($('#layout'))
   resolveWorkspaceReady!()
+  if (__NATIVE_HOST__) window.nsh?.postMessage('inkmark:ready')
   new ReadingFab($('#reading-fab'), {
     getPrefs: () => prefs,
     onChange: (patch) => setPrefs({...prefs, ...patch}),

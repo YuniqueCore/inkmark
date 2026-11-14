@@ -76,6 +76,7 @@ test('mixed workspace: route a backup and W3C together, select reviews, export, 
     const actions = page.locator('#sidebar [data-bulk-actions]')
     await expect(actions.getByRole('button', {name: '导出', exact: true})).toBeInViewport()
     expect(await actions.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
+    await expect(page.locator('.toast')).not.toHaveClass(/opacity-95/)
     if (process.platform === 'darwin') await expect(page.locator('#sidebar')).toHaveScreenshot('mixed-selection-sidebar.png', {animations: 'disabled'})
     await page.setViewportSize({width: 1440, height: 1000})
     await page.locator('#sidebar [data-bulk="delete"]').click()

@@ -70,13 +70,14 @@ export class SelectionPin {
 
   constructor(private callbacks: PinCallbacks) {
     this.pin = document.createElement('button')
+    this.pin.id = 'selection-pin'
     this.pin.className =
       'fixed z-50 hidden size-7 cursor-pointer place-items-center rounded-full bg-primary text-primary-foreground shadow-lg ring-4 ring-primary/15 transition-transform hover:scale-110'
     this.pin.title = '添加批注'
     this.pin.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" class="size-3.5"><path d="M12 5v14M5 12h14"/></svg>`
 
     this.card = document.createElement('div')
-    this.card.className = 'popover-panel fixed z-50 hidden w-[min(400px,calc(100vw-16px))]'
+    this.card.className = 'popover-panel fixed z-50 hidden overflow-y-auto w-[min(400px,calc(100vw-16px))]'
 
     document.body.append(this.pin, this.card)
 
@@ -121,6 +122,8 @@ export class SelectionPin {
       }
     })
     window.addEventListener('resize', () => this.reanchor())
+    window.visualViewport?.addEventListener('resize', () => this.reanchor())
+    window.visualViewport?.addEventListener('scroll', () => this.reanchor())
     document.addEventListener('scroll', (e) => {
       // 卡片内部的滚动（快捷语横滑、textarea 滚动）不是视口变化：
       // 此时选区已因 input.focus() 交出，重锚定会把展开态误判为失效而关卡
@@ -135,7 +138,14 @@ export class SelectionPin {
       this.dismiss()
       return
     }
+    const previous = this.info
+    const same = previous && previous.docId === info.docId && previous.sourceText === info.sourceText &&
+      previous.start === info.start && previous.end === info.end && previous.side === info.side && previous.preview === info.preview
     this.info = info
+    if (same) {
+      void this.placePin().then(() => { if (this.expanded) void this.placeCard() })
+      return
+    }
     this.draftKey = `${info.docId}:${info.side ?? 'a'}:${info.start}:${info.end}`
     ;({side: this.pinSide, vertical: this.pinVertical} = pickPinPlacement(info.rect, info.forward))
     this.collapse()
@@ -157,8 +167,12 @@ export class SelectionPin {
     const m = this.info.mouse
     const cx = (this.pinSide === 'left' ? -16 : 16) + clamp(m.x, r.left, r.right)
     const cy = this.pinVertical === 'up' ? r.top - 18 : r.bottom + 18
-    this.pin.style.left = `${clamp(cx - 14, 8, window.innerWidth - 36)}px`
-    this.pin.style.top = `${clamp(cy - 14, 8, window.innerHeight - 36)}px`
+    const viewport = window.visualViewport
+    const left = viewport?.offsetLeft ?? 0
+    const top = viewport?.offsetTop ?? 0
+    const size = window.matchMedia('(pointer: coarse)').matches ? 40 : 28
+    this.pin.style.left = `${clamp(cx - size / 2, left + 8, left + (viewport?.width ?? window.innerWidth) - size - 8)}px`
+    this.pin.style.top = `${clamp(cy - size / 2, top + 8, top + (viewport?.height ?? window.innerHeight) - size - 8)}px`
     return Promise.resolve()
   }
 
@@ -318,6 +332,15 @@ export class SelectionPin {
     const engaged = this.hasDraftContent() || (this.composer?.isFocused() ?? false)
     if (engaged) {
       this.pin.classList.add('hidden')
+      const viewport = window.visualViewport
+      const top = viewport?.offsetTop ?? 0
+      const left = viewport?.offsetLeft ?? 0
+      const height = viewport?.height ?? window.innerHeight
+      const width = viewport?.width ?? window.innerWidth
+      this.card.style.maxHeight = `${Math.max(0, height - 16)}px`
+      const rect = this.card.getBoundingClientRect()
+      this.card.style.left = `${clamp(rect.left, left + 8, Math.max(left + 8, left + width - rect.width - 8))}px`
+      this.card.style.top = `${clamp(rect.top, top + 8, Math.max(top + 8, top + height - rect.height - 8))}px`
       return
     }
     this.dismiss()
@@ -351,7 +374,7 @@ export class SelectionPin {
         // 近全宽的卡片会整块悬出左右视口缘（手机上必现）
         shift({padding: 8, crossAxis: true, limiter: limitShift()}),
         size({apply: ({availableHeight}) => {
-          this.card.style.maxHeight = `${Math.max(220, availableHeight)}px`
+          this.card.style.maxHeight = `${Math.max(0, availableHeight)}px`
         }}),
       ],
     }).then(({x, y}) => {

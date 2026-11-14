@@ -8,7 +8,7 @@ import { isSurrogateBoundary } from '../core/text'
 
 /** 把当前 DOM 选区换算为选区信息。不在编辑区内、空选区或纯空白时返回 null。 */
 export function resolveSelection(
-  e: MouseEvent,
+  e: Pick<MouseEvent, 'clientX' | 'clientY'>,
   editorEl: HTMLElement,
   doc: DocItem,
 ): SelectionInfo | null {

@@ -6,6 +6,7 @@ import type { Annotation } from '../core/types'
 import type { MatchRange } from '../core/batch'
 import { rangeOfOffsets } from './selection-offsets'
 import { renderAnnotatedText, type TextStyleRange } from './render-text'
+import {observeTextSelection, type SelectionPoint} from './text-selection'
 
 /** 编辑原文模式下的选段过滤：批注只与同侧的行相交 */
 function annsForSide(anns: Annotation[], revised: boolean): Annotation[] {
@@ -13,7 +14,7 @@ function annsForSide(anns: Annotation[], revised: boolean): Annotation[] {
 }
 
 export interface EditorCallbacks {
-  onSelectionChange: (e: MouseEvent) => void
+  onSelectionChange: (e: SelectionPoint) => void
   onAnnotationClick: (id: string, rect: DOMRect) => void
   onNewDocument: () => void
 }
@@ -30,20 +31,7 @@ export class EditorView {
   constructor(root: HTMLElement, callbacks: EditorCallbacks) {
     this.root = root
     this.onNewDocument = callbacks.onNewDocument
-    this.root.addEventListener('mouseup', (e) => callbacks.onSelectionChange(e))
-    this.root.addEventListener('keyup', (e) => {
-      // Shift 方向键选词后同样唤起标注小点（锚定到选区矩形，鼠标点用选区中点近似）
-      if (e.key.startsWith('Arrow') || e.key === 'a' || e.key === 'A') {
-        const sel = window.getSelection()
-        if (sel && sel.rangeCount > 0) {
-          const rect = sel.getRangeAt(0).getBoundingClientRect()
-          callbacks.onSelectionChange(new MouseEvent('keyup', {
-            clientX: rect.left + rect.width / 2,
-            clientY: rect.bottom,
-          }))
-        }
-      }
-    })
+    observeTextSelection(this.root, callbacks.onSelectionChange)
     this.root.addEventListener('click', (e) => {
       const target = (e.target as HTMLElement).closest('.seg-hl') as HTMLElement | null
       if (!target) return

@@ -16,7 +16,7 @@ const LABEL: Record<SaveStatus, {cls: string; text: string}> = {
 }
 
 const DEBOUNCE_MS = 500
-export function initSaveStatus(getPayload: () => Workspace): {markDirty: () => void; initialize: () => void; settle: () => Promise<void>} {
+export function initSaveStatus(getPayload: () => Workspace): {markDirty: () => void; initialize: () => void; settle: () => Promise<boolean>} {
   let status: SaveStatus = 'saved'
   let timer: ReturnType<typeof setTimeout> | undefined
 
@@ -65,9 +65,11 @@ export function initSaveStatus(getPayload: () => Workspace): {markDirty: () => v
   })
 
   return {
-    async settle(): Promise<void> {
-      if (status === 'dirty') flush()
+    async settle(): Promise<boolean> {
+      const requested = revision
+      if (status !== 'saved') flush()
       await queue
+      return status === 'saved' && requested === revision
     },
     initialize(): void {
       clearTimeout(timer)

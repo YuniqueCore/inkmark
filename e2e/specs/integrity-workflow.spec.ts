@@ -203,7 +203,7 @@ test('草稿跨视图、覆盖和删除时保持归属，恢复后可继续批�
   await page.locator('#btn-more').click()
   await page.getByRole('menuitem', {name: /下载文档与批注备份/}).click()
   await download
-  await expect(page.getByText('备份已下载，未提交的划词草稿不包含在内')).toBeVisible()
+  await expect(page.getByText('已开始下载；文档与批注备份不含未提交草稿')).toBeVisible()
 
   await page.locator('#btn-edit').click()
   await page.locator('#edit-source').fill('这次编辑还没有保存。')

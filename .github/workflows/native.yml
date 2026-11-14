@@ -1,0 +1,162 @@
+name: Native applications
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  desktop:
+    name: Desktop / ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {runner: macos-26, target: macos, arch: arm64}
+          - {runner: ubuntu-24.04, target: linux, arch: x86_64}
+          - {runner: windows-2025, target: windows, arch: x86_64}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/native-toolchain
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: '1.100.0'
+          components: rustfmt, clippy
+      - uses: jdx/mise-action@v5.2.8
+        with:
+          install_args: mr-boxington@1.24.1
+      - name: Linux WebView and display dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm libclang-dev libgtk-4-dev libwebkitgtk-6.0-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev xvfb xauth dbus-x11
+      - name: Check native file boundaries
+        working-directory: native/desktop
+        run: |
+          mbx fmt --all --check
+          mbx test --workspace --all-features
+          mbx clippy --workspace --all-targets --all-features -- -D warnings
+      - name: Check shared host and prepare business journey
+        run: |
+          bun run nsh check native/desktop
+          node scripts/native-test-prepare.mjs
+          bun run nsh check native/tests
+      - name: Test actual platform WebView
+        env:
+          NATIVE_TARGET: ${{ matrix.target }}
+        run: |
+          if [ "$NATIVE_TARGET" = linux ]; then
+            dbus-run-session -- xvfb-run -a bun run nsh test native/tests/workspace.test.tsx --target linux --junit native-test.xml
+          else
+            bun run nsh test native/tests/workspace.test.tsx --target "$NATIVE_TARGET" --junit native-test.xml
+          fi
+      - name: Package desktop application
+        env:
+          NATIVE_TARGET: ${{ matrix.target }}
+        run: |
+          bun run nsh package native/desktop --target "$NATIVE_TARGET" --out .local-build/packages/desktop
+          node scripts/native-artifact.mjs "$NATIVE_TARGET"
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: InkMark-${{ matrix.target }}-${{ matrix.arch }}
+          path: .local-build/artifacts/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: native-tests-${{ matrix.target }}
+          path: native-test.xml
+          if-no-files-found: ignore
+  android:
+    name: Android / APK, AAB and emulator
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/native-toolchain
+        with:
+          sdk: android
+      - uses: actions/setup-java@v6.3.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v6.4.1
+      - name: Prepare Android resources
+        run: |
+          sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0'
+          bun run nsh check native/mobile
+          bun run nsh build native/mobile --release --out native/generated/mobile-assets/nsh
+          rm native/generated/mobile-assets/nsh/bundle.js.map
+      - name: Build and lint
+        run: native/android/gradlew -p native/android assembleDebug bundleRelease lint
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2.38.0
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: native/android/gradlew -p native/android connectedDebugAndroidTest
+      - run: node scripts/native-artifact.mjs android
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: InkMark-android
+          path: .local-build/artifacts/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: native-tests-android
+          path: |
+            native/android/app/build/reports
+            native/android/app/build/outputs/androidTest-results
+          if-no-files-found: ignore
+  ios:
+    name: iOS / simulator, unsigned device and tests
+    runs-on: macos-26
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/native-toolchain
+        with:
+          sdk: ios
+      - name: Prepare Xcode project
+        run: |
+          brew install xcodegen
+          bun run nsh check native/mobile
+          bun run nsh build native/mobile --release --out native/generated/mobile-assets/nsh
+          rm native/generated/mobile-assets/nsh/bundle.js.map
+          export INKMARK_VERSION=$(node -p 'require("./package.json").version')
+          export INKMARK_BUILD=$(node -p 'require("./native/product.json").build')
+          xcodegen generate --spec native/ios/project.yml
+      - name: Run simulator business and file tests
+        run: |
+          DEVICE=$(xcrun simctl list devices available --json | node -e 'let s="";process.stdin.on("data",c=>s+=c).on("end",()=>{const d=Object.values(JSON.parse(s).devices).flat().find(x=>x.name.startsWith("iPhone"));if(!d)process.exit(1);console.log(d.udid)})')
+          xcodebuild -project native/ios/InkMark.xcodeproj -scheme InkMark -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath .local-build/ios -resultBundlePath .local-build/ios-tests.xcresult CODE_SIGNING_ALLOWED=NO test
+      - name: Build unsigned device application
+        run: xcodebuild -project native/ios/InkMark.xcodeproj -scheme InkMark -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath .local-build/ios CODE_SIGNING_ALLOWED=NO build
+      - run: node scripts/native-artifact.mjs ios
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: InkMark-ios-arm64
+          path: .local-build/artifacts/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: native-tests-ios
+          path: .local-build/ios-tests.xcresult
+          if-no-files-found: ignore

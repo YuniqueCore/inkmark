@@ -792,7 +792,7 @@ body.select-none {
   #filetree,
   #sidebar {
     position: fixed;
-    top: 57px;
+    top: var(--workspace-top, 57px);
     bottom: 0;
     width: min(84vw, 360px) !important; /* 覆盖桌面态的内联列宽 */
     z-index: 40;
@@ -1195,3 +1195,22 @@ body.select-none {
 .image-view .a9s-rotation-handle-group { display: none; }
 .image-view[data-tool='pan'] .a9s-annotationlayer { pointer-events: none; touch-action: auto; }
 .image-view[data-tool='pan'] .image-viewport { touch-action: pan-x pan-y; }
+
+/* The native mobile shell already insets its WebView to system safe areas. */
+.viewport-dialog {
+  top: calc(var(--visible-top, 0px) + var(--visible-height, 100dvh) / 2);
+  max-height: calc(var(--visible-height, 100dvh) - 24px);
+  overflow-y: auto;
+}
+#drawer-backdrop { top: var(--workspace-top, 57px); }
+@media (pointer: coarse) {
+  .btn { min-height: 44px; }
+  #selection-pin { min-width: 40px; min-height: 40px; }
+  .viewport-dialog textarea { font-size: 16px; }
+}
+
+.search-panel {
+  top: calc(var(--visible-top, 0px) + 65px);
+  max-height: calc(var(--visible-height, 100dvh) - 80px);
+  overflow-y: auto;
+}

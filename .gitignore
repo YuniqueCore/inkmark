@@ -10,3 +10,14 @@ playwright-report/
 .env.*
 !.env.example
 .local-build/
+native/generated/
+native/desktop/nsh.json
+native/mobile/nsh.json
+native/**/.nsh/
+native/**/target/
+native/android/.gradle/
+native/android/**/build/
+native/android/local.properties
+native/ios/*.xcodeproj/
+native/ios/build/
+native/tests/nsh.json

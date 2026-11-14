@@ -1,0 +1,14 @@
+{
+  "version": "0.5.1",
+  "commit": "224d9a795c7ac9d10d75750de9351adac5549675",
+  "assets": {
+    "nsh-macos-arm64.tar.gz": "2710affd59e6345b6f87dfa1f579c36b9a9d7a58992b8399d14f39290da048a3",
+    "nsh-macos-x86_64.tar.gz": "7381ffe37180584fb12b0488756ffd9e8ff585fede2deac450a51336141ccd69",
+    "nsh-linux-arm64.tar.gz": "6f182e61ce68115b99d29a096f4a935bf3e7aa2733cdf9f135274ccec00dfef6",
+    "nsh-linux-x86_64.tar.gz": "f34729e613196ca122d956deb543a92f319e053ff17dfc09ba04a6ec2fb79c74",
+    "nsh-windows-arm64.zip": "a1a9a1299a3286bc6fefff5746b892dd9192a77668969ec2b6732666d42c28fe",
+    "nsh-windows-x86_64.zip": "9dc4b74037033c8ff50b1047b4702b36e6fd66beb9f5d61411d3497f4751df90",
+    "nsh-embed-android.zip": "38af836d7892b8ed449e72bd023529594d90229aa2f019c900e472dc668fb0ce",
+    "nsh-embed-ios.zip": "0a11159c9d368f7558f9b48b62ffcb956a2643ab7ddc21925404ab52dfa563a3"
+  }
+}

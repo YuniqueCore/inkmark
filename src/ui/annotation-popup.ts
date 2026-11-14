@@ -1,6 +1,6 @@
 /** 已有批注的锚定卡片：点击正文高亮（或侧栏编辑）弹出，贴着高亮位置带箭头，支持原位编辑。 */
 
-import { arrow, autoUpdate, computePosition, flip, offset, shift } from '@floating-ui/dom'
+import { arrow, autoUpdate, computePosition, flip, offset, shift, size } from '@floating-ui/dom'
 import { escapeHtml, snippet } from '../core/text'
 import { KIND_LABEL } from '../core/types'
 import type { Annotation, AnnotationKind } from '../core/types'
@@ -154,7 +154,7 @@ export class AnnotationPopup {
     const cards = this.items
       .map((a) => this.renderItem(a))
       .join('<div class="my-2 border-t"></div>')
-    this.el.innerHTML = `<div class="p-3">${cards}</div>`
+    this.el.innerHTML = `<div class="popup-content overflow-y-auto p-3">${cards}</div>`
     this.el.append(this.arrowEl)
     this.mountComposer()
     this.bindItemEvents()
@@ -308,6 +308,10 @@ export class AnnotationPopup {
           // crossAxis 必开：bottom/top placement 下 shift 默认只校正横轴，
           // 段落贴近视口底部时弹层下半会被窗口裁掉
           shift({padding: 8, crossAxis: true}),
+          size({padding: 8, apply: ({availableHeight}) => {
+            const content = this.el.querySelector<HTMLElement>('.popup-content')
+            if (content) content.style.maxHeight = `${Math.max(0, availableHeight - 2)}px`
+          }}),
           arrow({element: this.arrowEl, padding: 12}),
         ],
       }).then(({x, y, placement, middlewareData}) => {

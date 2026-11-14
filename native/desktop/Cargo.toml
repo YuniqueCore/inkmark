@@ -1,0 +1,13 @@
+[package]
+name = "inkmark-native"
+version = "0.12.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+nsh-core = "=0.5.1"
+base64 = "0.23.1"
+tempfile = "3.27.0"
+walkdir = "2.5.0"

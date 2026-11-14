@@ -1,0 +1,64 @@
+name: InkMark
+options:
+  deploymentTarget:
+    iOS: '16.4'
+settings:
+  base:
+    SWIFT_VERSION: '6.0'
+    PRODUCT_BUNDLE_IDENTIFIER: io.github.yuniquecore.inkmark
+    MARKETING_VERSION: ${INKMARK_VERSION}
+    CURRENT_PROJECT_VERSION: ${INKMARK_BUILD}
+    CODE_SIGN_STYLE: Automatic
+    ARCHS: arm64
+targets:
+  InkMark:
+    type: application
+    platform: iOS
+    sources: [Sources]
+    resources:
+      - path: ../generated/mobile-assets/nsh
+        type: folder
+      - path: ../generated/icons/Assets.xcassets
+    dependencies:
+      - framework: ../../.local-build/nsh/sdk/embed-ios/nsh-embed-ios/NativeShell.xcframework
+        embed: false
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: InkMark
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        TARGETED_DEVICE_FAMILY: '1,2'
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        LD_RUNPATH_SEARCH_PATHS: $(inherited) @executable_path/Frameworks
+  InkMarkTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Tests]
+    dependencies:
+      - target: InkMark
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        IPHONEOS_DEPLOYMENT_TARGET: '17.0'
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.yuniquecore.inkmark.tests
+  InkMarkUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: InkMark
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        IPHONEOS_DEPLOYMENT_TARGET: '17.0'
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.yuniquecore.inkmark.uitests
+schemes:
+  InkMark:
+    build:
+      targets:
+        InkMark: all
+    test:
+      targets: [InkMarkTests, InkMarkUITests]
+      gatherCoverageData: true

@@ -62,8 +62,13 @@ export class SearchPanelView {
 
   constructor(private callbacks: SearchPanelCallbacks) {
     this.el = document.createElement('div')
-    this.el.className = 'popover-panel fixed right-4 top-[65px] z-70 hidden w-[min(430px,calc(100vw-16px))]'
+    this.el.className = 'popover-panel search-panel fixed right-4 top-[65px] z-70 hidden w-[min(430px,calc(100vw-16px))]'
     document.body.append(this.el)
+  }
+
+  hasDraft(): boolean {
+    const state = this.composer?.state()
+    return this.open && Boolean(state && (state.comment.trim() || state.replacement.trim()))
   }
 
   isOpen(): boolean {

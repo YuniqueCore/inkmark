@@ -168,7 +168,7 @@ export class MarkdownPreviewView {
 }
 
 /** 无法精确表示的局部实体选区明确拒绝，绝不推测源文坐标。 */
-export function resolvePreviewSelection(event: MouseEvent, root: HTMLElement, doc: DocItem): {info: SelectionInfo | null; error?: string} {
+export function resolvePreviewSelection(event: Pick<MouseEvent, 'clientX' | 'clientY'>, root: HTMLElement, doc: DocItem): {info: SelectionInfo | null; error?: string} {
   const selection = window.getSelection()
   if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return {info: null}
   const range = selection.getRangeAt(0)

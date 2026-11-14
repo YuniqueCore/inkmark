@@ -27,6 +27,8 @@ English · [简体中文](README.md)
 
 The UI follows the shadcn/ui design language (Tailwind CSS v4 + design tokens, inspired by rareui): neutral zinc base, hairline borders, subtle shadows, light & dark themes (toggle in the header, follows system preference, persisted in localStorage). It is a local-first frontend with no backend.
 
+**Native applications (NSH)**: the shared workspace also has macOS / Windows / Linux hosts and Android / iOS embedding hosts. Web remains a pure static Pages build. See [native platform builds](docs/native-platforms.md) for artifacts, signing status, storage boundaries and local/CI tests.
+
 ## Features
 
 - **Image region review**: paste screenshots, drop files or open PNG, JPEG and WebP images. Draw and adjust rectangles, enter exact pixel coordinates, zoom, pan with touch and use the existing sidebar actions. Limits: 12 MB, 32 million pixels and 16384 pixels per side. Review ZIPs include original bytes, feedback and a JSON copy filtered by the resolved toggle; image W3C uses FragmentSelector and requires the same image document. Rotation, polygons and EditHere smart selection are outside this feature.

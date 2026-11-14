@@ -45,7 +45,7 @@ export function choiceDialog(opts: ConfirmOptions): Promise<ConfirmChoice> {
     const panel = document.createElement('div')
     // max-h + 可滚动正文：批量操作把标题/描述撑长时弹层不得溢出视口（通病约束，所有确认共用）
     panel.className =
-      'fixed left-1/2 top-1/2 z-101 flex max-h-[86vh] w-[min(420px,92vw)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border bg-card p-5 text-card-foreground shadow-2xl'
+      'viewport-dialog fixed left-1/2 top-1/2 z-101 flex max-h-[86vh] w-[min(420px,92vw)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border bg-card p-5 text-card-foreground shadow-2xl'
     panel.setAttribute('role', 'alertdialog')
     panel.setAttribute('aria-modal', 'true')
     panel.setAttribute('aria-label', opts.title)
@@ -116,7 +116,7 @@ export function textDialog(opts: TextDialogOptions): Promise<string | null> {
     overlay.className = 'fixed inset-0 z-100 bg-black/50 backdrop-blur-[2px]'
     const panel = document.createElement('div')
     panel.className =
-      'fixed left-1/2 top-1/2 z-101 flex max-h-[86vh] w-[min(720px,94vw)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border bg-card p-5 text-card-foreground shadow-2xl'
+      'viewport-dialog fixed left-1/2 top-1/2 z-101 flex max-h-[86vh] w-[min(720px,94vw)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border bg-card p-5 text-card-foreground shadow-2xl'
     panel.setAttribute('role', 'dialog')
     panel.setAttribute('aria-modal', 'true')
     panel.setAttribute('aria-label', opts.title)
