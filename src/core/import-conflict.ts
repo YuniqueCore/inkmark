@@ -45,6 +45,12 @@ export function conflictKey(d: {name: string; path: string}): string {
   return d.path === '' ? d.name : `${d.path}/${d.name}`
 }
 
+/** 为显式新建的文档分配空闲名称，即使内容相同也保留独立文档。 */
+export function uniqueDocumentName(name: string, path: string, existing: {name: string; path: string}[]): string {
+  const taken = new Set(existing.map(conflictKey))
+  return taken.has(conflictKey({name, path})) ? renameTarget(name, path, taken) : name
+}
+
 /** 初次判定：无同名 → direct；同名同文 → identical；同名异文 → rename（默认动作） */
 export function buildImportPlan(incoming: IncomingDoc[], existing: DocItem[]): ImportPlan {
   const byKey = new Map(existing.map((d) => [conflictKey(d), d]))

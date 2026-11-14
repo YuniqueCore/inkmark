@@ -71,14 +71,14 @@ describe('purgeExpired', () => {
     const now = 10_000
     const trash = [entry('fresh', now - TRASH_RETENTION_MS + 1), entry('stale', now - TRASH_RETENTION_MS)]
     const { keep, purged } = purgeExpired(trash, now)
-    expect(keep.map(entryKey)).toEqual(['fresh'])
-    expect(purged.map(entryKey)).toEqual(['stale'])
+    expect(keep.map(entryKey)).toEqual(['annotation:fresh'])
+    expect(purged.map(entryKey)).toEqual(['annotation:stale'])
   })
 
   it('自定义保留期用于测试', () => {
     const { keep, purged } = purgeExpired([entry('a', 0), entry('b', 500)], 1000, 1000)
-    expect(purged.map(entryKey)).toEqual(['a'])
-    expect(keep.map(entryKey)).toEqual(['b'])
+    expect(purged.map(entryKey)).toEqual(['annotation:a'])
+    expect(keep.map(entryKey)).toEqual(['annotation:b'])
   })
 })
 
@@ -94,7 +94,7 @@ describe('restoreFromTrash', () => {
   it('按 docId 追加回原文档并从回收站移除', () => {
     // a1/a2 已从文档删除（真实流程），文档只剩 a3
     const docs: DocItem[] = [{ ...doc(), annotations: [ann('a3')] }]
-    const r = restoreFromTrash([trashed('a1'), trashed('a2')], docs, new Set(['a1', 'a2']))
+    const r = restoreFromTrash([trashed('a1'), trashed('a2')], docs, new Set(['annotation:a1', 'annotation:a2']))
     expect(r.restored).toBe(2)
     expect(r.stranded).toBe(0)
     expect(r.trash).toEqual([])
@@ -106,17 +106,17 @@ describe('restoreFromTrash', () => {
     const r = restoreFromTrash(
       [trashed('a1', 'doc-1'), trashed('a9', 'doc-gone')],
       docs,
-      new Set(['a1', 'a9']),
+      new Set(['annotation:a1', 'annotation:a9']),
     )
     expect(r.restored).toBe(1)
     expect(r.stranded).toBe(1)
-    expect(r.trash.map(entryKey)).toEqual(['a9'])
+    expect(r.trash.map(entryKey)).toEqual(['annotation:a9'])
     expect(r.docs[0]!.annotations.map((a) => a.id)).toEqual(['a3', 'a1'])
   })
 
   it('恢复只动目标文档，其他文档引用不变', () => {
     const docs = [doc(), { ...doc(), id: 'doc-2', name: '文档二' }]
-    const r = restoreFromTrash([trashed('a1')], docs, new Set(['a1']))
+    const r = restoreFromTrash([trashed('a1')], docs, new Set(['annotation:a1']))
     expect(r.docs[1]).toBe(docs[1])
   })
 
@@ -136,7 +136,7 @@ describe('purgeForever', () => {
     ]
     const trashDoc: TrashEntry = { type: 'doc', doc: doc(), deletedAt: 1 }
     expect(purgeForever([...trash, trashDoc], new Set([entryKey(trashDoc)]))).toEqual(trash)
-    expect(purgeForever(trash, new Set(['a1'])).map(entryKey)).toEqual(['a2'])
+    expect(purgeForever(trash, new Set(['annotation:a1'])).map(entryKey)).toEqual(['annotation:a2'])
   })
 })
 
@@ -165,9 +165,9 @@ describe('restoreFromTrash · 文档条目', () => {
     const docs: DocItem[] = [{ ...doc(), annotations: [ann('a2'), ann('a3')] }]
     const entries: TrashEntry[] = [
       { type: 'annotation', annotation: ann('a1'), docId: 'doc-1', docName: '文档一', deletedAt: 1 },
-      { type: 'doc', doc: { ...doc(), id: 'doc-2', name: '文档二' }, deletedAt: 2 },
+      { type: 'doc', doc: { ...doc(), id: 'doc-2', name: '文档二', annotations: [ann('b1'), ann('b2'), ann('b3')] }, deletedAt: 2 },
     ]
-    const r = restoreFromTrash(entries, docs, new Set(['a1', 'doc-2']))
+    const r = restoreFromTrash(entries, docs, new Set(['annotation:a1', 'doc:doc-2']))
     expect(r.restored).toBe(2)
     expect(r.stranded).toBe(0)
     expect(r.trash).toEqual([])
@@ -176,7 +176,7 @@ describe('restoreFromTrash · 文档条目', () => {
   })
 
   it('entryKey：批注条目取批注 id，文档条目取文档 id', () => {
-    expect(entryKey({ type: 'annotation', annotation: ann('a1'), docId: 'd', docName: 'n', deletedAt: 0 })).toBe('a1')
-    expect(entryKey({ type: 'doc', doc: doc(), deletedAt: 0 })).toBe('doc-1')
+    expect(entryKey({ type: 'annotation', annotation: ann('a1'), docId: 'd', docName: 'n', deletedAt: 0 })).toBe('annotation:a1')
+    expect(entryKey({ type: 'doc', doc: doc(), deletedAt: 0 })).toBe('doc:doc-1')
   })
 })

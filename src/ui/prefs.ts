@@ -33,10 +33,11 @@ export function applyPrefs(p: ReadingPrefs): void {
   el.classList.toggle('dark', isDarkContent(p.theme))
   el.style.setProperty('--doc-font-size', `${p.fontSize}px`)
   el.style.setProperty('--doc-font-weight', String(FONT_WEIGHT_META[p.fontWeight].value))
-  const editor = document.querySelector<HTMLElement>('#editor')
-  editor?.setAttribute('data-texture', p.texture)
-  editor?.setAttribute('data-font', p.font)
-  applyEditorColors(editor, p)
+  document.querySelectorAll<HTMLElement>('#editor, #markdown-preview').forEach((pane) => {
+    pane.setAttribute('data-texture', p.texture)
+    pane.setAttribute('data-font', p.font)
+    applyEditorColors(pane, p)
+  })
   const btn = document.querySelector('#btn-theme')
   if (btn) btn.innerHTML = icon(isDarkContent(p.theme) ? 'sun' : 'moon', 'size-4')
 }

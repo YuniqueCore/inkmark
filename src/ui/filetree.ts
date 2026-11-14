@@ -2,7 +2,7 @@
 
 import { escapeHtml } from '../core/text'
 import { icon } from './icons'
-import type { DocItem } from '../core/types'
+import type { ReviewDocument } from '../core/types'
 
 export interface FileTreeCallbacks {
   onOpen: (id: string) => void
@@ -19,7 +19,7 @@ interface TreeNode {
   dir: boolean
   /** dir: 子节点；file: 文档 */
   children: TreeNode[]
-  doc?: DocItem
+  doc?: ReviewDocument
 }
 
 export class FileTreeView {
@@ -28,7 +28,7 @@ export class FileTreeView {
   /** 多选集合：勾选框驱动，重渲染时剪除已不存在的文档 */
   private selected = new Set<string>()
   /** 最近一次渲染的入参，目录折叠切换时局部重渲染用 */
-  private lastDocs: DocItem[] = []
+  private lastDocs: ReviewDocument[] = []
   private lastActiveId = ''
 
   constructor(root: HTMLElement, private callbacks: FileTreeCallbacks) {
@@ -42,7 +42,7 @@ export class FileTreeView {
     this.render(this.lastDocs, this.lastActiveId)
   }
 
-  render(docs: DocItem[], activeDocId: string): void {
+  render(docs: ReviewDocument[], activeDocId: string): void {
     this.lastDocs = docs
     this.lastActiveId = activeDocId
     if (docs.length === 0) {
@@ -177,7 +177,7 @@ export class FileTreeView {
   }
 }
 
-function buildTree(docs: DocItem[]): TreeNode {
+function buildTree(docs: ReviewDocument[]): TreeNode {
   const root: TreeNode = { name: '', dir: true, children: [] }
   for (const doc of docs) {
     const parts = (doc.path ? doc.path + '/' : '').split('/').filter(Boolean)

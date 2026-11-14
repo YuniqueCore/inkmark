@@ -14,6 +14,7 @@ const info = (over: Partial<SelectionInfo> = {}): SelectionInfo => ({
   end: 22,
   rect: new DOMRect(100, 200, 120, 20),
   quoted: '被批注的原文片段',
+  sourceText: '用于测试的原文',
   mouse: {x: 220, y: 220},
   forward: true,
   docId: 'doc-1',
@@ -24,13 +25,17 @@ let pin: SelectionPin
 let pinEl: HTMLElement
 let card: HTMLElement
 let created: {info: SelectionInfo; kind: string; comment: string; replacement?: string} | null
+let acceptCreate: boolean
 
 beforeEach(() => {
   document.body.innerHTML = ''
   created = null
+  acceptCreate = true
   pin = new SelectionPin({
     onCreate: (i, kind, comment, replacement) => {
+      if (!acceptCreate) return false
       created = {info: i, kind, comment, replacement}
+      return true
     },
     onCopySelection: () => {},
     onDismiss: () => {},
@@ -111,11 +116,11 @@ describe('SelectionPin 草稿保护', () => {
     await showPin()
     const input = await openCard()
     type(input, '拼音输入中')
-    document.dispatchEvent(
+    input.dispatchEvent(
       new KeyboardEvent('keydown', {key: 'Escape', bubbles: true, isComposing: true}),
     )
     expect(card.classList.contains('hidden')).toBe(false)
-    document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}))
+    input.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}))
     expect(card.classList.contains('hidden')).toBe(true)
   })
 
@@ -138,7 +143,7 @@ describe('SelectionPin 草稿保护', () => {
     expect(card.querySelector('.kind-chip.on')?.getAttribute('data-kind')).toBe('praise')
 
     // Esc 显式取消：草稿丢弃，划回为空
-    document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}))
+    input.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}))
     await showPin({start: 10, end: 22})
     input = await openCard()
     expect(input.value).toBe('')
@@ -159,6 +164,30 @@ describe('SelectionPin 草稿保护', () => {
     await showPin()
     const again = await openCard()
     expect(again.value).toBe('')
+  })
+
+  it('相同偏移的不同版本分别保存草稿，提交被拒时保留输入', async () => {
+    await showPin({sourceText: '原版本'})
+    type(await openCard(), '原版本的意见')
+
+    await showPin({sourceText: '新版本', quoted: '新版本片段'})
+    const updated = await openCard()
+    expect(updated.value).toBe('')
+    type(updated, '新版本的意见')
+
+    await showPin({sourceText: '原版本'})
+    expect((await openCard()).value).toBe('原版本的意见')
+    acceptCreate = false
+    card.querySelector('[data-op="submit"]')!.dispatchEvent(new MouseEvent('click', {bubbles: true}))
+    expect(created).toBeNull()
+    expect(card.classList.contains('hidden')).toBe(false)
+    expect((card.querySelector('[data-role="composer-comment"]') as HTMLTextAreaElement).value).toBe('原版本的意见')
+
+    acceptCreate = true
+    card.querySelector('[data-op="submit"]')!.dispatchEvent(new MouseEvent('click', {bubbles: true}))
+    expect(created!.comment).toBe('原版本的意见')
+    await showPin({sourceText: '新版本', quoted: '新版本片段'})
+    expect((await openCard()).value).toBe('新版本的意见')
   })
 
   it('认可类型：空批注语可直接提交；其它类型空语被拦截', async () => {

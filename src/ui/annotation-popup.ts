@@ -26,6 +26,7 @@ export class AnnotationPopup {
   private editState: ComposerState | null = null
   private editComposer: ComposerForm | null = null
   private anchorRect: DOMRect | null = null
+  private anchorRoot: HTMLElement | null = null
   private arrowEl: HTMLElement
   private stopAutoUpdate: (() => void) | null = null
   /** popup 展示的批注集合（可能多条堆叠） */
@@ -80,6 +81,11 @@ export class AnnotationPopup {
     const s = this.editState
     if (!s) return false
     return s.kind !== a.kind || s.comment !== a.comment || s.replacement !== (a.replacement ?? '')
+  }
+
+  hasDraft(): boolean {
+    const annotation = this.items.find((a) => a.id === this.editingId)
+    return Boolean(annotation && this.hasUnsavedChanges(annotation))
   }
 
   /** 进入编辑态：从批注自身初始化撰写状态（保存时不会悄悄改掉未动的字段） */
@@ -279,14 +285,12 @@ export class AnnotationPopup {
     // （此前引用是打开时冻结的矩形，autoUpdate 虽随滚动重算、锚却不动）；
     // 实时元素暂不在（重渲染间隙/被筛选隐藏）就沿用打开时的矩形，避免跳到左上角。
     // contextElement 让 autoUpdate 能挂上高亮的滚动祖先监听（虚拟元素本身没有）。
-    const liveEl = this.activeId
-      ? document.querySelector(`.seg-hl[data-ann-ids~="${this.activeId}"]`)
-      : null
+    const findVisible = (): HTMLElement | undefined => Array.from((this.anchorRoot ?? document).querySelectorAll<HTMLElement>('.seg-hl'))
+      .find((el) => (el.dataset.annIds ?? '').split(' ').includes(this.activeId ?? '') && el.getClientRects().length > 0)
+    const liveEl = findVisible()
     const reference = {
       getBoundingClientRect: () => {
-        const live = this.activeId
-          ? document.querySelector(`.seg-hl[data-ann-ids~="${this.activeId}"]`)
-          : null
+        const live = findVisible()
         return live ? live.getBoundingClientRect() : this.anchorRect!
       },
       ...(liveEl ? {contextElement: liveEl} : {}),
@@ -326,8 +330,9 @@ export class AnnotationPopup {
   }
 
   /** main 在点击高亮时设置锚矩形（视口坐标） */
-  setAnchorRect(rect: DOMRect): void {
+  setAnchorRect(rect: DOMRect, root?: HTMLElement): void {
     this.anchorRect = rect
+    this.anchorRoot = root ?? null
   }
 }
 

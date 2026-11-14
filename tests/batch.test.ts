@@ -78,6 +78,7 @@ describe('buildBatchAnnotations', () => {
       ],
       { kind: 'suggestion', comment: '表述含糊' },
       1234,
+      'batch-1234',
     )
     expect(anns).toHaveLength(2)
     expect(new Set(anns.map((a) => a.id)).size).toBe(2)

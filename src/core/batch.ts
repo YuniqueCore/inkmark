@@ -6,6 +6,7 @@
  */
 
 import type { Annotation, AnnotationKind } from './types'
+import { newId } from './identity'
 
 export interface MatchRange {
   start: number
@@ -56,9 +57,9 @@ export function buildBatchAnnotations(
   matches: MatchRange[],
   input: { kind: AnnotationKind; comment: string; replacement?: string },
   now = Date.now(),
+  groupId = newId('batch'),
 ): Annotation[] {
   if (matches.length === 0) return []
-  const groupId = `batch-${now}`
   return matches.map((m, i) => ({
     id: `${groupId}-${i}`,
     start: m.start,

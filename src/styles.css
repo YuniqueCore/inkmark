@@ -521,6 +521,113 @@
   100% { box-shadow: 0 0 0 9px transparent; }
 }
 
+/* ---------------------------------------------------------------- 原文与 Markdown 预览 */
+
+#editor-wrap { container-type: inline-size; }
+.reading-toolbar {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+  color: var(--card-foreground);
+}
+.reading-toolbar[hidden], .reading-pane[hidden], .reading-hint[hidden], .save-error[hidden], #btn-raw-backup[hidden], #btn-reset-storage[hidden] { display: none; }
+.reading-switch {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border-radius: 8px;
+  background: var(--muted);
+}
+.reading-switch button {
+  min-height: 28px;
+  padding: 3px 11px;
+  border-radius: 6px;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  cursor: pointer;
+}
+.reading-switch button:hover { color: var(--foreground); }
+.reading-switch button[aria-pressed='true'] {
+  background: var(--card);
+  color: var(--foreground);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
+  font-weight: 600;
+}
+.reading-switch button:focus-visible, .markdown-preview:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.reading-hint { color: var(--muted-foreground); font-size: 12px; }
+.reading-panes { position: absolute; inset: 0; display: flex; min-height: 0; }
+.reading-toolbar:not([hidden]) + .reading-panes { top: 44px; }
+.reading-pane {
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 0;
+  color: var(--foreground);
+  background-color: var(--background);
+}
+.reading-panes[data-layout='split'] .markdown-preview { border-left: 1px solid var(--border); }
+.markdown-body {
+  max-width: 72ch;
+  margin-inline: auto;
+  font-size: var(--doc-font-size, 16.5px);
+  font-weight: var(--doc-font-weight, 400);
+  line-height: 1.85;
+  overflow-wrap: anywhere;
+}
+.markdown-body > * + * { margin-top: 1em; }
+.markdown-body h1, .markdown-body h2, .markdown-body h3,
+.markdown-body h4, .markdown-body h5, .markdown-body h6 { line-height: 1.35; font-weight: 700; }
+.markdown-body h1 { font-size: 1.7em; }
+.markdown-body h2 { font-size: 1.4em; }
+.markdown-body h3 { font-size: 1.2em; }
+.markdown-body ul, .markdown-body ol { padding-left: 1.6em; }
+.markdown-body ul { list-style: disc; }
+.markdown-body ol { list-style: decimal; }
+.markdown-body li + li { margin-top: .25em; }
+.markdown-body blockquote { padding-left: 1em; border-left: 1px solid var(--border); color: var(--muted-foreground); }
+.markdown-body a { text-decoration: underline; text-underline-offset: 3px; }
+.markdown-body code { font-family: var(--font-doc-mono); font-size: .9em; }
+.markdown-body :not(pre) > code { padding: .1em .3em; border-radius: 4px; background: var(--muted); }
+.markdown-body pre { overflow: auto; padding: 1em; border-radius: 8px; background: var(--muted); line-height: 1.6; }
+.markdown-body table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+.markdown-body th, .markdown-body td { padding: .4em .7em; border: 1px solid var(--border); text-align: left; }
+.markdown-body hr { border: 0; border-top: 1px solid var(--border); }
+.markdown-image-placeholder { color: var(--muted-foreground); font-size: .9em; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.markdown-image-placeholder:disabled { cursor: not-allowed; }
+.markdown-body img { max-width: 100%; height: auto; }
+.save-error {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 80;
+  max-width: min(360px, calc(100vw - 32px));
+  padding: 12px 16px;
+  border: 1px solid var(--destructive);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--card-foreground);
+  font-size: 13px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.15);
+}
+@container (max-width: 700px) {
+  .reading-panes[data-layout='split'] { flex-direction: column; }
+  .reading-panes[data-layout='split'] .markdown-preview { border-left: 0; border-top: 1px solid var(--border); }
+  .reading-panes[data-layout='split'] .reading-pane { padding: 20px; }
+}
+@media (max-width: 639.98px) {
+  .reading-toolbar { padding-inline: 12px; }
+  .reading-hint { font-size: 11px; }
+}
+
 /* ---------------------------------------------------------------- 编辑器高亮 */
 
 .editor-blk {
@@ -528,6 +635,12 @@
   font-size: var(--doc-font-size, 16.5px);
   font-weight: var(--doc-font-weight, 400);
 }
+.md-syntax-heading, .md-syntax-strong { font-weight: 650; }
+.md-syntax-emphasis, .md-syntax-quote { font-style: italic; }
+.md-syntax-strike { text-decoration: line-through; }
+.md-syntax-link { text-decoration: underline; text-underline-offset: 3px; }
+.md-syntax-url, .md-syntax-mark { color: color-mix(in srgb, var(--foreground) 75%, var(--background)); }
+.md-syntax-code { font-family: var(--font-doc-mono); background: color-mix(in srgb, var(--foreground) 7%, transparent); border-radius: 3px; }
 .seg-hl {
   @apply rounded-[4px] cursor-pointer transition-shadow duration-300;
   padding: 1.5px 0;
@@ -707,6 +820,7 @@ body.select-none {
   .resize-handle {
     display: none;
   }
+  .edge-collapse { display: none; }
 }
 
 /* 手机顶栏：图标按钮收紧内边距（.btn-sm 的 px-3 在 390px 下放不下全部工具） */

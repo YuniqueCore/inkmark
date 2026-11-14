@@ -2,6 +2,7 @@
 /** 回收站弹层：列表渲染、动作派发、空态、Esc 关闭。 */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Mock } from 'vitest'
 import { TrashDialog } from '../src/ui/trash-dialog'
 import type { Annotation, TrashEntry, TrashedAnnotation } from '../src/core/types'
 
@@ -35,12 +36,12 @@ const docEntry = (): TrashEntry => ({
 
 const NOW = 3_600_000 // 开机 1 小时：距 7 天保留期满还剩约 7 天
 
-let callbacks: { restore: ReturnType<typeof vi.fn>; purge: ReturnType<typeof vi.fn>; clear: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn> }
+let callbacks: { restore: Mock<(keys: string[]) => void>; purge: Mock<(keys: string[]) => void>; clear: Mock<() => void>; close: Mock<() => void> }
 let dialog: TrashDialog
 
 beforeEach(() => {
   document.body.innerHTML = ''
-  callbacks = { restore: vi.fn(), purge: vi.fn(), clear: vi.fn(), close: vi.fn() }
+  callbacks = { restore: vi.fn<(keys: string[]) => void>(), purge: vi.fn<(keys: string[]) => void>(), clear: vi.fn<() => void>(), close: vi.fn<() => void>() }
   dialog = new TrashDialog({
     onRestore: callbacks.restore,
     onPurge: callbacks.purge,
@@ -74,8 +75,8 @@ describe('TrashDialog', () => {
     dialog.open([entry('a1')], NOW)
     ;(document.querySelector('[data-op="restore"]') as HTMLButtonElement).click()
     ;(document.querySelector('[data-op="purge"]') as HTMLButtonElement).click()
-    expect(callbacks.restore).toHaveBeenCalledWith(['a1'])
-    expect(callbacks.purge).toHaveBeenCalledWith(['a1'])
+    expect(callbacks.restore).toHaveBeenCalledWith(['annotation:a1'])
+    expect(callbacks.purge).toHaveBeenCalledWith(['annotation:a1'])
   })
 
   it('清空按钮派发回调；空态时禁用且渲染空态文案', () => {
@@ -99,7 +100,7 @@ describe('TrashDialog', () => {
   it('混排按删除时间倒序，头部计数区分文档与批注', () => {
     dialog.open([entry('a1'), docEntry()], NOW)
     const keys = Array.from(document.body.querySelectorAll('[data-entry]')).map((el) => el.getAttribute('data-entry'))
-    expect(keys).toEqual(['doc-9', 'a1'])
+    expect(keys).toEqual(['doc:doc-9', 'annotation:a1'])
     expect(document.body.textContent).toContain('1 文档')
     expect(document.body.textContent).toContain('1 批注')
   })
@@ -173,26 +174,26 @@ describe('TrashDialog · 搜索与批量', () => {
     input.dispatchEvent(new Event('input'))
     ;(document.querySelector('[data-select-all]') as HTMLInputElement).click()
     ;(document.querySelector('[data-bulk-op="restore"]') as HTMLButtonElement).click()
-    expect(callbacks.restore).toHaveBeenCalledWith(['a3'])
+    expect(callbacks.restore).toHaveBeenCalledWith(['annotation:a3'])
   })
 
   it('逐条勾选进批量条，批量彻底删除派发全部选中 key', () => {
     openThree()
-    const box = (k: string): HTMLInputElement => document.querySelector(`[data-select-key="${k}"]`) as HTMLInputElement
+    const box = (k: string): HTMLInputElement => document.querySelector(`[data-select-key="annotation:${k}"]`) as HTMLInputElement
     box('a1').click()
     box('a2').click()
     expect(document.body.textContent).toContain('已选 2 项')
     ;(document.querySelector('[data-bulk-op="purge"]') as HTMLButtonElement).click()
-    expect(callbacks.purge).toHaveBeenCalledWith(['a1', 'a2'])
+    expect(callbacks.purge).toHaveBeenCalledWith(['annotation:a1', 'annotation:a2'])
   })
 
   it('update 后剪除已消失的选中项，剩余选中仍可批量操作', () => {
     openThree()
-    ;(document.querySelector('[data-select-key="a1"]') as HTMLInputElement).click()
-    ;(document.querySelector('[data-select-key="a2"]') as HTMLInputElement).click()
+    ;(document.querySelector('[data-select-key="annotation:a1"]') as HTMLInputElement).click()
+    ;(document.querySelector('[data-select-key="annotation:a2"]') as HTMLInputElement).click()
     dialog.update([entry('a2'), entry('a3')], NOW) // a1 已被恢复
     expect(document.body.textContent).toContain('已选 1 项')
     ;(document.querySelector('[data-bulk-op="purge"]') as HTMLButtonElement).click()
-    expect(callbacks.purge).toHaveBeenCalledWith(['a2'])
+    expect(callbacks.purge).toHaveBeenCalledWith(['annotation:a2'])
   })
 })

@@ -4,6 +4,7 @@
 
 import type { DocItem } from '../core/types'
 import type { SelectionInfo } from './selection-pin'
+import { isSurrogateBoundary } from '../core/text'
 
 /** 把当前 DOM 选区换算为选区信息。不在编辑区内、空选区或纯空白时返回 null。 */
 export function resolveSelection(
@@ -16,14 +17,21 @@ export function resolveSelection(
   const range = sel.getRangeAt(0)
   if (!editorEl.contains(range.commonAncestorContainer)) return null
 
+  const startBlock = blockOf(range.startContainer)
+  const endBlock = blockOf(range.endContainer)
+  if (!startBlock || !endBlock) return null
+  const side = startBlock.dataset.side === 'b' ? ('b' as const) : undefined
+  if ((endBlock.dataset.side === 'b') !== (side === 'b')) return null
+  // 对照视图中原文行之间也可能夹有改稿行；不能把两侧坐标拼成一个选区。
+  for (const block of editorEl.querySelectorAll<HTMLElement>('.editor-blk')) {
+    if (range.intersectsNode(block) && (block.dataset.side === 'b') !== (side === 'b')) return null
+  }
+
   const start = domPointToOffset(range.startContainer, range.startOffset)
   const end = domPointToOffset(range.endContainer, range.endOffset)
   if (start === null || end === null || end <= start) return null
-  const blk = (range.startContainer.nodeType === Node.TEXT_NODE
-    ? range.startContainer.parentElement
-    : (range.startContainer as HTMLElement))?.closest('.editor-blk') as HTMLElement | null
-  const side = blk?.dataset.side === 'b' ? ('b' as const) : undefined
   const text = side === 'b' ? (doc.revised ?? '') : doc.text
+  if (isSurrogateBoundary(text, start) || isSurrogateBoundary(text, end)) return null
   const quoted = text.slice(start, end)
   if (quoted.trim() === '') return null
   // 拖拽方向：anchor（按下点）在 range 起点即正向选
@@ -32,6 +40,7 @@ export function resolveSelection(
   return {
     start,
     end,
+    sourceText: text,
     rect: range.getBoundingClientRect(),
     quoted,
     mouse: { x: e.clientX, y: e.clientY },
@@ -50,6 +59,7 @@ export function rectOfAnnotation(root: HTMLElement, id: string): DOMRect | null 
 /** 规范文本偏移区间 → 编辑区内的 DOM Range（搜索跳转用）；定位不到返回 null。 */
 export function rangeOfOffsets(root: HTMLElement, start: number, end: number): Range | null {
   for (const blk of root.querySelectorAll<HTMLElement>('.editor-blk')) {
+    if (blk.dataset.side === 'b') continue
     const blockStart = Number(blk.dataset.start ?? 0)
     const blockEnd = blockStart + textLengthOf(blk)
     if (start < blockStart || start >= blockEnd) continue
@@ -61,6 +71,11 @@ export function rangeOfOffsets(root: HTMLElement, start: number, end: number): R
     return range
   }
   return null
+}
+
+function blockOf(node: Node): HTMLElement | null {
+  const element = node.nodeType === Node.TEXT_NODE ? node.parentElement : node as HTMLElement
+  return element?.closest<HTMLElement>('.editor-blk') ?? null
 }
 
 /** 块内规范偏移 → DOM 位置（textLengthOf 与 domPointToOffset 同一计数规则，<br> 记 1） */

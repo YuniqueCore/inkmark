@@ -8,8 +8,10 @@
  */
 
 import { anchorQuote } from './quote-match'
-import { textQuoteSelector } from './text'
+import { codePointsToUtf16, textQuoteSelector, utf16ToCodePoints } from './text'
 import type { Annotation, AnnotationKind, DocItem } from './types'
+import { isSafeId } from './session-schema'
+import { stableId } from './identity'
 
 const ANNO_CONTEXT = 'http://www.w3.org/ns/anno.jsonld'
 
@@ -75,7 +77,7 @@ export function toW3C(doc: DocItem, opts?: { includeResolved?: boolean }): W3CAn
           source: isRevised ? `urn:inkmark:doc:${doc.id}#revised` : `urn:inkmark:doc:${doc.id}`,
           selector: [
             { type: 'TextQuoteSelector' as const, ...textQuoteSelector(sourceText, a.start, a.end) },
-            { type: 'TextPositionSelector' as const, start: a.start, end: a.end },
+            { type: 'TextPositionSelector' as const, start: utf16ToCodePoints(sourceText, a.start), end: utf16ToCodePoints(sourceText, a.end) },
           ],
         },
       }
@@ -103,19 +105,18 @@ export interface W3CImportResult {
 export function fromW3C(
   data: unknown,
   text: string,
-  opts?: { revisedText?: string; now?: number },
+  opts?: { revisedText?: string; now?: number; identityScope?: string },
 ): W3CImportResult {
   const items = collectW3CItems(data)
   const now = opts?.now ?? Date.now()
   const annotations: Annotation[] = []
   let unmatched = 0
-  items.forEach((item, idx) => {
+  items.forEach((item) => {
     const obj = item as Record<string, unknown> | null
-    const isRevised =
-      !!obj && typeof obj === 'object' &&
-      (obj as { target?: { source?: unknown } })?.target?.source?.toString().includes('#revised') === true
+    const source = obj && typeof obj === 'object' ? (obj as {target?: {source?: unknown}}).target?.source : undefined
+    const isRevised = typeof source === 'string' && source.endsWith('#revised')
     const targetText = isRevised ? opts?.revisedText : text
-    const ann = targetText === undefined ? null : parseOne(item, targetText, now, idx, isRevised)
+    const ann = targetText === undefined ? null : parseOne(item, targetText, now, opts?.identityScope ?? '', isRevised)
     if (ann) annotations.push(ann)
     else unmatched++
   })
@@ -134,7 +135,7 @@ export function collectW3CItems(data: unknown): unknown[] {
   return []
 }
 
-function parseOne(item: unknown, text: string, now: number, idx: number, isRevised = false): Annotation | null {
+function parseOne(item: unknown, text: string, now: number, scope: string, isRevised = false): Annotation | null {
   if (!item || typeof item !== 'object') return null
   const obj = item as Record<string, unknown>
   const target = obj.target as Record<string, unknown> | undefined
@@ -150,8 +151,9 @@ function parseOne(item: unknown, text: string, now: number, idx: number, isRevis
   if (exact === null || exact === '') return null
 
   const hint =
-    position && typeof position.start === 'number' && typeof position.end === 'number'
-      ? {start: position.start, end: position.end}
+    position && Number.isSafeInteger(position.start) && Number.isSafeInteger(position.end) &&
+    (position.start as number) >= 0 && (position.end as number) >= (position.start as number)
+      ? {start: codePointsToUtf16(text, position.start as number), end: codePointsToUtf16(text, position.end as number)}
       : undefined
   const anchor = anchorQuote(
     text,
@@ -160,22 +162,25 @@ function parseOne(item: unknown, text: string, now: number, idx: number, isRevis
   )
   if (anchor === null) return null
 
-  const bodies = Array.isArray(obj.body) ? (obj.body as Array<Record<string, unknown>>) : []
+  const bodies = Array.isArray(obj.body)
+    ? obj.body.filter((body): body is Record<string, unknown> => Boolean(body) && typeof body === 'object')
+    : []
   const comment =
     bodies
       .filter((b) => b.purpose === 'describing' && typeof b.value === 'string')
       .map((b) => b.value as string)
       .join('\n') || '(无批注内容)'
-  const tags = bodies.filter((b) => b.purpose === 'tagging').map((b) => String(b.value ?? ''))
-  const kind = tags.find((t): t is AnnotationKind => t in KIND_TO_MOTIVATION) ??
-    MOTIVATION_TO_KIND[String(obj.motivation ?? '')] ?? 'highlight'
+  const tags = bodies.filter((b) => b.purpose === 'tagging' && typeof b.value === 'string').map((b) => b.value as string)
+  const motivation = typeof obj.motivation === 'string' ? obj.motivation : ''
+  const kind = tags.find((t): t is AnnotationKind => Object.hasOwn(KIND_TO_MOTIVATION, t)) ??
+    (Object.hasOwn(MOTIVATION_TO_KIND, motivation) ? MOTIVATION_TO_KIND[motivation] : undefined) ?? 'highlight'
   const status = tags.includes('resolved') ? 'resolved' : 'open'
   const created = Date.parse(asString(obj.created) ?? '') || now
   const modified = Date.parse(asString(obj.modified) ?? '') || created
   const idSuffix = asString(obj.id)?.split('ann=')[1]
 
   return {
-    id: idSuffix || `w3c-${now}-${idx}`,
+    id: idSuffix && isSafeId(idSuffix) ? idSuffix : stableId('w3c', [scope, asString(obj.id) ?? obj]),
     start: anchor.start,
     end: anchor.end,
     kind,

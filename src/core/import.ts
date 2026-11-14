@@ -9,10 +9,14 @@
 
 import { collectW3CItems, fromW3C, parseW3CSource } from './w3c'
 import { parseWorkspace } from './session'
-import type { Annotation, DocItem } from './types'
+import type { Annotation, DocItem, ReviewDocument } from './types'
+import type { TrashEntry } from './types'
+import { uniqueDocumentName } from './import-conflict'
+import { newId } from './identity'
+import { remapAnnotationIds } from './document'
 
 const TEXT_SUFFIX = /\.(txt|md|markdown)$/i
-const MAX_DOC_CHARS = 400_000 // 单文档上限，超出截断
+export const MAX_DOC_CHARS = 400_000 // 单文档上限；文件导入超出时会提示截断
 
 export interface ImportContext {
   /** 工作区全部文档：W3C 按 source 分发的重锚目标池 */
@@ -33,7 +37,7 @@ export interface ImportOutcome {
   /** 文本文件 → 新文档 */
   textDocs: DocItem[]
   /** 会话 JSON → 新文档（整体合并） */
-  sessionDocs: DocItem[]
+  sessionDocs: ReviewDocument[]
   /** 识别为 W3C 的文件数（0 条命中也计入，用于提示） */
   w3cFiles: number
   /** W3C 条目按来源文档分组的重锚结果 */
@@ -45,7 +49,34 @@ export interface ImportOutcome {
 }
 
 export function newDocId(): string {
-  return `doc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
+  return newId('doc')
+}
+
+/** 合并会话文档时保留不同文档，避免 ID 或路径名称冲突。 */
+export function prepareSessionDocs(incoming: ReviewDocument[], existing: ReviewDocument[], trash: TrashEntry[]): ReviewDocument[] {
+  const docs = [...existing]
+  const docIds = new Set([...existing.map((d) => d.id), ...trash.map((t) => t.type === 'doc' ? t.doc.id : t.docId)])
+  const annIds = new Set([
+    ...existing.flatMap((d) => d.annotations.map((a) => a.id)),
+    ...trash.flatMap((t) => t.type === 'doc' ? t.doc.annotations.map((a) => a.id) : [t.annotation.id]),
+  ])
+  const added: ReviewDocument[] = []
+  for (const doc of incoming) {
+    let id = doc.id
+    while (docIds.has(id)) id = newDocId()
+    docIds.add(id)
+    const name = uniqueDocumentName(doc.name, doc.path, docs)
+    const mapped = remapAnnotationIds(doc, (oldId) => {
+      let annId = oldId
+      while (annIds.has(annId)) annId = `ann-${newDocId()}`
+      annIds.add(annId)
+      return annId
+    })
+    const next = {...mapped, id, name}
+    docs.push(next)
+    added.push(next)
+  }
+  return added
 }
 
 export async function importFileList(
@@ -134,7 +165,7 @@ async function tryW3CFile(file: File, ctx: ImportContext, outcome: ImportOutcome
       outcome.w3cRouted.push({ docId, annotations: [], unmatched: groupItems.length })
       continue
     }
-    const result = fromW3C(groupItems, target.text, { revisedText: target.revised })
+    const result = fromW3C(groupItems, target.text, { revisedText: target.revised, identityScope: target.id })
     outcome.w3cRouted.push({ docId, annotations: result.annotations, unmatched: result.unmatched })
   }
   return true

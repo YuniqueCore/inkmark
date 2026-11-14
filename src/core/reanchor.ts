@@ -36,6 +36,8 @@ export function reanchorAnnotations(
   let clamped = 0
 
   const next = annotations.map((a) => {
+    // 改稿侧的坐标属于 doc.revised，原文变化时不应移动或标记失锚。
+    if (a.target === 'revised') return a
     const quote = textQuoteSelector(oldText, a.start, a.end)
     const found = anchorQuote(
       newText,

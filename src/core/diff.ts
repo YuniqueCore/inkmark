@@ -4,6 +4,8 @@
  * 降级为「整块删除 + 整块新增」（不挂死、不爆内存），对超大改动文档仍然可用。
  */
 
+import { scanLines } from './text'
+
 export interface DiffRow {
   type: 'equal' | 'del' | 'add'
   /** 行内容（不含行尾换行符） */
@@ -17,18 +19,6 @@ export interface DiffRow {
 interface Line {
   text: string
   start: number
-}
-
-function splitLines(text: string): Line[] {
-  const lines: Line[] = []
-  let start = 0
-  while (start < text.length) {
-    const nl = text.indexOf('\n', start)
-    const end = nl === -1 ? text.length : nl
-    lines.push({ text: text.slice(start, end), start })
-    start = nl === -1 ? text.length : nl + 1
-  }
-  return lines
 }
 
 type Op = { t: 'equal' | 'del' | 'add'; i: number; j: number }
@@ -107,8 +97,8 @@ function backtrack(trace: Int32Array[], a: string[], b: string[], dFinal: number
  * 等值行在两侧都出现，del 行只属于原文，add 行只属于改稿。
  */
 export function diffLines(a: string, b: string): DiffRow[] {
-  const al = splitLines(a)
-  const bl = splitLines(b)
+  const al = scanLines(a)
+  const bl = scanLines(b)
 
   // 裁掉公共前后缀，把 Myers 的工作量限制在真正改动的中部
   let pre = 0

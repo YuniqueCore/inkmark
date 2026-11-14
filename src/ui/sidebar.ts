@@ -4,11 +4,11 @@
  * （统计 + 展开跳转）；聚合是派生状态，不复制可变状态。
  */
 
-import { snippet } from '../core/text'
+import type { AnnotationPresentation as Annotation } from './annotation-presentation'
 import { reportCategoryCounts } from '../core/slop'
 import type { SlopBand, SlopReport, SlopSample } from '../core/types'
 import { ALL_KINDS, KIND_LABEL, MANUAL_KINDS } from '../core/types'
-import type { Annotation, AnnotationKind } from '../core/types'
+import type { AnnotationBody, AnnotationKind } from '../core/types'
 import { escapeHtml } from '../core/text'
 import { icon } from './icons'
 
@@ -28,7 +28,7 @@ export interface SidebarCallbacks {
 
 export interface SidebarRenderOptions {
   /** AI 改稿全文：改稿侧批注（target === 'revised'）的摘录来源 */
-  revised?: string
+  image?: boolean
   /** 最近一次 slop 扫描报告（当前文档）：有则展示评分统计卡 */
   slop?: SlopReport | null
   /** 评分历史采样：≥2 个时统计卡展示趋势线与环比 */
@@ -66,8 +66,7 @@ export class SidebarView {
   private selected = new Set<string>()
   /** 上次渲染的选中数：0 → N 的瞬间给操作簇挂滑入动画，避免每次勾选重放 */
   private prevSelectedSize = 0
-  private lastArgs: { text: string; annotations: Annotation[]; opts: SidebarRenderOptions } = {
-    text: '',
+  private lastArgs: { annotations: Annotation[]; opts: SidebarRenderOptions } = {
     annotations: [],
     opts: {},
   }
@@ -97,7 +96,7 @@ export class SidebarView {
   }
 
   /** 当前筛选下的可见批注（列表与编辑器高亮共用同一份判定） */
-  visibleOf(annotations: Annotation[]): Annotation[] {
+  visibleOf<A extends AnnotationBody>(annotations: A[]): A[] {
     return annotations.filter(
       (a) =>
         (this.filter === 'all' || a.status === this.filter) &&
@@ -109,8 +108,8 @@ export class SidebarView {
     this.activeId = id
   }
 
-  render(text: string, annotations: Annotation[], opts: SidebarRenderOptions = {}): void {
-    this.lastArgs = { text, annotations, opts }
+  render(annotations: Annotation[], opts: SidebarRenderOptions = {}): void {
+    this.lastArgs = { annotations, opts }
     const open = annotations.filter((a) => a.status === 'open').length
     const shown = this.visibleOf(annotations)
     // 选中集合剪除已不存在的批注（删除/重锚 id 不变，删除才失效）
@@ -154,8 +153,8 @@ export class SidebarView {
     const cards = items
       .map((item) =>
         item.kind === 'single'
-          ? this.renderCard(sourceTextFor(item.ann, text, opts), item.ann)
-          : this.renderGroupCard(item.members, text, opts),
+          ? this.renderCard(item.ann)
+          : this.renderGroupCard(item.members),
       )
       .join('')
 
@@ -170,10 +169,10 @@ export class SidebarView {
         <button type="button" data-select-invert class="shrink-0 text-[11px] text-muted-foreground transition-colors hover:text-foreground" title="反选：选中未勾选的，取消已勾选的">反选</button>
         <select data-quick-select class="h-6 min-w-0 flex-1 rounded-md border border-input bg-card px-1 text-[11px] text-muted-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40" aria-label="快速选中">
           <option value="" disabled selected>快速选中…</option>
-          <option value="lost">失锚批注</option>
+          ${opts.image ? '' : '<option value="lost">失锚批注</option>'}
           <option value="open">未解决</option>
           <option value="resolved">已解决</option>
-          <option value="revised">改稿侧</option>
+          ${opts.image ? '' : '<option value="revised">改稿侧</option>'}
           ${chipKinds.map((k) => `<option value="kind:${k}">${KIND_LABEL[k]}</option>`).join('')}
         </select>
         ${
@@ -216,8 +215,8 @@ export class SidebarView {
   }
 
   private rerender(): void {
-    const { text, annotations, opts } = this.lastArgs
-    this.render(text, annotations, opts)
+    const { annotations, opts } = this.lastArgs
+    this.render(annotations, opts)
   }
 
   // ---------------------------------------------------------------- 列表
@@ -422,8 +421,8 @@ export class SidebarView {
     return `<svg viewBox="0 0 ${w} ${h}" class="mt-1.5 h-6 w-full text-muted-foreground" preserveAspectRatio="none" aria-hidden="true"><polyline points="${points}" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`
   }
 
-  private renderCard(text: string, a: Annotation): string {
-    const quote = snippet(text, a.start, a.end, 90)
+  private renderCard(a: Annotation): string {
+    const quote = a.excerpt
     const slopInfo = a.meta
       ? `<span class="badge border-transparent" style="color:var(--kind-slop);background:var(--kind-slop-bg)">${escapeHtml(a.meta.label)}</span>`
       : ''
@@ -453,7 +452,7 @@ export class SidebarView {
   }
 
   /** 批量批注组卡：kind + N 处统计 + 批注语，展开逐条跳转 */
-  private renderGroupCard(members: Annotation[], text: string, opts: SidebarRenderOptions): string {
+  private renderGroupCard(members: Annotation[]): string {
     const first = members[0]!
     const groupId = first.groupId!
     const resolved = members.filter((m) => m.status === 'resolved').length
@@ -464,7 +463,7 @@ export class SidebarView {
     const rows = expanded
       ? `<div class="mt-2 flex flex-col gap-1">${members
           .map((m) => {
-            const quote = snippet(sourceTextFor(m, text, opts), m.start, m.end, 60)
+            const quote = m.excerpt
             return `<div class="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[13px] hover:bg-secondary/60">
               <button class="min-w-0 flex-1 truncate text-left text-muted-foreground transition-colors hover:text-foreground" data-op="focus" data-id="${m.id}" title="${escapeHtml(quote)}">“${escapeHtml(quote)}”</button>
               ${m.anchorLost ? '<span class="badge border-amber-500/40 text-amber-600 dark:text-amber-400">失锚</span>' : ''}
@@ -498,11 +497,6 @@ export class SidebarView {
 
 // ---------------------------------------------------------------- 纯辅助
 
-/** 批注锚定侧对应的摘录来源文本 */
-function sourceTextFor(a: Annotation, text: string, opts: SidebarRenderOptions): string {
-  return a.target === 'revised' ? (opts.revised ?? '') : text
-}
-
 /** 可见批注 → 列表项：无 groupId 的单条 + 同 groupId 聚合，按位置排序 */
 function buildListItems(shown: Annotation[]): ListItem[] {
   const items: ListItem[] = []
@@ -518,7 +512,7 @@ function buildListItems(shown: Annotation[]): ListItem[] {
   }
   const groupItems: ListItem[] = [...groupIndex.values()].map((members) => ({
     kind: 'group' as const,
-    members: [...members].sort((x, y) => x.start - y.start),
+    members: [...members].sort((x, y) => x.order - y.order),
   }))
   return [...items, ...groupItems].sort(
     (x, y) => firstStart(x) - firstStart(y),
@@ -526,5 +520,5 @@ function buildListItems(shown: Annotation[]): ListItem[] {
 }
 
 function firstStart(item: ListItem): number {
-  return item.kind === 'single' ? item.ann.start : item.members[0]!.start
+  return item.kind === 'single' ? item.ann.order : item.members[0]!.order
 }

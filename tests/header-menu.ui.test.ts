@@ -2,6 +2,7 @@
 /** Header 分组菜单：悬停意图、点击钉住、选择派发、Esc/外点关闭。 */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Mock } from 'vitest'
 import { wireHeaderMenu } from '../src/ui/header-menu'
 import type { MenuItem } from '../src/ui/header-menu'
 
@@ -12,11 +13,11 @@ const items: MenuItem[] = [
 ]
 
 let trigger: HTMLButtonElement
-let onSelect: ReturnType<typeof vi.fn>
+let onSelect: Mock<(id: string) => void>
 
 beforeEach(() => {
   document.body.innerHTML = ''
-  onSelect = vi.fn()
+  onSelect = vi.fn<(id: string) => void>()
   trigger = document.createElement('button')
   document.body.append(trigger)
   wireHeaderMenu(trigger, items, onSelect)

@@ -1,40 +1,63 @@
-/** 工作区持久化：localStorage 是唯一 IO 边界。v1 旧数据自动迁移。 */
-
+/** One atomic, self-contained workspace snapshot; no persistent object URLs. */
+import { createStore, get, set, del } from 'idb-keyval'
 import { parseWorkspace } from '../core/session'
 import { purgeExpired } from '../core/trash'
-import { SESSION_VERSION } from '../core/types'
-import type { Workspace } from '../core/types'
+import { SESSION_VERSION, type Workspace } from '../core/types'
 
-const KEY = 'inkmark:session:v1' // 键沿用，内部按 version 字段迁移
+const LEGACY_KEY = 'inkmark:session:v1'
+const store = createStore('inkmark-workspace', 'snapshots')
+const KEY = 'workspace'
+let unreadableWorkspace: string | null = null
+let readFailed = false
 
-export function loadWorkspace(): Workspace {
+export function unreadableWorkspaceData(): string | null { return unreadableWorkspace }
+
+export async function replaceUnreadableWorkspace(ws: Workspace): Promise<boolean> {
+  if (unreadableWorkspace === null) return false
   try {
-    const raw = localStorage.getItem(KEY)
+    await set(KEY, JSON.stringify(ws), store)
+    unreadableWorkspace = null
+    removeLegacy()
+    return true
+  } catch { return false }
+}
+
+export async function loadWorkspace(): Promise<Workspace> {
+  try {
+    const stored = await get<string>(KEY, store)
+    const raw = stored ?? localStorage.getItem(LEGACY_KEY)
     if (!raw) return emptyWorkspace()
-    const ws = parseWorkspace(raw) ?? emptyWorkspace()
-    // 启动即清理超过保留期的回收站条目（唯一的过期清理入口，会话中途不再轮询）
-    return { ...ws, trash: purgeExpired(ws.trash, Date.now()).keep }
+    const ws = parseWorkspace(raw)
+    if (!ws) {
+      unreadableWorkspace = raw
+      return emptyWorkspace()
+    }
+    return {...ws, trash: purgeExpired(ws.trash, Date.now()).keep}
   } catch {
+    // Never overwrite a database that could not be read. Reload to retry.
+    readFailed = true
     return emptyWorkspace()
   }
 }
 
-export function saveWorkspace(ws: Workspace): void {
+export async function saveWorkspace(snapshot: string): Promise<boolean> {
+  if (unreadableWorkspace !== null || readFailed) return false
   try {
-    localStorage.setItem(KEY, JSON.stringify(ws))
-  } catch {
-    // 配额溢出（大文件夹导入）：静默失败，导出能力不受影响
-  }
+    await set(KEY, snapshot, store)
+    removeLegacy()
+    return true
+  } catch { return false }
 }
 
-export function clearWorkspaceStorage(): void {
-  try {
-    localStorage.removeItem(KEY)
-  } catch {
-    // 同上
-  }
+function removeLegacy(): void {
+  try { localStorage.removeItem(LEGACY_KEY) } catch { /* IndexedDB is already committed. */ }
+}
+
+export async function clearWorkspaceStorage(): Promise<void> {
+  await del(KEY, store)
+  removeLegacy()
 }
 
 export function emptyWorkspace(): Workspace {
-  return { version: SESSION_VERSION, docs: [], activeDocId: '', trash: [], savedAt: Date.now() }
+  return {version: SESSION_VERSION, docs: [], activeDocId: '', trash: [], savedAt: Date.now()}
 }

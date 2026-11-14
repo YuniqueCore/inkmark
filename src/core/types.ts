@@ -83,30 +83,68 @@ export const KIND_LABEL: Record<AnnotationKind, string> = {
 
 export type AnnotationStatus = 'open' | 'resolved'
 
-export interface Annotation {
+export interface AnnotationBody {
   id: string
-  /** 规范文本中的字符偏移：[start, end) */
-  start: number
-  end: number
   kind: AnnotationKind
   comment: string
   status: AnnotationStatus
   /** manual = 人工划词；slop = 词库预扫描 */
   source: 'manual' | 'slop'
-  /** 锚定侧：缺省 = 原文；'revised' = AI 改稿（对照视图的新增行，偏移相对 doc.revised） */
-  target?: 'revised'
-  /** slop 命中的词库元数据 */
-  meta?: SlopMeta
-  /** 失锚标记：原文编辑后引文已不在原文中，批注被钳到改动处（重锚成功时清除） */
-  anchorLost?: true
-  /** 批量批注组：同一 groupId 的批注在侧栏聚合为一张卡（统计 + 展开跳转）。
-   * 每条批注仍是独立的一阶 [start,end)，导出 / W3C / 重锚不受分组影响 */
   groupId?: string
-  /** 批量批注的建议替换词（同组一致）：导出为机器可执行的替换指令 */
-  replacement?: string
   createdAt: number
   updatedAt: number
 }
+
+/** Text-specific anchors and capabilities never appear on image annotations. */
+export interface Annotation extends AnnotationBody {
+  start: number
+  end: number
+  target?: 'revised'
+  meta?: SlopMeta
+  anchorLost?: true
+  replacement?: string
+}
+
+/** Integer half-open rectangle in the decoded image's natural pixel space. */
+export interface ImageRegion {
+  type: 'rectangle'
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface RegionAnnotation extends AnnotationBody {
+  selector: ImageRegion
+}
+
+export type ReviewAnnotation = Annotation | RegionAnnotation
+
+/** Self-contained immutable raster: backup and trash retain the original bytes. */
+export interface RasterImage {
+  dataUrl: string
+  width: number
+  height: number
+}
+
+export interface DocumentIdentity {
+  id: string
+  name: string
+  path: string
+  addedAt: number
+}
+
+export interface ImageDocument extends DocumentIdentity {
+  kind: 'image'
+  image: RasterImage
+  annotations: RegionAnnotation[]
+}
+
+export type ReviewDocument = DocItem | ImageDocument
+
+export const isImageDocument = (doc: ReviewDocument): doc is ImageDocument => doc.kind === 'image'
+export const isTextDocument = (doc: ReviewDocument): doc is DocItem => doc.kind !== 'image'
+export const isRegionAnnotation = (ann: ReviewAnnotation): ann is RegionAnnotation => 'selector' in ann
 
 export interface SlopMeta {
   categoryId: string
@@ -128,7 +166,8 @@ export interface AnnotationInput {
 }
 
 /** 工作区文档：一个可批注的文本单元 */
-export interface DocItem {
+export interface DocItem extends DocumentIdentity {
+  kind?: 'text'
   id: string
   name: string
   /** 相对路径（文件夹导入时含目录层级），单文件导入为 '' */
@@ -156,7 +195,9 @@ export const SESSION_VERSION = 3 as const
 /** 回收站条目（批注）：7 天保留期。恢复 = 按 docId 找回文档并追加批注 */
 export interface TrashedAnnotation {
   type: 'annotation'
-  annotation: Annotation
+  annotation: ReviewAnnotation
+  /** Snapshot identity prevents restoring onto a changed or unrelated target. */
+  targetIdentity?: string
   docId: string
   docName: string
   deletedAt: number
@@ -165,7 +206,7 @@ export interface TrashedAnnotation {
 /** 回收站条目（整文档）：连文档带批注整体入站，恢复即整份找回 */
 export interface TrashedDoc {
   type: 'doc'
-  doc: DocItem
+  doc: ReviewDocument
   deletedAt: number
 }
 
@@ -175,7 +216,7 @@ export type TrashEntry = TrashedAnnotation | TrashedDoc
 /** 工作区会话 v3：多文档 + 回收站（批注/文档双类型）。localStorage 持久化单元 */
 export interface Workspace {
   version: typeof SESSION_VERSION
-  docs: DocItem[]
+  docs: ReviewDocument[]
   activeDocId: string
   /** 已删除批注与文档：保留 7 天，过期自动清理；彻底删除需二次确认 */
   trash: TrashEntry[]

@@ -11,6 +11,7 @@
 import { escapeHtml } from '../core/text'
 import { TRASH_RETENTION_MS } from '../core/trash'
 import type { TrashEntry } from '../core/types'
+import { entryKey } from '../core/trash'
 import { KIND_LABEL } from '../core/types'
 import { icon } from './icons'
 
@@ -94,7 +95,7 @@ export class TrashDialog {
   }
 
   private keyOf(t: TrashEntry): string {
-    return t.type === 'doc' ? t.doc.id : t.annotation.id
+    return entryKey(t)
   }
 
   private visible(): TrashEntry[] {

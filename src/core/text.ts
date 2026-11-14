@@ -7,21 +7,60 @@ export interface Block {
   text: string
 }
 
-interface Line {
+/** 应用内使用 UTF-16；W3C TextPositionSelector 以 Unicode code point 计数。 */
+export function utf16ToCodePoints(text: string, offset: number): number {
+  return Array.from(text.slice(0, offset)).length
+}
+
+export function codePointsToUtf16(text: string, offset: number): number {
+  let units = 0
+  let points = 0
+  for (const character of text) {
+    if (points >= offset) break
+    units += character.length
+    points++
+  }
+  return units
+}
+
+export function isSurrogateBoundary(text: string, offset: number): boolean {
+  if (offset <= 0 || offset >= text.length) return false
+  const before = text.charCodeAt(offset - 1)
+  const after = text.charCodeAt(offset)
+  return before >= 0xd800 && before <= 0xdbff && after >= 0xdc00 && after <= 0xdfff
+}
+
+/** textarea 会把 CRLF 和 CR 规范化为 LF。 */
+export function normalizeLineEndings(text: string): string {
+  return text.replace(/\r\n?/g, '\n')
+}
+
+/** 保存编辑时保留统一的换行类型；混合格式需要由调用方提示用户。 */
+export function restoreLineEndings(value: string, original: string): {text: string; mixed: boolean} {
+  const endings = new Set(original.match(/\r\n|\r|\n/g) ?? [])
+  if (endings.size > 1) return {text: value, mixed: true}
+  const ending = endings.values().next().value
+  return {text: ending && ending !== '\n' ? value.replace(/\n/g, () => ending) : value, mixed: false}
+}
+
+export interface TextLine {
   start: number
   /** 不含行尾换行符 */
   end: number
   text: string
 }
 
-function scanLines(text: string): Line[] {
-  const lines: Line[] = []
+/** 按 LF、CRLF 或 CR 切行，起点始终指向未修改的原始文本。 */
+export function scanLines(text: string): TextLine[] {
+  const lines: TextLine[] = []
+  const breaks = /\r\n|\r|\n/g
   let i = 0
   while (i < text.length) {
-    const br = text.indexOf('\n', i)
-    const end = br === -1 ? text.length : br
+    breaks.lastIndex = i
+    const br = breaks.exec(text)
+    const end = br?.index ?? text.length
     lines.push({ start: i, end, text: text.slice(i, end) })
-    i = br === -1 ? text.length : br + 1
+    i = br ? breaks.lastIndex : text.length
   }
   return lines
 }
@@ -32,7 +71,7 @@ function scanLines(text: string): Line[] {
  */
 export function splitBlocks(text: string): Block[] {
   const blocks: Block[] = []
-  let group: Line[] = []
+  let group: TextLine[] = []
   const flush = () => {
     if (group.length === 0) return
     const first = group[0]!

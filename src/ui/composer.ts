@@ -27,6 +27,8 @@ export interface ComposerCallbacks {
 export interface ComposerOptions {
   /** 批注语 textarea 的附加类（尺寸与宿主布局相关） */
   commentClass?: string
+  /** Image hosts have no text replacement operation or text-specific quick phrases. */
+  image?: boolean
 }
 
 export class ComposerForm {
@@ -88,8 +90,8 @@ export class ComposerForm {
           `<button class="chip-toggle kind-chip${this.kind === k ? ' on' : ''}" data-kind="${k}">${icon(k)} ${KIND_LABEL[k]}</button>`,
       ).join('')}</div>
       <div data-role="phrases" class="chip-scroll mb-2.5">${this.phraseChips()}</div>
-      <textarea data-role="composer-comment" class="input-base ${this.options.commentClass ?? 'min-h-20 resize-y'}" placeholder="批注内容：点选快捷语或直接输入；认可类型可不写描述……">${escapeHtml(this.comment)}</textarea>
-      <input data-role="composer-replacement" class="input-base mt-2 h-8 w-full text-[13px]" placeholder="建议替换词（可选，导出为机器可执行指令）" value="${escapeHtml(this.replacement)}" />`
+      <textarea data-role="composer-comment" class="input-base ${this.options.commentClass ?? 'min-h-20 resize-y'}" placeholder="${this.options.image ? '描述这个区域需要调整的地方；认可可不写描述……' : '批注内容：点选快捷语或直接输入；认可类型可不写描述……'}">${escapeHtml(this.comment)}</textarea>
+      ${this.options.image ? '' : `<input data-role="composer-replacement" class="input-base mt-2 h-8 w-full text-[13px]" placeholder="建议替换词（可选，导出为机器可执行指令）" value="${escapeHtml(this.replacement)}" />`}`
     this.wire()
   }
 
@@ -98,7 +100,7 @@ export class ComposerForm {
   }
 
   private phraseChips(): string {
-    return (QUICK_PHRASES[this.kind] ?? [])
+    return (this.options.image ? [] : QUICK_PHRASES[this.kind] ?? [])
       .map(
         (p) =>
           `<button class="chip-toggle phrase-chip ${hasQuickPhrase(this.comment, p) ? 'on' : ''}" data-phrase="${escapeHtml(p)}">${escapeHtml(p)}</button>`,

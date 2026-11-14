@@ -13,6 +13,7 @@ import type {
   SlopReport,
   SlopSample,
 } from './types'
+import { newId } from './identity'
 
 interface CompiledEntry {
   regex: RegExp
@@ -246,8 +247,8 @@ export function appendSample(
 
 /** 命中 → slop 候选批注（comment 自动组合类别与建议）。 */
 export function hitsToAnnotations(hits: SlopHit[], now = Date.now()): Annotation[] {
-  return hits.map((h, i) => ({
-    id: `slop-${now}-${i}`,
+  return hits.map((h) => ({
+    id: newId('slop'),
     start: h.start,
     end: h.end,
     kind: 'slop' as const,

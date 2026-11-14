@@ -1,51 +1,21 @@
 /** 编辑区渲染：把块 + 分段画成 DOM。只负责画，不持状态。 */
 
-import { buildSegments } from '../core/anchors'
 import type { DiffRow } from '../core/diff'
-import { escapeHtml, splitBlocks } from '../core/text'
-import type { Annotation, AnnotationKind } from '../core/types'
+import { splitBlocks } from '../core/text'
+import type { Annotation } from '../core/types'
 import type { MatchRange } from '../core/batch'
 import { rangeOfOffsets } from './selection-offsets'
+import { renderAnnotatedText, type TextStyleRange } from './render-text'
 
 /** 编辑原文模式下的选段过滤：批注只与同侧的行相交 */
 function annsForSide(anns: Annotation[], revised: boolean): Annotation[] {
   return anns.filter((a) => revised === (a.target === 'revised'))
 }
 
-/** 多类重叠时取优先级最高的底色 */
-const KIND_PRIORITY: AnnotationKind[] = ['slop', 'issue', 'praise', 'suggestion', 'question', 'highlight']
-
-function renderBlockContent(
-  blockText: string,
-  blockAnns: Annotation[],
-  blockStart: number,
-  searchRanges: MatchRange[] = [],
-): string {
-  const segments = buildSegments(blockStart, blockText, blockAnns, searchRanges)
-  return segments
-    .map((seg) => {
-      const html = escapeHtml(seg.text).replaceAll('\n', '<br>')
-      if (seg.annIds.length === 0) {
-        return seg.search ? `<span class="seg-search">${html}</span>` : html
-      }
-      const kinds = seg.annIds
-        .map((id) => blockAnns.find((a) => a.id === id)?.kind ?? 'issue')
-        .filter((k, i, arr) => arr.indexOf(k) === i)
-      const kind = KIND_PRIORITY.find((k) => kinds.includes(k)) ?? 'issue'
-      // 段内全部批注都失锚时才标记：部分失锚的文本仍被健康批注锚定
-      const lost =
-        seg.annIds.length > 0 &&
-        seg.annIds.every((id) => blockAnns.find((a) => a.id === id)?.anchorLost)
-      return `<span class="seg-hl k-${kind}${lost ? ' seg-lost' : ''}${seg.search ? ' seg-search' : ''}" ${
-        lost ? 'title="原引文已不在原文中，批注钉在改动处"' : ''
-      } data-ann-ids="${seg.annIds.join(' ')}">${html}</span>`
-    })
-    .join('')
-}
-
 export interface EditorCallbacks {
   onSelectionChange: (e: MouseEvent) => void
   onAnnotationClick: (id: string, rect: DOMRect) => void
+  onNewDocument: () => void
 }
 
 export interface EditModeCallbacks {
@@ -55,9 +25,11 @@ export interface EditModeCallbacks {
 
 export class EditorView {
   private root: HTMLElement
+  private onNewDocument: () => void
 
   constructor(root: HTMLElement, callbacks: EditorCallbacks) {
     this.root = root
+    this.onNewDocument = callbacks.onNewDocument
     this.root.addEventListener('mouseup', (e) => callbacks.onSelectionChange(e))
     this.root.addEventListener('keyup', (e) => {
       // Shift 方向键选词后同样唤起标注小点（锚定到选区矩形，鼠标点用选区中点近似）
@@ -85,6 +57,7 @@ export class EditorView {
     annotations: Annotation[],
     onEmptySample?: () => void,
     searchRanges: MatchRange[] = [],
+    syntax: TextStyleRange[] = [],
   ): void {
     if (text.trim() === '') {
       this.root.innerHTML = `
@@ -98,18 +71,21 @@ export class EditorView {
             「slop 预扫描」会用 anti-slop 词库自动标出套话候选。
           </p>
           <div class="mt-5 flex items-center justify-center gap-2">
-            <button class="btn btn-default btn-sm" id="btn-empty-sample">载入示例文本</button>
-            <span class="text-xs text-muted-foreground">或直接把文本粘贴进来</span>
+            <button class="btn btn-default btn-sm" id="btn-empty-paste">粘贴新建文档</button>
+            <button class="btn btn-outline btn-sm" id="btn-empty-sample">载入示例文本</button>
           </div>
+          <p class="mt-3 text-xs text-muted-foreground">也可以直接在空工作台粘贴文本</p>
         </div>`
       this.root.querySelector('#btn-empty-sample')?.addEventListener('click', () => onEmptySample?.())
+      this.root.querySelector('#btn-empty-paste')?.addEventListener('click', this.onNewDocument)
       return
     }
     const blocks = splitBlocks(text)
+    const originalAnnotations = annsForSide(annotations, false)
     const parts = blocks.map((b) => {
-      const anns = annotations.filter((a) => a.start < b.start + b.text.length && a.end > b.start)
+      const anns = originalAnnotations.filter((a) => a.start < b.start + b.text.length && a.end > b.start)
       const hits = searchRanges.filter((r) => r.start < b.start + b.text.length && r.end > b.start)
-      return `<p class="editor-blk" data-start="${b.start}">${renderBlockContent(b.text, anns, b.start, hits)}</p>`
+      return `<p class="editor-blk" data-start="${b.start}">${renderAnnotatedText(b.text, b.start, anns, hits, syntax)}</p>`
     })
     this.root.innerHTML = parts.join('')
   }
@@ -127,7 +103,7 @@ export class EditorView {
         const anns = annsForSide(annotations, true).filter(
           (a) => a.start < bStart + row.text.length && a.end > bStart,
         )
-        const inner = renderBlockContent(row.text, anns, bStart)
+        const inner = renderAnnotatedText(row.text, bStart, anns)
         return (
           `<div class="diff-row diff-add"><span class="diff-mark" aria-hidden="true">${mark}</span>` +
           `<p class="editor-blk diff-blk" data-start="${bStart}" data-side="b">${inner || '<br>'}</p></div>`
@@ -137,7 +113,7 @@ export class EditorView {
       const anns = annsForSide(annotations, false).filter(
         (a) => a.start < aStart + row.text.length && a.end > aStart,
       )
-      const inner = renderBlockContent(row.text, anns, aStart)
+      const inner = renderAnnotatedText(row.text, aStart, anns)
       return (
         `<div class="diff-row diff-${row.type}"><span class="diff-mark" aria-hidden="true">${mark}</span>` +
         `<p class="editor-blk diff-blk" data-start="${aStart}">${inner || '<br>'}</p></div>`

@@ -4,6 +4,7 @@ import { defineConfig } from '@playwright/test'
  * 复用已起的服务器（reuseExistingServer）便于本地迭代；CI 上自动拉起。 */
 export default defineConfig({
   testDir: 'e2e/specs',
+  snapshotPathTemplate: '{testDir}/{testFilePath}-snapshots/{arg}{ext}',
   timeout: 15_000,
   expect: { timeout: 5_000 },
   use: {

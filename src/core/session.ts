@@ -1,7 +1,10 @@
 /** 会话迁移：v1 单文档 → v2 多文档 → v3 回收站。纯函数。 */
 
-import type { DocItem, SessionV1, SessionV2, Workspace } from './types'
+import type { DocItem, ReviewDocument, SessionV1, Workspace } from './types'
 import { SESSION_VERSION } from './types'
+import { annotationFits } from './image'
+import { sessionSchema } from './session-schema'
+import { safeParse } from 'valibot'
 
 export function migrateV1(old: SessionV1): Workspace {
   const doc: DocItem = {
@@ -24,22 +27,41 @@ export function migrateV1(old: SessionV1): Workspace {
 /** 任意存储读数的防御性解析：合法 v3 返回，v2/v1 迁移，其余 null。 */
 export function parseWorkspace(raw: string): Workspace | null {
   try {
-    const parsed = JSON.parse(raw) as SessionV1 | SessionV2 | Workspace
-    if (
-      parsed.version === SESSION_VERSION &&
-      Array.isArray((parsed as Workspace).docs) &&
-      Array.isArray((parsed as Workspace).trash)
-    ) {
-      return parsed as Workspace
-    }
-    if (parsed.version === 2 && Array.isArray((parsed as SessionV2).docs)) {
-      return { ...(parsed as SessionV2), version: SESSION_VERSION, trash: [] }
-    }
-    if (parsed.version === 1 && typeof (parsed as SessionV1).text === 'string') {
-      return migrateV1(parsed as SessionV1)
-    }
-    return null
+    const result = safeParse(sessionSchema, JSON.parse(raw))
+    if (!result.success) return null
+    const parsed = result.output
+    const workspace = parsed.version === SESSION_VERSION ? parsed
+      : parsed.version === 2 ? {...parsed, version: SESSION_VERSION, trash: []}
+      : migrateV1(parsed)
+    if (!validWorkspace(workspace)) return null
+    if (!workspace.activeDocId && workspace.docs.length > 0) workspace.activeDocId = workspace.docs[0]!.id
+    return workspace
   } catch {
     return null
   }
+}
+
+function validWorkspace(workspace: Workspace): boolean {
+  const docIds = new Set<string>()
+  const annotationIds = new Set<string>()
+  const validDoc = (doc: ReviewDocument): boolean => {
+    if (docIds.has(doc.id)) return false
+    docIds.add(doc.id)
+    for (const ann of doc.annotations) {
+      if (!annotationFits(doc, ann) || annotationIds.has(ann.id)) return false
+      annotationIds.add(ann.id)
+    }
+    return true
+  }
+  if (!workspace.docs.every(validDoc)) return false
+  if (workspace.activeDocId && !workspace.docs.some((doc) => doc.id === workspace.activeDocId)) return false
+  for (const entry of workspace.trash) {
+    if (entry.type === 'doc') {
+      if (!validDoc(entry.doc)) return false
+    } else {
+      if (annotationIds.has(entry.annotation.id)) return false
+      annotationIds.add(entry.annotation.id)
+    }
+  }
+  return true
 }
