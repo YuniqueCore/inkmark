@@ -16,3 +16,15 @@ export function availableId(id: string, used: ReadonlySet<string>): string {
   while (used.has(`${id}-${index}`)) index++
   return `${id}-${index}`
 }
+
+/** Same external identity in a different document becomes a stable, independently owned entity. */
+export function importedAnnotationId(id: string, documentId: string, occupied: ReadonlySet<string>, owned: ReadonlySet<string> = new Set()): string {
+  if (owned.has(id)) return id
+  const scoped = stableId('ann', [documentId, id])
+  // A previous collision may have disappeared from another document or expired from trash.
+  // Retain the identity already owned here, including a suffix allocated for a secondary collision.
+  for (const existing of owned) {
+    if (existing === scoped || (existing.startsWith(`${scoped}-`) && /^[1-9]\d*$/.test(existing.slice(scoped.length + 1)))) return existing
+  }
+  return occupied.has(id) ? availableId(scoped, occupied) : id
+}

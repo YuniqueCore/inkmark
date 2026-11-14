@@ -3,6 +3,7 @@
 import { escapeHtml } from '../core/text'
 import { icon } from './icons'
 import type { ReviewDocument } from '../core/types'
+import { captureKeyedFocus } from './keyed-focus'
 
 export interface FileTreeCallbacks {
   onOpen: (id: string) => void
@@ -43,17 +44,18 @@ export class FileTreeView {
   }
 
   render(docs: ReviewDocument[], activeDocId: string): void {
+    const restoreFocus = captureKeyedFocus(this.root)
     this.lastDocs = docs
     this.lastActiveId = activeDocId
+    const existing = new Set(docs.map((d) => d.id))
+    for (const id of this.selected) if (!existing.has(id)) this.selected.delete(id)
     if (docs.length === 0) {
       this.root.innerHTML = `
         <div class="px-3 py-6 text-center text-xs leading-relaxed text-muted-foreground">
-          还没有文档。<br>用顶栏「打开文件」导入 .txt / .md，<br>或整个文件夹。
+          还没有文档。<br>打开文本、Markdown、图片或文件夹，<br>也可以直接粘贴图片。
         </div>`
       return
     }
-    const existing = new Set(docs.map((d) => d.id))
-    for (const id of this.selected) if (!existing.has(id)) this.selected.delete(id)
     const tree = buildTree(docs)
     this.root.innerHTML = `
       <div class="px-2 py-1.5">
@@ -68,6 +70,7 @@ export class FileTreeView {
         ${this.renderNodes(tree.children, '', activeDocId)}
       </div>`
     this.bindEvents()
+    restoreFocus()
   }
 
   private renderBulkBar(): string {
@@ -104,12 +107,12 @@ export class FileTreeView {
         const active = doc.id === activeDocId
         return `
           <div class="tree-row group ${active ? 'bg-secondary text-secondary-foreground' : ''}" data-doc="${doc.id}" role="button" tabindex="0">
-            <input type="checkbox" data-select="${doc.id}" class="size-3 shrink-0 accent-[var(--primary)]" ${this.selected.has(doc.id) ? 'checked' : ''}/>
+            <input type="checkbox" data-select="${doc.id}" aria-label="选中 ${escapeHtml(doc.name)}" class="size-3 shrink-0 accent-[var(--primary)]" ${this.selected.has(doc.id) ? 'checked' : ''}/>
             ${icon('file', 'size-3.5 shrink-0 text-muted-foreground/80')}
             <span class="truncate flex-1">${escapeHtml(n.name)}</span>
             ${count > 0 ? `<span class="badge h-4 bg-secondary px-1 text-[10px] text-secondary-foreground">${count}</span>` : ''}
-            <button class="tree-export opacity-0 transition-opacity group-hover:opacity-100" data-export="${doc.id}" title="导出该文档批注">${icon('download', 'size-3')}</button>
-            <button class="tree-remove opacity-0 transition-opacity group-hover:opacity-100" data-remove="${doc.id}" title="移除文档">${icon('x', 'size-3')}</button>
+            <button class="tree-export opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100" data-export="${doc.id}" title="导出该文档批注">${icon('download', 'size-3')}</button>
+            <button class="tree-remove opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100" data-remove="${doc.id}" title="移除文档">${icon('x', 'size-3')}</button>
           </div>`
       })
       .join('')
@@ -159,7 +162,10 @@ export class FileTreeView {
       const id = (row as HTMLElement).dataset.doc!
       row.addEventListener('click', () => this.callbacks.onOpen(id))
       row.addEventListener('keydown', (e) => {
-        if ((e as KeyboardEvent).key === 'Enter') this.callbacks.onOpen(id)
+        if (e.target === row && ['Enter', ' '].includes((e as KeyboardEvent).key)) {
+          e.preventDefault()
+          this.callbacks.onOpen(id)
+        }
       })
     })
     this.root.querySelectorAll('[data-export]').forEach((btn) => {

@@ -1,10 +1,9 @@
 /** 文件导入管线：分类（文本 / 会话 JSON / W3C JSON）→ 解析 → 聚合结果。
  * 纯数据管线：无 DOM、不持有应用状态（文件读取是输入边界），主进程按结果应用。
  *
- * W3C 路由语义：inkmark 导出的 target.source 带 urn:inkmark:doc:<docId>，
- * 条目按 source 分发回各自的文档重锚；无 inkmark 来源（外部标注工具）或
- * 来源文档已不在工作区的条目回落到当前文档。锚定以「导入开始时的工作区
- * 快照」为准，避免隐式的顺序耦合。
+ * W3C 路由语义：本地 target.source 明确指定文档身份；缺失或多个候选时拒绝匹配。
+ * 同批会话先解析，再以全部候选路由，输入文件顺序不影响归属。
+ * 只有外部无本地身份的条目才使用调用方明确提供的当前文档。
  */
 
 import { collectW3CItems, fromImageW3C, fromW3C, parseW3CSource } from './w3c'
@@ -12,7 +11,7 @@ import { parseWorkspace } from './session'
 import type { DocItem, ReviewDocument, ReviewAnnotation } from './types'
 import type { TrashEntry } from './types'
 import { uniqueDocumentName } from './import-conflict'
-import { newId } from './identity'
+import { newId, importedAnnotationId } from './identity'
 import { isImageDocument } from './types'
 import { remapAnnotationIds } from './document'
 
@@ -27,7 +26,7 @@ export interface ImportContext {
 }
 
 export interface W3CRouted {
-  /** 目标文档 id；null = 回落到当前文档 */
+  /** 已确定的目标文档 id；null = 外部来源且没有可用目标 */
   docId: string | null
   annotations: ReviewAnnotation[]
   /** 该组锚不上被跳过的条数 */
@@ -47,6 +46,8 @@ export interface ImportOutcome {
   skipped: number
   /** 超限被截断的文本文件数 */
   truncated: number
+  /** Merge import only includes live documents; complete recovery is a separate command. */
+  omittedTrash: number
 }
 
 export function newDocId(): string {
@@ -68,8 +69,7 @@ export function prepareSessionDocs(incoming: ReviewDocument[], existing: ReviewD
     docIds.add(id)
     const name = uniqueDocumentName(doc.name, doc.path, docs)
     const mapped = remapAnnotationIds(doc, (oldId) => {
-      let annId = oldId
-      while (annIds.has(annId)) annId = `ann-${newDocId()}`
+      const annId = importedAnnotationId(oldId, id, annIds)
       annIds.add(annId)
       return annId
     })
@@ -91,12 +91,13 @@ export async function importFileList(
     w3cRouted: [],
     skipped: 0,
     truncated: 0,
+    omittedTrash: 0,
   }
+  const annotationFiles: File[] = []
   for (const file of Array.from(files)) {
     if (file.name.endsWith('.json')) {
       if (await trySessionFile(file, outcome)) continue
-      if (await tryW3CFile(file, ctx, outcome)) continue
-      outcome.skipped++
+      annotationFiles.push(file)
       continue
     }
     if (!TEXT_SUFFIX.test(file.name)) {
@@ -122,6 +123,7 @@ export async function importFileList(
       addedAt: Date.now(),
     })
   }
+  for (const file of annotationFiles) if (!await tryW3CFile(file, ctx, outcome)) outcome.skipped++
   return outcome
 }
 
@@ -131,6 +133,7 @@ async function trySessionFile(file: File, outcome: ImportOutcome): Promise<boole
     const ws = parseWorkspace(await file.text())
     if (!ws) return false
     outcome.sessionDocs.push(...ws.docs)
+    outcome.omittedTrash += ws.trash.length
     return true
   } catch {
     return false
@@ -149,25 +152,27 @@ async function tryW3CFile(file: File, ctx: ImportContext, outcome: ImportOutcome
   if (items.length === 0) return false
   outcome.w3cFiles++
 
-  // 按 source 文档分组：来源在工作区 → 该文档；否则 null → 当前文档回落
+  const candidates = [...ctx.docs, ...outcome.sessionDocs]
+  // Explicit local identity is authoritative. Multiple candidates are ambiguous, never a fallback.
   const groups = new Map<string | null, unknown[]>()
   for (const item of items) {
     const source = (item as {target?: {source?: unknown}} | null)?.target?.source
     const { docId } = parseW3CSource(source)
-    const key = docId && ctx.docs.some((d) => d.id === docId) ? docId : null
+    const key = docId
     const list = groups.get(key) ?? []
     list.push(item)
     groups.set(key, list)
   }
   for (const [docId, groupItems] of groups) {
-    const target = docId ? ctx.docs.find((d) => d.id === docId)! : ctx.currentDoc
+    const matches = candidates.filter((d) => d.id === docId)
+    const target = docId ? (matches.length === 1 ? matches[0] : undefined) : ctx.currentDoc
     if (!target) {
       // 无处可锚（无当前文档的回落组）：条目计入未匹配
       outcome.w3cRouted.push({ docId, annotations: [], unmatched: groupItems.length })
       continue
     }
     const result = isImageDocument(target) ? fromImageW3C(groupItems, target) : fromW3C(groupItems, target.text, { revisedText: target.revised, identityScope: target.id })
-    outcome.w3cRouted.push({ docId, annotations: result.annotations, unmatched: result.unmatched })
+    outcome.w3cRouted.push({ docId: target.id, annotations: result.annotations, unmatched: result.unmatched })
   }
   return true
 }

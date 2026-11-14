@@ -38,14 +38,14 @@ import { toast } from './ui/toast'
 import { rectOfAnnotation, resolveSelection } from './ui/selection-offsets'
 import { SAMPLE_TEXT } from './ui/sample'
 import { SESSION_VERSION } from './core/types'
-import { loadWorkspace, replaceWorkspace, unreadableWorkspaceData } from './ui/storage'
-import { availableId, newId, stableId } from './core/identity'
+import { loadWorkspace, replaceWorkspace, unreadableWorkspaceData, legacyWorkspaceData } from './ui/storage'
+import { importedAnnotationId, newId } from './core/identity'
 import { MarkdownPreviewView, resolvePreviewSelection } from './ui/markdown-preview'
 import { markdownSyntaxRanges } from './ui/markdown-syntax'
 import type { TextStyleRange } from './ui/render-text'
 import { isImageDocument, isTextDocument, isRegionAnnotation } from './core/types'
 import { annotationFits } from './core/image'
-import { appendAnnotations, patchAnnotationBodies } from './core/document'
+import { appendAnnotations, filterAnnotations, patchAnnotationBodies } from './core/document'
 import { presentAnnotations } from './ui/annotation-presentation'
 import { ImageView } from './ui/image-view'
 import { readRaster, verifyRaster } from './ui/image-input'
@@ -206,6 +206,10 @@ const deleteAnnotation = (ids: string[]): void => {
       ...(lostCount > 0 ? { altText: `标记为已解决（${lostCount}）` } : {}),
     })
     if (choice === 'cancel') return
+    if (!doc || activeItem() !== doc || document.body.inert) {
+      toast('文档在操作期间发生变化，请重新确认删除')
+      return
+    }
     if (choice === 'alt') {
       // 引导路径：不删除，把所选批注全部归档为已解决
       const altSet = new Set(ids)
@@ -213,7 +217,6 @@ const deleteAnnotation = (ids: string[]): void => {
       toast(`已将 ${ids.length} 条批注标记为已解决`)
       return
     }
-    if (!doc) return
     const idSet = new Set(ids)
     const { doc: nextDoc, trashed } = trashFromDoc(doc, idSet, Date.now())
     state = {
@@ -398,6 +401,14 @@ const sidebar = new SidebarView(sidebarEl, {
     sidebar.setActive(a.id)
   },
   onDelete: deleteAnnotation,
+  onExport: (ids) => {
+    if (!canLeaveEdit()) return
+    const doc = activeItem()
+    if (!doc) return
+    const selected = new Set(ids)
+    const scoped = filterAnnotations(doc, (a) => selected.has(a.id))
+    if (scoped.annotations.length > 0) exporter.open([scoped], {includeResolved: true})
+  },
   onToggleStatus: toggleAnnotationStatus,
   onFilterChange: (f) => {
     sidebar.setFilter(f)
@@ -450,7 +461,7 @@ const exporter = new ExporterView($('#export-modal'), $('#overlay'), {
     void navigator.clipboard.writeText(content).then(() => toast('已复制到剪贴板'))
   },
   onClose: () => {},
-  onImportW3C: (file) => void importW3CFile(file),
+  onImportW3C: (file, fallbackDocId) => importW3CFile(file, fallbackDocId),
 })
 
 // ---------------------------------------------------------------- 工作区操作
@@ -492,6 +503,10 @@ function mutateActive(fn: (doc: DocItem) => DocItem): void {
 }
 
 function canLeaveEdit(): boolean {
+  if (document.body.inert) {
+    toast('正在恢复工作区，请完成后重新操作')
+    return false
+  }
   if (!ready) { toast('工作区正在载入，请稍候'); return false }
   if (imageView.hasDraft()) { toast('请先保存或取消当前区域批注'); return false }
   imageView.flushGeometry()
@@ -554,6 +569,10 @@ async function removeDoc(id: string): Promise<void> {
     danger: true,
   })
   if (!ok) return
+  if (state.docs.find((d) => d.id === id) !== doc || document.body.inert) {
+    toast('文档在操作期间发生变化，请重新确认删除')
+    return
+  }
   await removeDocsConfirmed([id])
   toast(`已移除 ${doc.name}，可在回收站恢复`)
 }
@@ -575,6 +594,10 @@ async function removeDocs(ids: string[]): Promise<void> {
     danger: true,
   })
   if (!ok) return
+  if (docs.some((doc) => state.docs.find((d) => d.id === doc.id) !== doc) || document.body.inert) {
+    toast('文档在操作期间发生变化，请重新确认删除')
+    return
+  }
   await removeDocsConfirmed(ids)
   toast(`已移除 ${docs.length} 个文档`)
 }
@@ -1053,7 +1076,10 @@ async function importFiles(inputFiles: FileList | File[]): Promise<void> {
     return
   }
 
-  const applied = applyW3C(r.w3cRouted)
+  // Existing-document imports join the same overwrite/reanchor operation. New documents
+  // receive their anchors after identity allocation, without changing the input-order contract.
+  const existingIds = new Set(state.docs.map((doc) => doc.id))
+  const applied = applyW3C(r.w3cRouted.filter((route) => route.docId === null || existingIds.has(route.docId)))
   const sessionDocs = prepareSessionDocs(r.sessionDocs, [...state.docs, ...imageDocs, ...fresh], state.trash)
   const newDocs = [...imageDocs, ...fresh, ...sessionDocs]
   if (overwrites.size > 0 || newDocs.length > 0) {
@@ -1078,17 +1104,20 @@ async function importFiles(inputFiles: FileList | File[]): Promise<void> {
       trash: state.trash,
     }
   }
+  const incomingApplied = applyW3C(r.w3cRouted.filter((route) => route.docId !== null && !existingIds.has(route.docId)))
+  applied.merged += incomingApplied.merged
+  applied.unmatched += incomingApplied.unmatched
+  applied.routed += incomingApplied.routed
   if (applied.merged > 0 || newDocs.length > 0 || overwrites.size > 0) rerender(false)
-  if (applied.merged > 0 || applied.unmatched > 0) {
-    toast(w3cToast(applied.merged, applied.unmatched, applied.routed))
-  } else if (r.w3cFiles > 0 && newDocs.length === 0 && overwrites.size === 0) {
+  const parts: string[] = []
+  if (applied.merged > 0 || applied.unmatched > 0) parts.push(w3cToast(applied.merged, applied.unmatched, applied.routed))
+  else if (r.w3cFiles > 0 && newDocs.length === 0 && overwrites.size === 0) {
     toast('这些批注已导入')
   } else if (newDocs.length === 0 && overwrites.size === 0 && r.w3cFiles === 0) {
     if (imageErrors.length === 0) toast(r.skipped > 0 ? `没有可导入的文本文件（跳过 ${r.skipped} 个）` : '没有可导入的文件')
   }
   if (newDocs.length > 0 || overwrites.size > 0) {
     const action = (a: string): number => rows.filter((row) => row.action === a).length
-    const parts: string[] = []
     if (imageErrors.length) parts.push(`${imageErrors.length} 张图片导入失败`)
     if (imageDocs.length) parts.push(`导入 ${imageDocs.length} 张图片`)
     const imported = action('direct') + action('rename')
@@ -1102,16 +1131,17 @@ async function importFiles(inputFiles: FileList | File[]): Promise<void> {
     if (action('identical') > 0) parts.push(`${action('identical')} 个内容相同已跳过`)
     if (r.skipped > 0) parts.push(`跳过 ${r.skipped}`)
     if (r.truncated > 0) parts.push(`${r.truncated} 个超大文件已截断`)
-    toast(parts.join('，'))
   }
+  if (r.omittedTrash > 0) parts.push(`${r.omittedTrash} 项回收站记录未合并；请用更多菜单中的「恢复完整工作区」恢复全部数据`)
+  if (parts.length > 0) toast(parts.join('，'))
 }
 
 /** 导出弹层的 W3C 导入入口：单文件按来源分发 */
-async function importW3CFile(file: File): Promise<void> {
+async function importW3CFile(file: File, fallbackDocId: string | null): Promise<void> {
   if (!canLeaveEdit()) return
   const initialDocs = state.docs
   const initialActiveId = state.activeDocId
-  const r = await readImport([file], { docs: state.docs, currentDoc: activeItem() })
+  const r = await readImport([file], { docs: state.docs, currentDoc: state.docs.find((doc) => doc.id === fallbackDocId) })
   if (!r) return
   if (state.docs !== initialDocs || state.activeDocId !== initialActiveId || !canLeaveEdit()) {
     toast('工作区在导入期间发生变化，请重新导入')
@@ -1134,7 +1164,8 @@ async function importW3CFile(file: File): Promise<void> {
 function applyW3C(routed: W3CRouted[]): { merged: number; unmatched: number; routed: number } {
   if (routed.length === 0) return { merged: 0, unmatched: 0, routed: 0 }
   let merged = 0
-  let unmatched = routed.filter((g) => g.docId === null && !activeItem()).reduce((count, g) => count + g.unmatched, 0)
+  const unmatched = routed.reduce((count, g) => count + g.unmatched +
+    (g.docId !== null && !state.docs.some((d) => d.id === g.docId) ? g.annotations.length : 0), 0)
   let routedDocs = 0
   const usedIds = new Set([
     ...state.docs.flatMap((d) => d.annotations.map((a) => a.id)),
@@ -1144,20 +1175,19 @@ function applyW3C(routed: W3CRouted[]): { merged: number; unmatched: number; rou
     ...state,
     docs: state.docs.map((d) => {
       const groups = routed.filter(
-        (g) => g.docId === d.id || (g.docId === null && d.id === state.activeDocId),
+        (g) => g.docId === d.id,
       )
       if (groups.length === 0) return d
       const ids = new Set(d.annotations.map((a) => a.id))
+      const occupiedElsewhere = new Set([...usedIds].filter((id) => !ids.has(id)))
       const anns = groups.flatMap((g) => g.annotations).flatMap((a) => {
         if (ids.has(a.id)) return []
-        const scoped = usedIds.has(a.id) ? stableId('w3c', [d.id, a.id]) : a.id
-        if (ids.has(scoped)) return []
-        const id = availableId(scoped, usedIds)
+        const id = importedAnnotationId(a.id, d.id, occupiedElsewhere, ids)
+        if (ids.has(id)) return []
         ids.add(id)
         usedIds.add(id)
         return [id === a.id ? a : {...a, id}]
       })
-      unmatched += groups.reduce((a, g) => a + g.unmatched, 0)
       merged += anns.length
       routedDocs +=
         anns.length > 0 && groups.some((g) => g.docId !== null && g.docId !== state.activeDocId) ? 1 : 0
@@ -1254,7 +1284,7 @@ function maybeExport(): void {
   if (!canLeaveEdit()) return
   const doc = activeItem()
   if (!doc || doc.annotations.length === 0) {
-    toast('当前文档还没有批注：划选正文文字，或运行 slop 预扫描')
+    toast(doc && isImageDocument(doc) ? '当前图片还没有批注：框选区域或使用坐标批注' : '当前文档还没有批注：划选正文文字，或运行 slop 预扫描')
     return
   }
   exporter.open([doc])
@@ -1404,6 +1434,16 @@ wireHeaderMenu($('#btn-more'), [
 $('#btn-search').addEventListener('click', () => openSearch())
 $('#btn-trash').addEventListener('click', () => openTrash())
 $('#btn-recovery-backup').addEventListener('click', downloadRecoveryBackup)
+function renderLegacyRecovery(): void {
+  $('#legacy-recovery').hidden = legacyWorkspaceData() === null
+}
+$('#btn-legacy-backup').addEventListener('click', () => {
+  const raw = legacyWorkspaceData()
+  if (raw !== null) downloadJson(raw, 'inkmark-legacy-workspace.json')
+  renderLegacyRecovery()
+})
+window.addEventListener('storage', renderLegacyRecovery)
+window.addEventListener('focus', renderLegacyRecovery)
 $('#workspace-input').addEventListener('change', (event) => {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
@@ -1502,6 +1542,7 @@ function openSearch(): void {
 async function bootstrap(): Promise<void> {
   applyPrefs(prefs) // 首渲染前应用阅读偏好（防闪烁脚本已先行设置主题，这里补齐其余维度）
   state = await loadWorkspace()
+  renderLegacyRecovery()
   ready = true
   save.initialize()
   rerender(false)

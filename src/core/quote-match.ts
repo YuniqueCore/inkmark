@@ -34,6 +34,16 @@ export interface QuoteAnchor {
   via: 'exact' | 'fuzzy'
 }
 
+/** Exact context with one possible destination; destructive recovery must not guess among ties. */
+export function anchorUniqueQuote(text: string, quote: Required<TextQuote>): {start: number; end: number} | null {
+  if (!quote.exact || (!quote.prefix && !quote.suffix)) return null
+  const context = quote.prefix + quote.exact + quote.suffix
+  const at = text.indexOf(context)
+  if (at < 0 || text.indexOf(context, at + 1) >= 0) return null
+  const start = at + quote.prefix.length
+  return {start, end: start + quote.exact.length}
+}
+
 const WEIGHT = {quote: 50, prefix: 20, suffix: 20, pos: 2} as const
 const MAX_SCORE = WEIGHT.quote + WEIGHT.prefix + WEIGHT.suffix + WEIGHT.pos
 const MAX_ERRORS_CAP = 256

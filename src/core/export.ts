@@ -191,29 +191,3 @@ export function zipEntryNames(
     return n === 1 ? stem : stem.replace(/(\.(?:md|json))$/, `-${n}$1`)
   })
 }
-
-/** 多文档合并导出的最小文档形状 */
-export interface ExportableDoc {
-  name: string
-  text: string
-  annotations: Annotation[]
-  revised?: string
-}
-
-/** 多文档合并导出：每份文档一节，节首强制「文件：{name}」（合并输出里文件信息
- * 是区分出处的唯一线索，不随开关关闭），节间以水平线分隔。 */
-export function exportCombined(
-  format: ExportFormat,
-  docs: ExportableDoc[],
-  opts: ExportOptions = {},
-): string {
-  return docs
-    .map((d) =>
-      exportAs(format, d.text, d.annotations, {
-        ...opts,
-        fileName: d.name,
-        revisedText: d.revised,
-      }),
-    )
-    .join('\n\n---\n\n')
-}

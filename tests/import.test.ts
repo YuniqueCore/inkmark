@@ -30,6 +30,17 @@ const file = (name: string, content: string): File =>
   new File([content], name, { type: 'text/plain' })
 
 describe('importFileList · 文本文件', () => {
+  it('routes a same-batch backup before or after its W3C file, refusing ambiguous identities', async () => {
+    const incoming = docWithAnn('incoming', 'Shared phrase for review')
+    const backup = file('backup.json', JSON.stringify({version: 3, docs: [{...incoming, annotations: []}], activeDocId: incoming.id, trash: [], savedAt: 1}))
+    const annotation = file('annotations.json', JSON.stringify(toW3C(incoming)))
+    for (const files of [[backup, annotation], [annotation, backup]]) {
+      const imported = await importFileList(files, {docs: []})
+      expect(imported.w3cRouted).toMatchObject([{docId: incoming.id, unmatched: 0, annotations: [{comment: '问题'}]}])
+      const ambiguous = await importFileList(files, {docs: [incoming], currentDoc: incoming})
+      expect(ambiguous.w3cRouted).toEqual([{docId: incoming.id, annotations: [], unmatched: 1}])
+    }
+  })
   it('txt/md 构建新文档；路径取自 webkitRelativePath；json 与未知扩展跳过', async () => {
     const root = file('a.txt', '第一份内容。')
     Object.defineProperty(root, 'webkitRelativePath', { value: 'docs/sub/a.txt' })
@@ -85,16 +96,17 @@ describe('importFileList · 会话与 W3C JSON', () => {
     expect(gb.unmatched).toBe(0)
   })
 
-  it('来源文档不在工作区 → 回落当前文档重锚', async () => {
+  it('明确来源文档不在工作区 → 拒绝向相同文字的当前文档错投', async () => {
     const cur = docWithAnn('doc-cur', '当前文档的正文内容。')
-    const gone = docWithAnn('doc-gone', cur.text) // 引文与当前文档一致，回落可锚上
+    const gone = docWithAnn('doc-gone', cur.text) // 相同引文不能替代文档身份
     const items = JSON.parse(JSON.stringify(toW3C(gone))) as Array<{
       target: { source: string }
     }>
     for (const it of items) it.target.source = 'urn:inkmark:doc:doc-gone'
     const r = await importFileList([file('x.json', JSON.stringify(items))], { docs: [cur], currentDoc: cur })
-    const fallback = r.w3cRouted.find((g) => g.docId === null)!
-    expect(fallback.annotations).toHaveLength(1)
+    const fallback = r.w3cRouted.find((g) => g.docId === 'doc-gone')!
+    expect(fallback.annotations).toHaveLength(0)
+    expect(fallback.unmatched).toBe(1)
   })
 
   it('无当前文档且来源未知 → 计入未匹配', async () => {
@@ -110,8 +122,8 @@ describe('importFileList · 会话与 W3C JSON', () => {
   it('引文锚不上目标文档 → 该组 unmatched 计数，skipped 不变', async () => {
     const other = docWithAnn('doc-x', '完全不同的另一篇文章。')
     const r = await importFileList([file('x.json', JSON.stringify(toW3C(other)))], { docs: [doc()], currentDoc: doc() })
-    // doc-x 不在工作区 → 回落当前文档；引文对不上 → unmatched
-    expect(r.w3cRouted[0]!.docId).toBeNull()
+    // 明确本地来源缺失，不使用当前文档作为回落目标
+    expect(r.w3cRouted[0]!.docId).toBe('doc-x')
     expect(r.w3cRouted[0]!.annotations).toHaveLength(0)
     expect(r.w3cRouted[0]!.unmatched).toBe(1)
     expect(r.skipped).toBe(0)

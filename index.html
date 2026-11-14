@@ -25,8 +25,8 @@
       })()
     </script>
   </head>
-  <body class="h-full overflow-hidden">
-    <header class="sticky top-0 z-20 border-b bg-card/80 backdrop-blur-md">
+  <body class="flex h-dvh flex-col overflow-hidden">
+    <header class="sticky top-0 z-20 shrink-0 border-b bg-card/80 backdrop-blur-md">
       <div class="flex h-14 items-center justify-between gap-2 px-2 sm:gap-3 sm:px-4">
         <div class="flex items-center gap-1.5">
           <button id="btn-tree-drawer" class="btn btn-ghost btn-sm lg:hidden" title="文档树抽屉" aria-label="文档树抽屉">
@@ -41,7 +41,7 @@
         </div>
         <div class="flex items-center gap-1.5">
           <span id="save-status" class="mr-1 flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground max-[399px]:hidden" title="自动保存到本地浏览器" role="status" aria-live="polite">
-            <span id="save-dot" class="size-1.5 rounded-full bg-emerald-500"></span><span id="save-text" class="hidden sm:inline">已保存</span>
+            <span id="save-dot" class="size-1.5 rounded-full bg-emerald-500"></span><span id="save-text" class="hidden sm:inline">正在载入</span>
           </span>
           <button id="btn-import" class="btn btn-ghost btn-sm" title="导入：打开文件 / 导入文件夹 / 载入示例" aria-haspopup="menu" aria-expanded="false">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
@@ -104,7 +104,11 @@
       </div>
     </header>
 
-    <main id="layout" class="flex h-[calc(100vh-57px)] h-[calc(100dvh-57px)] overflow-hidden">
+    <div id="legacy-recovery" class="flex shrink-0 flex-wrap items-center gap-2 border-b bg-muted px-4 py-2 text-xs text-muted-foreground" role="status" hidden>
+      <span class="flex-1">旧版工作区数据已保留。请关闭旧标签页；下载后可用「打开文件」合并文档，或从更多菜单恢复完整工作区。</span>
+      <button id="btn-legacy-backup" type="button" class="btn btn-outline btn-sm">下载旧版数据</button>
+    </div>
+    <main id="layout" class="flex min-h-0 flex-1 overflow-hidden">
       <aside id="filetree" class="theme-side shrink-0 overflow-y-auto py-2" style="width: var(--tree-w, 240px)" aria-label="文档树"></aside>
       <div id="handle-left" class="resize-handle shrink-0 max-lg:hidden" role="separator" aria-orientation="vertical"></div>
       <div id="editor-wrap" class="relative min-w-0 flex-1">

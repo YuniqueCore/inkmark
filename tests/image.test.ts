@@ -4,6 +4,8 @@ import { fromImageW3C, fromW3C, toW3C } from '../src/core/w3c'
 import { parseWorkspace } from '../src/core/session'
 import { entryKey, restoreFromTrash, trashFromDoc } from '../src/core/trash'
 import { prepareSessionDocs } from '../src/core/import'
+import { buildReviewExport } from '../src/core/review-export'
+import { filterAnnotations } from '../src/core/document'
 import { presentAnnotations } from '../src/ui/annotation-presentation'
 import type { Annotation, DocItem, ImageDocument, RegionAnnotation } from '../src/core/types'
 
@@ -15,6 +17,26 @@ const text: DocItem = {id: 'text-one', name: 'note.md', path: '', text: 'alpha b
 const session = (docs: unknown[], trash: unknown[] = []) => JSON.stringify({version: 3, docs, activeDocId: (docs[0] as {id: string} | undefined)?.id ?? '', trash, savedAt: 2})
 
 describe('image review primitives and portable boundaries', () => {
+  it('builds mixed review artifacts with one selection scope and a single importable W3C JSON', () => {
+    const resolved = {...region, id: 'resolved', status: 'resolved' as const, comment: 'Resolved private opinion'}
+    const docs = [text, {...image, annotations: [region, resolved]}]
+    const options = {date: new Date('2026-11-14T00:00:00Z')}
+    const review = buildReviewExport(docs, 'review', options)
+    expect(review.kind).toBe('bundle')
+    if (review.kind !== 'bundle') throw new Error('Expected portable image review')
+    expect(review.preview).toMatchSnapshot()
+    expect(review.preview).not.toContain(resolved.comment)
+    const backup = parseWorkspace(review.entries['inkmark-documents.json'] as string)!
+    expect(backup.docs.map((d) => d.annotations.length)).toEqual([1, 1])
+    expect(backup.docs[1]).toMatchObject({image: image.image})
+    const selected = filterAnnotations(docs[1]!, (a) => a.id === resolved.id)
+    const w3c = buildReviewExport([text, selected], 'w3c', {...options, includeResolved: true})
+    expect(w3c).toMatchObject({kind: 'file', name: '批注-w3c-2文档-2026-11-14.json', mediaType: 'application/json;charset=utf-8'})
+    expect(JSON.parse(w3c.preview)).toHaveLength(2)
+    expect(w3c.preview).toContain(resolved.comment)
+    expect(w3c.preview).not.toContain(region.comment)
+    expect(docs[1]!.annotations).toHaveLength(2)
+  })
   it('keeps pixels, annotation bodies and selectors separate across storage, presentation and W3C', () => {
     expect(parseWorkspace(session([text, image]))?.docs).toEqual([text, image])
     expect(presentAnnotations(image)[0]).toMatchObject({excerpt: '区域 (0, 0) · 1 × 1 px', order: 0, comment: 'Increase contrast'})
@@ -81,6 +103,10 @@ describe('trash target identity and workspace integrity', () => {
     expect(relocated.docs[0]?.annotations[0]).toMatchObject({start: 13, end: 17})
     expect(restoreFromTrash(deleted.trashed.map((t) => ({...t, targetIdentity: undefined, textQuote: undefined})), [text], selection)).toMatchObject({restored: 0, stranded: 1})
     expect(restoreFromTrash(deleted.trashed, [{...text, text: 'unrelated beta', annotations: []}], selection)).toMatchObject({restored: 0, stranded: 1})
+    const passage = 'a'.repeat(40) + 'TARGET' + 'b'.repeat(40)
+    const repeated = {...text, text: `${passage}\n${passage}`, annotations: [{...textAnn, start: passage.length + 41, end: passage.length + 47}]}
+    const ambiguous = trashFromDoc(repeated, new Set([textAnn.id]), 3)
+    expect(restoreFromTrash(ambiguous.trashed, [{...repeated, annotations: [], text: `${repeated.text} extra`}], selection)).toMatchObject({restored: 0, stranded: 1})
     const revised = trashFromDoc({...text, revised: text.text, annotations: [{...textAnn, target: 'revised'}]}, new Set([textAnn.id]), 3)
     expect(restoreFromTrash(revised.trashed, [{...text, annotations: []}], selection)).toMatchObject({restored: 0, stranded: 1})
   })

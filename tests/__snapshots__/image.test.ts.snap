@@ -1,5 +1,27 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`image review primitives and portable boundaries > builds mixed review artifacts with one selection scope and a single importable W3C JSON 1`] = `
+"文件：note.md
+
+批注反馈（共 1 条）：
+> 原文 @6-10：beta
+> [?] 批注①（疑问）：Why?
+
+---
+
+# screen.png
+
+![原图](image-2.png)
+
+原图尺寸：1 × 1 px。坐标原点在左上角，区域为 x, y, width, height。
+
+## 1. 建议
+
+区域：(0, 0, 1, 1) px
+
+Increase contrast"
+`;
+
 exports[`image review primitives and portable boundaries > keeps pixels, annotation bodies and selectors separate across storage, presentation and W3C 1`] = `
 [
   {

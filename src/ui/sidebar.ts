@@ -11,6 +11,7 @@ import { ALL_KINDS, KIND_LABEL, MANUAL_KINDS } from '../core/types'
 import type { AnnotationBody, AnnotationKind } from '../core/types'
 import { escapeHtml } from '../core/text'
 import { icon } from './icons'
+import { captureKeyedFocus } from './keyed-focus'
 
 export type StatusFilter = 'all' | 'open' | 'resolved'
 
@@ -18,6 +19,7 @@ export interface SidebarCallbacks {
   onFocus: (id: string) => void
   onEdit: (a: Annotation) => void
   onDelete: (ids: string[]) => void
+  onExport: (ids: string[]) => void
   onToggleStatus: (ids: string[]) => void
   onFilterChange: (filter: StatusFilter) => void
   onKindFilterChange: (kinds: Set<AnnotationKind>) => void
@@ -27,7 +29,7 @@ export interface SidebarCallbacks {
 }
 
 export interface SidebarRenderOptions {
-  /** AI 改稿全文：改稿侧批注（target === 'revised'）的摘录来源 */
+  /** Content-specific guidance; shared actions use annotation identity only. */
   image?: boolean
   /** 最近一次 slop 扫描报告（当前文档）：有则展示评分统计卡 */
   slop?: SlopReport | null
@@ -109,11 +111,12 @@ export class SidebarView {
   }
 
   render(annotations: Annotation[], opts: SidebarRenderOptions = {}): void {
+    const restoreFocus = captureKeyedFocus(this.root)
     this.lastArgs = { annotations, opts }
     const open = annotations.filter((a) => a.status === 'open').length
     const shown = this.visibleOf(annotations)
-    // 选中集合剪除已不存在的批注（删除/重锚 id 不变，删除才失效）
-    const existing = new Set(annotations.map((a) => a.id))
+    // 选中范围仅包含当前可见批注，筛选后不会误操作隐藏的内容
+    const existing = new Set(shown.map((a) => a.id))
     for (const id of this.selected) if (!existing.has(id)) this.selected.delete(id)
     const selectedAnns = annotations.filter((a) => this.selected.has(a.id))
     const selectedAnyOpen = selectedAnns.some((a) => a.status === 'open')
@@ -162,9 +165,9 @@ export class SidebarView {
       annotations.length === 0
         ? ''
         : `
-      <div class="mb-2 flex items-center gap-1.5 rounded-lg border bg-muted/40 px-2 py-1.5" data-bulk-strip>
+      <div class="mb-2 flex flex-wrap items-center gap-1.5 rounded-lg border bg-muted/40 px-2 py-1.5" data-bulk-strip>
         <label class="flex shrink-0 cursor-pointer items-center gap-1 text-[11px] text-muted-foreground">
-          <input type="checkbox" data-select-all class="size-3 accent-[var(--primary)]" ${this.selected.size === annotations.length && annotations.length > 0 ? 'checked' : ''}/> 全选
+          <input type="checkbox" data-select-all class="size-3 accent-[var(--primary)]" ${this.selected.size === shown.length && shown.length > 0 ? 'checked' : ''}/> 全选
         </label>
         <button type="button" data-select-invert class="shrink-0 text-[11px] text-muted-foreground transition-colors hover:text-foreground" title="反选：选中未勾选的，取消已勾选的">反选</button>
         <select data-quick-select class="h-6 min-w-0 flex-1 rounded-md border border-input bg-card px-1 text-[11px] text-muted-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40" aria-label="快速选中">
@@ -177,8 +180,9 @@ export class SidebarView {
         </select>
         ${
           this.selected.size > 0
-            ? `<div class="flex shrink-0 items-center gap-1 ${popIn ? 'bulk-pop' : ''}" data-bulk-actions>
-                 <span class="text-[11px] text-muted-foreground">已选 ${this.selected.size}</span>
+            ? `<div class="flex w-full flex-wrap items-center gap-1 border-t pt-1.5 ${popIn ? 'bulk-pop' : ''}" data-bulk-actions>
+                 <span class="mr-auto text-[11px] text-muted-foreground">已选 ${this.selected.size}</span>
+                 <button type="button" class="btn btn-outline btn-sm h-6 px-2 text-[11px]" data-bulk="export">导出</button>
                  <button type="button" class="btn btn-outline btn-sm h-6 px-2 text-[11px]" data-bulk="resolve">${selectedAnyOpen ? '解决' : '重开'}</button>
                  <button type="button" class="btn btn-outline btn-sm h-6 px-2 text-[11px] text-destructive hover:text-destructive" data-bulk="delete">删除</button>
                  <button type="button" class="btn btn-ghost btn-sm h-6 w-6 p-0" data-bulk="clear" title="取消选择" aria-label="取消选择">${icon('x', 'size-3')}</button>
@@ -198,19 +202,20 @@ export class SidebarView {
       <div class="mb-1.5 flex flex-wrap gap-1.5 px-1">${chips}</div>
       ${annotations.length > 0 && chipKinds.length > 0 ? `<div class="mb-2 flex flex-wrap gap-1 px-1">${kindChips}</div>` : ''}
       <div class="mb-3 flex items-center gap-2 px-1 text-xs text-muted-foreground">
-        <button type="button" id="only-hl" role="switch" aria-checked="${this.onlyHighlightFiltered}" class="ui-switch" aria-label="正文只高亮当前筛选结果"></button>
-        正文只高亮当前筛选结果
+        <button type="button" id="only-hl" role="switch" aria-checked="${this.onlyHighlightFiltered}" class="ui-switch" aria-label="${opts.image ? '图片只显示当前筛选区域' : '正文只高亮当前筛选结果'}"></button>
+        ${opts.image ? '图片只显示当前筛选区域' : '正文只高亮当前筛选结果'}
       </div>
       ${strip}
       ${items.length === 0
         ? `<div class="mt-16 rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-             划选正文写批注、点顶栏「slop 预扫描」，<br>或按 ⌘F 搜索后一键批量批注
+             ${annotations.length > 0 ? '当前筛选没有匹配的批注。调整状态或类型筛选即可查看。' : opts.image ? '拖动框选图片区域，写下意见。<br>也可以用「坐标批注」精确选择。' : '划选正文写批注、点顶栏「slop 预扫描」，<br>或按 ⌘F 搜索后一键批量批注'}
            </div>`
         : `<div class="flex flex-col gap-2.5 ${this.selected.size > 0 ? 'sel-active' : ''}">${cards}</div>`}
     `
 
     this.wireFilters()
-    this.wireStrip(annotations)
+    this.wireStrip(shown)
+    restoreFocus()
     this.wireCards(items)
   }
 
@@ -281,6 +286,7 @@ export class SidebarView {
         const ids = [...this.selected]
         if (ids.length === 0) return
         if (op === 'resolve') this.callbacks.onToggleStatus(ids)
+        if (op === 'export') this.callbacks.onExport(ids)
         if (op === 'delete') this.callbacks.onDelete(ids)
         if (op === 'clear') {
           this.selected.clear()
