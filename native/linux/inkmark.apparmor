@@ -1,0 +1,7 @@
+abi <abi/4.0>,
+include <tunables/global>
+
+# WebKitGTK creates its own sandbox using unprivileged user namespaces.
+/opt/InkMark/InkMark flags=(unconfined) {
+  userns,
+}

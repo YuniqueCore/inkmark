@@ -31,12 +31,14 @@ Desktop export reports `saved` only after an atomic file replacement succeeds. A
 | --- | --- | --- |
 | Web | GitHub Pages static site | Current browser; no native runtime |
 | macOS | Apple Silicon `.app` in ZIP | macOS 14+; ad-hoc signed, not notarized |
-| Linux | x86_64 `.tar.gz` | GTK 4.14+ and WebKitGTK 6; tested on Ubuntu 24.04 |
+| Linux | x86_64 `.tar.gz` | GTK 4.14+ and WebKitGTK 6; Ubuntu needs the included application-specific AppArmor profile |
 | Windows | x86_64 ZIP, installer when Inno Setup is available | Windows WebView2 Runtime; unsigned |
 | Android | debug-signed APK and unsigned release AAB | API 26+; release AAB needs the owner's signing key |
 | iOS | arm64 simulator ZIP and unsigned device ZIP | iOS 16.4+; device installation requires Apple signing/provisioning |
 
 The upstream iOS embedding SDK supplies arm64 device and simulator slices. Intel iOS simulators are not supported by this SDK. Mobile builds use the official embedding SDK, not NSH's generic package shell, because file picking and sharing belong to InkMark's host. CI artifacts include `BUILD.json` and `SHA256SUMS`; signing certificates and private keys are never uploaded. These are test/distribution candidates, not App Store or Play Store submissions.
+
+The Linux archive includes [installation instructions and an AppArmor profile](../native/linux/README.md) for `/opt/InkMark/InkMark`. CI loads the same policy for its exact NSH development-host path. This permits WebKit's sandbox namespaces without disabling the system-wide AppArmor restriction or WebKit's sandbox.
 
 ## Persistence and lifecycle
 

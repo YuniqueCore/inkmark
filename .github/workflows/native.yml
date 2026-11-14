@@ -31,7 +31,10 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang llvm libclang-dev libgtk-4-dev libwebkitgtk-6.0-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev xvfb xauth dbus-x11
+          sudo apt-get install -y clang llvm libclang-dev libgtk-4-dev libwebkitgtk-6.0-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev xvfb xauth dbus-x11 at-spi2-core
+          # Give only this test host the namespaces WebKit needs for its sandbox.
+          sed "s|/opt/InkMark/InkMark|$PWD/.local-build/nsh/sdk/cli/nsh/runtime/linux/nsh-linux-host|" native/linux/inkmark.apparmor | sudo tee /etc/apparmor.d/inkmark-ci > /dev/null
+          sudo apparmor_parser -r /etc/apparmor.d/inkmark-ci
       - name: Check native file boundaries
         working-directory: native/desktop
         run: |
@@ -48,9 +51,9 @@ jobs:
           NATIVE_TARGET: ${{ matrix.target }}
         run: |
           if [ "$NATIVE_TARGET" = linux ]; then
-            xvfb-run -a dbus-run-session -- bun run nsh test native/tests --target linux --verbose --junit native-test.xml
+            xvfb-run -a dbus-run-session -- bun run nsh test native/tests --target linux --verbose --trace --fps --junit .local-build/native-test.xml 2>&1 | tee .local-build/native-webview.log | awk 'length($0) < 1000'
           else
-            bun run nsh test native/tests --target "$NATIVE_TARGET" --verbose --junit native-test.xml
+            bun run nsh test native/tests --target "$NATIVE_TARGET" --verbose --trace --fps --junit .local-build/native-test.xml 2>&1 | tee .local-build/native-webview.log | awk 'length($0) < 1000'
           fi
       - name: Package desktop application
         env:
@@ -67,7 +70,9 @@ jobs:
         if: always()
         with:
           name: native-tests-${{ matrix.target }}
-          path: native-test.xml
+          path: |
+            .local-build/native-test.xml
+            .local-build/native-webview.log
           if-no-files-found: ignore
   android:
     name: Android / APK, AAB and emulator

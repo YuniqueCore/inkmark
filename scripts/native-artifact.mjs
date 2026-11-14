@@ -3,11 +3,10 @@ import {createHash} from 'node:crypto'
 import {spawnSync} from 'node:child_process'
 
 const target = process.argv[2]
+if (!['macos', 'linux', 'windows', 'android', 'ios'].includes(target)) throw new Error('Unknown artifact target')
 const {version} = JSON.parse(await readFile('package.json', 'utf8'))
 const toolchain = JSON.parse(await readFile('native/toolchain.json', 'utf8'))
 const root = `.local-build/artifacts/${version}/${target}`
-await rm(root, {recursive: true, force: true})
-await mkdir(root, {recursive: true})
 const prefix = `InkMark-${version}-${target}-${process.arch}`
 function run(command, args) {
   const result = spawnSync(command, args, {encoding: 'utf8'})
@@ -15,6 +14,11 @@ function run(command, args) {
   return result.stdout.trim()
 }
 function zip(source, name) { run('ditto', ['-c', '-k', '--sequesterRsrc', '--keepParent', source, `${root}/${name}`]) }
+const changes = run('git', ['status', '--porcelain'])
+const source = {commit: run('git', ['rev-parse', 'HEAD']), dirty: Boolean(changes)}
+if (process.env.CI && source.dirty) throw new Error(`Build changed the checkout:\n${changes}`)
+await rm(root, {recursive: true, force: true})
+await mkdir(root, {recursive: true})
 let signing
 switch (target) {
   case 'macos':
@@ -22,7 +26,9 @@ switch (target) {
     signing = 'ad-hoc; not notarized'
     break
   case 'linux':
-    await copyFile('.local-build/packages/desktop/InkMark.tar.gz', `${root}/${prefix}.tar.gz`)
+    await copyFile('native/linux/inkmark.apparmor', '.local-build/packages/desktop/InkMark/inkmark.apparmor')
+    await copyFile('native/linux/README.md', '.local-build/packages/desktop/InkMark/README.md')
+    run('tar', ['-czf', `${root}/${prefix}.tar.gz`, '-C', '.local-build/packages/desktop', 'InkMark'])
     signing = 'unsigned'
     break
   case 'windows':
@@ -51,8 +57,7 @@ switch (target) {
 const files = await Promise.all((await readdir(root)).filter(name => /\.(zip|gz|apk|aab|exe)$/.test(name)).sort().map(async name => ({
   name, sha256: createHash('sha256').update(await readFile(`${root}/${name}`)).digest('hex'),
 })))
-await writeFile(`${root}/BUILD.json`, JSON.stringify({version, target, signing, source: {
-  commit: run('git', ['rev-parse', 'HEAD']), dirty: Boolean(run('git', ['status', '--porcelain'])),
-}, nsh: {version: toolchain.version, commit: toolchain.commit}, files}, null, 2) + '\n')
+await writeFile(`${root}/BUILD.json`, JSON.stringify({version, target, signing, source,
+  nsh: {version: toolchain.version, commit: toolchain.commit}, files}, null, 2) + '\n')
 await writeFile(`${root}/SHA256SUMS`, files.map(file => `${file.sha256}  ${file.name}`).join('\n') + '\n')
 console.log(`Prepared ${files.length} ${target} artifact(s) with checksums and source provenance`)
