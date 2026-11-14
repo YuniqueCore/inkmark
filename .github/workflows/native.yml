@@ -76,7 +76,8 @@ jobs:
           path: |
             .local-build/native-test.xml
             .local-build/native-webview.log
-            .local-build/clipboard-host*.log
+            .local-build/clipboard-host.log
+            .local-build/clipboard-host-error.log
           if-no-files-found: ignore
   android:
     name: Android / APK, AAB and emulator

@@ -36,6 +36,9 @@ try {
         Start-Sleep -Milliseconds 200
     }
     throw 'Timed out waiting for the native clipboard probe'
+} catch {
+    Get-Content '.local-build/clipboard-host.log', '.local-build/clipboard-host-error.log' -Tail 30 -ErrorAction SilentlyContinue | Write-Output
+    throw
 } finally {
     if (-not $probe.HasExited) { & taskkill.exe /PID $probe.Id /T /F | Out-Null }
 }

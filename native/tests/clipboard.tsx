@@ -3,6 +3,7 @@ import {currentWindow} from 'nsh/desktop'
 
 // Run with `nsh run`, not `nsh test`: the test runner replaces the OS clipboard with a text-only backend.
 mount(() => {
+  const window = currentWindow()
   const status = signal('reading system clipboard')
   void (async () => {
     try {
@@ -13,7 +14,7 @@ mount(() => {
       if (blob.type !== 'image/bmp' || bytes[0] !== 0x42 || bytes[1] !== 0x4d) throw new Error('Expected CF_DIB encoded as BMP')
       status.set('passed')
     } catch (error) { status.set(`failed: ${error instanceof Error ? error.message : String(error)}`) }
-    currentWindow().set({title: `InkMarkClipboard:${status()}`})
+    window.set({title: `InkMarkClipboard:${status()}`})
   })()
   return <Text>{status}</Text>
 })
