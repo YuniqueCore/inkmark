@@ -48,9 +48,9 @@ jobs:
           NATIVE_TARGET: ${{ matrix.target }}
         run: |
           if [ "$NATIVE_TARGET" = linux ]; then
-            dbus-run-session -- xvfb-run -a bun run nsh test native/tests --target linux --junit native-test.xml
+            xvfb-run -a dbus-run-session -- bun run nsh test native/tests --target linux --verbose --junit native-test.xml
           else
-            bun run nsh test native/tests --target "$NATIVE_TARGET" --junit native-test.xml
+            bun run nsh test native/tests --target "$NATIVE_TARGET" --verbose --junit native-test.xml
           fi
       - name: Package desktop application
         env:

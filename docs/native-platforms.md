@@ -73,7 +73,7 @@ mbx test --workspace --all-features
 mbx clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
-On Linux run the native journey under `dbus-run-session -- xvfb-run -a` when no display is available. Android additionally needs JDK 17, platform `android-37.0` and build-tools `37.0.0`:
+On Linux run the native journey under `xvfb-run -a dbus-run-session --` when no display is available so portal services inherit the display. Android additionally needs JDK 17, platform `android-37.0` and build-tools `37.0.0`:
 
 ```sh
 node scripts/native-setup.mjs android
