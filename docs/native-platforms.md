@@ -50,9 +50,10 @@ Mobile hosts own safe-area and keyboard insets. DOM floating editors and search 
 
 ## Build and test
 
-Use Bun 1.3.14+, Node 24 and the checked-in lockfile. Desktop Rust is pinned to 1.100.0; install `mr-boxington` 1.24.1 (`mbx`) so Cargo builds use the repository's build-cache workflow.
+Use Bun 1.3.14+, Node 24, mise 2026.8.16+ and the checked-in lockfile. Desktop Rust is pinned to 1.100.0; `mise.toml` installs `mr-boxington` 1.30.0 (`mbx`) and its official Cargo wrapper so Cargo builds use the repository's build-cache workflow. Version 1.30.0 includes the [upstream Windows build-script trampoline fix](https://github.com/jdx/mr-boxington/pull/787). The NSH launcher uses `mise exec`; do not set `CARGO=mbx`, which makes Cargo metadata calls recurse.
 
 ```sh
+mise install
 bun install --frozen-lockfile
 bun run check
 bun run build:pages

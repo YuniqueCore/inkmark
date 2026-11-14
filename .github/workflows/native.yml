@@ -27,7 +27,6 @@ jobs:
         with:
           toolchain: '1.100.0'
           components: rustfmt, clippy
-      - uses: jdx/mise-action@v5.2.8
       - name: Linux WebView and display dependencies
         if: runner.os == 'Linux'
         run: |

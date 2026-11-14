@@ -13,10 +13,12 @@ final class WorkspaceUITests: XCTestCase {
         XCTAssertTrue(input.waitForExistence(timeout: 5))
         input.tap(); input.typeText("# Native iOS review\n\nA **stable primitive** composes.")
         app.webViews.buttons["创建文档"].tap()
-        let preview = app.webViews.buttons["预览"]
+        // WebKit exposes aria-pressed buttons as accessibility switches.
+        let preview = app.webViews.switches["预览"]
         XCTAssertTrue(preview.waitForExistence(timeout: 5)); preview.tap()
+        XCTAssertEqual(preview.value as? String, "1")
         XCTAssertTrue(app.webViews.staticTexts["Native iOS review"].waitForExistence(timeout: 5))
-        let saved = app.webViews.staticTexts["已保存"]
+        let saved = app.webViews.otherElements.matching(NSPredicate(format: "label BEGINSWITH %@", "已保存")).firstMatch
         XCTAssertTrue(saved.waitForExistence(timeout: 10))
         app.terminate(); app.launch()
         XCTAssertTrue(app.webViews.staticTexts["Native iOS review"].waitForExistence(timeout: 20))
