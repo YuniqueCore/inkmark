@@ -84,6 +84,19 @@ describe('ensureReadable', () => {
     expect(contrastRatio(r.text, '#000000')).toBeGreaterThanOrEqual(4.5)
   })
 
+  it('中间亮度背景选择能达到 AA 的终点，避免短期提升后停在仍不达标的黑色', () => {
+    const background = '#8658bf'
+    expect(contrastRatio('#000000', background)).toBeLessThan(4.5)
+    expect(contrastRatio('#ffffff', background)).toBeGreaterThan(4.5)
+    const corrected = ensureReadable('#047857', background)
+    expect(contrastRatio(corrected.text, background)).toBeGreaterThanOrEqual(4.5)
+    for (const text of ['#ffffff', '#000000', '#64748b', '#7e22ce']) {
+      for (const paper of ['#000000', '#ffffff', '#767676', background, '#f6f1e7']) {
+        expect(contrastRatio(ensureReadable(text, paper).text, paper)).toBeGreaterThanOrEqual(4.5)
+      }
+    }
+  })
+
   it('非法输入不调整', () => {
     expect(ensureReadable('oops', '#ffffff')).toEqual({text: 'oops', adjusted: false})
   })

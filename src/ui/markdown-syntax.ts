@@ -5,7 +5,7 @@ import type { TextStyleRange } from './render-text'
 
 const markdown = parser.configure(GFM)
 const highlighter = tagHighlighter([
-  {tag: [tags.heading1, tags.heading2, tags.heading3, tags.heading4, tags.heading5, tags.heading6], class: 'md-syntax-heading'},
+  {tag: tags.heading, class: 'md-syntax-heading'},
   {tag: tags.strong, class: 'md-syntax-strong'},
   {tag: tags.emphasis, class: 'md-syntax-emphasis'},
   {tag: tags.strikethrough, class: 'md-syntax-strike'},
@@ -13,7 +13,10 @@ const highlighter = tagHighlighter([
   {tag: tags.url, class: 'md-syntax-url'},
   {tag: tags.monospace, class: 'md-syntax-code'},
   {tag: tags.quote, class: 'md-syntax-quote'},
-  {tag: [tags.meta, tags.processingInstruction], class: 'md-syntax-mark'},
+  {tag: tags.labelName, class: 'md-syntax-meta'},
+  {tag: tags.string, class: 'md-syntax-literal'},
+  {tag: tags.comment, class: 'md-syntax-comment'},
+  {tag: [tags.meta, tags.processingInstruction, tags.contentSeparator, tags.atom, tags.escape, tags.character], class: 'md-syntax-mark'},
 ])
 
 export function markdownSyntaxRanges(text: string): TextStyleRange[] {

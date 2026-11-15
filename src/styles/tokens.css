@@ -23,6 +23,13 @@
   /* 阅读偏好：边栏底色（亮/暗为半透明卡片，分面主题给实色）与纹理线条色（随中区极性自适应） */
   --sidebar-bg: color-mix(in oklab, var(--card) 40%, transparent);
   --texture-line: color-mix(in oklab, var(--foreground) 8%, transparent);
+  /* Source syntax has its own palette; shell accents may be neutral in reading themes. */
+  --syntax-heading: #1d4ed8;
+  --syntax-emphasis: #7e22ce;
+  --syntax-link: #0369a1;
+  --syntax-code: #047857;
+  --syntax-mark: #b45309;
+  --syntax-muted: #64748b;
   /* 正文字体族：[data-font] 应用与设置里的字体样例共用单一来源 */
   --font-doc-serif: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', SimSun, Georgia, serif;
   --font-doc-kai: 'Kaiti SC', 'STKaiti', KaiTi, 'Noto Serif SC', serif;
@@ -251,6 +258,12 @@
 }
 
 .dark {
+  --syntax-heading: #93c5fd;
+  --syntax-emphasis: #d8b4fe;
+  --syntax-link: #7dd3fc;
+  --syntax-code: #86efac;
+  --syntax-mark: #fbbf24;
+  --syntax-muted: #94a3b8;
   --background: #09090b;
   --foreground: #fafafa;
   --card: #101012;

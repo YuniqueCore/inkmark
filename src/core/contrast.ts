@@ -79,9 +79,10 @@ export function ensureReadable(text: string, bg: string, min: number = WCAG_AA_B
   const base = hexToRgb(text)
   if (!base || !hexToRgb(bg)) return {text, adjusted: false}
   let current = text
-  // 方向：向白混（深色字提亮）或向黑混（浅色字压暗），取能提高对比度者
-  const white = contrastRatio(mixHex(text, '#ffffff', 0.1), bg)
-  const black = contrastRatio(mixHex(text, '#000000', 0.1), bg)
+  // Choose the reachable endpoint, not the first step: on mid-tone paper one
+  // direction can improve locally yet never reach AA, even at its endpoint.
+  const white = contrastRatio('#ffffff', bg)
+  const black = contrastRatio('#000000', bg)
   const target = white >= black ? '#ffffff' : '#000000'
   for (let step = 1; step <= 20; step++) {
     if (contrastRatio(current, bg) >= min) return {text: current, adjusted: step > 1}

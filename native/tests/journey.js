@@ -19,8 +19,17 @@
     await wait(() => view?.chrome?.ready, 'workspace ready')
     if (q('header,aside,input,textarea,select,[role="dialog"]')) throw new Error('Native build contains web application controls')
     await wait(() => q('#editor')?.textContent.includes('Native review') && view.save.status === 'saved', 'native picker import')
+    const foreground = getComputedStyle(q('#editor')).color
+    for (const selector of ['.md-syntax-heading:not(.md-syntax-mark)', '.md-syntax-strong:not(.md-syntax-mark)', '.md-syntax-mark']) {
+      const token = q(`#editor ${selector}`)
+      if (!token) throw new Error(`Missing source syntax: ${selector}`)
+      const color = getComputedStyle(token).color
+      const channels = color.match(/[\d.]+/g).slice(0, 3).map(Number)
+      if (color === foreground || Math.max(...channels) - Math.min(...channels) <= 20) throw new Error(`Source syntax has no visible hue: ${selector}`)
+    }
     report({status: 'imported'})
     await wait(() => view.chrome.readingMode === 'split' && q('#markdown-preview strong'), 'native reading menu')
+    if (q('#markdown-preview .md-syntax-mark')) throw new Error('Source punctuation leaked into rendered preview')
     const target = q('#markdown-preview strong'), range = document.createRange()
     range.selectNodeContents(target)
     getSelection().removeAllRanges(); getSelection().addRange(range)

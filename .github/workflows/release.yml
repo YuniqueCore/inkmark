@@ -1,0 +1,50 @@
+name: Publish verified release artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Product tag matching the delivery source (for example v0.13.1)
+        type: string
+        required: true
+      run_id:
+        description: Successful all-platform main delivery run ID
+        type: string
+        required: true
+      publish:
+        description: Publish after every asset and checksum is verified
+        type: boolean
+        default: false
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: release-publication
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: ./.github/actions/javascript
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          pattern: InkMark-*
+          path: .local-build/release-inputs
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify, attach and optionally publish without rebuilding
+        run: |
+          args=(--run "$DELIVERY_RUN" --tag "$RELEASE_TAG")
+          if [ "$PUBLISH" = true ]; then args+=(--publish); fi
+          node scripts/publish-release.ts "${args[@]}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DELIVERY_RUN: ${{ inputs.run_id }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          PUBLISH: ${{ inputs.publish }}

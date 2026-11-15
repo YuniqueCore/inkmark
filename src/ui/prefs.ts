@@ -53,16 +53,23 @@ function parsePrefs(raw: string | null): ReadingPrefs {
  * 纹理线色随矫正后的文字色重算（与 --texture-line 的 root 定义同式）。 */
 function applyEditorColors(editor: HTMLElement | null, p: ReadingPrefs): void {
   if (!editor) return
+  const rootStyle = getComputedStyle(document.documentElement)
+  const themeBg = rootStyle.getPropertyValue('--background').trim() || '#ffffff'
+  const bg = p.customBg ?? themeBg
+  if (editor.id === 'editor') {
+    for (const role of ['heading', 'emphasis', 'link', 'code', 'mark', 'muted']) {
+      const property = `--syntax-${role}`
+      const color = rootStyle.getPropertyValue(property).trim()
+      editor.style.setProperty(property, ensureReadable(color, bg).text)
+    }
+  }
   if (!p.customBg && !p.customText) {
     editor.style.removeProperty('--foreground')
     editor.style.removeProperty('--background')
     editor.style.removeProperty('--texture-line')
     return
   }
-  const rootStyle = getComputedStyle(document.documentElement)
-  const themeBg = rootStyle.getPropertyValue('--background').trim() || '#ffffff'
   const themeFg = rootStyle.getPropertyValue('--foreground').trim() || '#000000'
-  const bg = p.customBg ?? themeBg
   const {text} = ensureReadable(p.customText ?? themeFg, bg)
   editor.style.setProperty('--foreground', text)
   editor.style.setProperty('--background', bg)

@@ -71,7 +71,8 @@ export async function selectText(locator: Locator, from: number, to: number): Pr
   }, {from, to})
 }
 
-export async function dragText(page: Page, locator: Locator): Promise<void> {
+export async function dragText(page: Page, locator: Locator, direction: 'forward' | 'backward' = 'forward'): Promise<void> {
+  await locator.scrollIntoViewIfNeeded()
   const points = await locator.evaluate((root) => {
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
     const text = walker.nextNode() as Text
@@ -82,9 +83,11 @@ export async function dragText(page: Page, locator: Locator): Promise<void> {
     const a = first.getBoundingClientRect(); const b = last.getBoundingClientRect()
     return {x1: a.left + 1, y1: a.top + a.height / 2, x2: b.right - 1, y2: b.top + b.height / 2}
   })
-  await page.mouse.move(points.x1, points.y1)
+  const from = direction === 'forward' ? {x: points.x1, y: points.y1} : {x: points.x2, y: points.y2}
+  const to = direction === 'forward' ? {x: points.x2, y: points.y2} : {x: points.x1, y: points.y1}
+  await page.mouse.move(from.x, from.y)
   await page.mouse.down()
-  await page.mouse.move(points.x2, points.y2, {steps: 8})
+  await page.mouse.move(to.x, to.y, {steps: 8})
   await page.mouse.up()
 }
 

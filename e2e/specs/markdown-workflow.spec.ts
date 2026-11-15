@@ -5,10 +5,94 @@ import { expect, test } from '../screenplay/fixtures/screenplay'
 import { BrowseTheWorkbench } from '../screenplay/abilities/BrowseTheWorkbench'
 import { Workbench } from '../screenplay/screens/Workbench'
 import { SelectBlockText, ClickPinDot, TypeComment, SubmitAnnotation } from '../screenplay/interactions/composer'
+import {ImportTextFile} from '../screenplay/interactions/workspace'
+import {contrastRatio, hexToRgb} from '../../src/core/contrast'
 
 import { createDoc, setStoredWorkspace, storedWorkspace, dragText, openNew, selectText, submitPreviewAnnotation, workspace } from '../screenplay/support/markdown'
 
 test.describe.configure({timeout: 45_000})
+
+test('Source syntax stays colored and readable across themes and custom paper without changing nested review anchors', async ({actor}) => {
+  const page = BrowseTheWorkbench.as(actor).page
+  await page.setViewportSize({width: 1440, height: 900})
+  const source = '# 彩色源文 😀\r\n\r\n正文 **粗体 _斜体_** 与 [链接](https://example.test "标题")。\r\n\r\n- [x] 已完成\r\n- [ ] 待办\r\n\r\n> 引用\r\n\r\n---\r\n\r\n| 名称 | 状态 |\r\n| --- | --- |\r\n| 文档 | 完成 |\r\n\r\n```ts\r\nconst value = 42\r\n```\r\n\r\n转义 \\* 和 &amp; <!-- 注释 --> **对照文字**'
+  await actor.attemptsTo(ImportTextFile('彩色源文.md', source))
+  const palette = () => page.locator('#editor').evaluate(root => {
+    const hex = (value: string) => '#' + value.match(/\d+/g)!.slice(0, 3).map(part => Number(part).toString(16).padStart(2, '0')).join('')
+    return {
+      background: hex(getComputedStyle(root).backgroundColor), foreground: hex(getComputedStyle(root).color),
+      colors: ['heading', 'strong', 'mark', 'link', 'code', 'meta', 'comment'].map(role => ({
+        role, color: hex(getComputedStyle([...root.querySelectorAll(`.md-syntax-${role}`)].find(node => !node.closest('.seg-hl,.seg-search') && (role === 'mark' || !node.classList.contains('md-syntax-mark')))!).color),
+      })),
+    }
+  })
+  const assertReadable = async (colored: boolean) => {
+    const current = await palette()
+    for (const {role, color} of current.colors) {
+      expect(contrastRatio(color, current.background), `${role} on ${current.background}`).toBeGreaterThanOrEqual(4.5)
+      if (colored) {
+        const rgb = hexToRgb(color)!
+        expect(Math.max(rgb.r, rgb.g, rgb.b) - Math.min(rgb.r, rgb.g, rgb.b), `${role} must have an actual hue`).toBeGreaterThan(20)
+        expect(color).not.toBe(current.foreground)
+      }
+    }
+  }
+  await test.step('Given real Markdown, punctuation and semantic content have actual colors in both light and dark Source views', async () => {
+    await expect(page.locator('#markdown-preview')).toBeHidden()
+    await assertReadable(true)
+    await workspaceAction(page, 'settings')
+    await Workbench.settingsDialog(page).locator('[data-set-theme="dark"]').click()
+    await expect(Workbench.settingsDialog(page).locator('[data-set-theme="dark"]')).toHaveAttribute('aria-pressed', 'true')
+    await expect(Workbench.settingsDialog(page).locator('[data-set-theme="light"]')).toHaveAttribute('aria-pressed', 'false')
+    await Workbench.settingsDialog(page).getByRole('button', {name: '完成'}).click()
+    await assertReadable(true)
+  })
+  await test.step('When choosing custom paper, syntax contrast is corrected; resetting restores the theme palette', async () => {
+    const dark = await palette()
+    await workspaceAction(page, 'settings')
+    const dialog = Workbench.settingsDialog(page)
+    await dialog.locator('[data-set-bg]').fill('#8658bf')
+    expect((await palette()).background).toBe('#8658bf')
+    await expect(dialog.locator('[data-clear-colors]')).toBeEnabled()
+    await assertReadable(false)
+    await dialog.locator('[data-clear-colors]').click()
+    expect(await palette()).toEqual(dark)
+    await dialog.locator('[data-set-theme="light"]').click()
+    await dialog.locator('[data-set-bg]').fill('#8658bf')
+    expect((await palette()).background).toBe('#8658bf')
+    await assertReadable(false)
+    await dialog.locator('[data-clear-colors]').click()
+    await expect(dialog.locator('[data-clear-colors]')).toBeDisabled()
+    await assertReadable(true)
+    await dialog.getByRole('button', {name: '完成'}).click()
+  })
+  await test.step('Then selection across nested colored spans retains the original CRLF and emoji offsets through preview and reload', async () => {
+    const text = '正文 **粗体 _斜体_** 与 [链接](https://example.test "标题")。'
+    await actor.attemptsTo(SelectBlockText(1, text.indexOf('粗体'), text.indexOf('斜体') + 2), ClickPinDot(), TypeComment('跨语法范围的意见'), SubmitAnnotation())
+    await expect(page.locator('#editor .seg-hl')).toContainText('粗体 _斜体')
+    await expect.poll(async () => (await workspace(page)).docs[0].annotations.length).toBe(1)
+    const saved = (await workspace(page)).docs[0]
+    expect(saved.text).toBe(source)
+    expect(saved.annotations[0].start).toBe(source.indexOf('粗体'))
+    expect(source.slice(saved.annotations[0].start, saved.annotations[0].end)).toBe('粗体 _斜体')
+    const annotatedColor = await page.locator('#editor .seg-hl .md-syntax-strong').first().evaluate(node => getComputedStyle(node).color)
+    expect(annotatedColor).toBe(await page.locator('#editor').evaluate(node => getComputedStyle(node).color))
+    await page.getByRole('button', {name: '分栏', exact: true}).click()
+    await expect(page.locator('#markdown-preview h1')).toHaveText('彩色源文 😀')
+    await expect(page.locator('#markdown-preview .md-syntax-mark')).toHaveCount(0)
+    await expect(page.locator('#markdown-preview .seg-hl').first()).toContainText('粗体')
+    await page.reload()
+    await expect(page.locator('#sidebar')).toContainText('跨语法范围的意见')
+    expect((await workspace(page)).docs[0].annotations).toEqual(saved.annotations)
+    await assertReadable(true)
+    await dragText(page, page.locator('#editor .md-syntax-code'), 'backward')
+    expect(await page.evaluate(() => window.getSelection()!.anchorOffset > window.getSelection()!.focusOffset)).toBe(true)
+    await submitPreviewAnnotation(page, '反向划选代码')
+    await expect.poll(async () => (await workspace(page)).docs[0].annotations.length).toBe(2)
+    const code = (await workspace(page)).docs[0].annotations[1]
+    expect(source.slice(code.start, code.end)).toBe('const value = 42')
+  })
+})
 
 test('审稿人从粘贴到源文与渲染预览互相批注，再重载和导出', async ({actor}) => {
   const page = BrowseTheWorkbench.as(actor).page

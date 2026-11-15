@@ -1,0 +1,146 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`GFM source keeps punctuation, semantic tokens and UTF-16 anchors when annotations and search split nested syntax 1`] = `
+[
+  {
+    "classes": "md-syntax-heading md-syntax-mark",
+    "text": "#",
+  },
+  {
+    "classes": "md-syntax-heading",
+    "text": " 标题 😀
+",
+  },
+  {
+    "classes": "md-syntax-strong md-syntax-mark",
+    "text": "**",
+  },
+  {
+    "classes": "md-syntax-strong",
+    "text": "粗体 ",
+  },
+  {
+    "classes": "md-syntax-strong md-syntax-emphasis md-syntax-mark",
+    "text": "_",
+  },
+  {
+    "classes": "md-syntax-strong md-syntax-emphasis",
+    "text": "斜体",
+  },
+  {
+    "classes": "md-syntax-strong md-syntax-emphasis md-syntax-mark",
+    "text": "_",
+  },
+  {
+    "classes": "md-syntax-strong md-syntax-mark",
+    "text": "**",
+  },
+  {
+    "classes": "md-syntax-link md-syntax-mark",
+    "text": "[",
+  },
+  {
+    "classes": "md-syntax-link",
+    "text": "链接",
+  },
+  {
+    "classes": "md-syntax-link md-syntax-mark",
+    "text": "]",
+  },
+  {
+    "classes": "md-syntax-link md-syntax-mark",
+    "text": "(",
+  },
+  {
+    "classes": "md-syntax-link md-syntax-url",
+    "text": "https://example.test",
+  },
+  {
+    "classes": "md-syntax-link",
+    "text": " ",
+  },
+  {
+    "classes": "md-syntax-link md-syntax-literal",
+    "text": ""标题"",
+  },
+  {
+    "classes": "md-syntax-link md-syntax-mark",
+    "text": ")",
+  },
+  {
+    "classes": "md-syntax-mark",
+    "text": "-",
+  },
+  {
+    "classes": "md-syntax-mark",
+    "text": "[x]",
+  },
+  {
+    "classes": "md-syntax-mark",
+    "text": "-",
+  },
+  {
+    "classes": "md-syntax-mark",
+    "text": "[ ]",
+  },
+  {
+    "classes": "md-syntax-quote md-syntax-mark",
+    "text": ">",
+  },
+  {
+    "classes": "md-syntax-quote",
+    "text": " 引用
+",
+  },
+  {
+    "classes": "md-syntax-mark",
+    "text": "---
+",
+  },
+  {
+    "classes": "md-syntax-mark",
+    "text": "\`\`\`",
+  },
+  {
+    "classes": "md-syntax-meta",
+    "text": "ts",
+  },
+  {
+    "classes": "md-syntax-code",
+    "text": "const value = 42
+",
+  },
+  {
+    "classes": "md-syntax-mark",
+    "text": "\`\`\`",
+  },
+  {
+    "classes": "md-syntax-meta",
+    "text": "[ref]",
+  },
+  {
+    "classes": "md-syntax-mark",
+    "text": ":",
+  },
+  {
+    "classes": "md-syntax-url",
+    "text": "https://example.test",
+  },
+  {
+    "classes": "md-syntax-literal",
+    "text": ""引用标题"",
+  },
+  {
+    "classes": "md-syntax-mark",
+    "text": "\\*",
+  },
+  {
+    "classes": "md-syntax-mark",
+    "text": "&amp;",
+  },
+  {
+    "classes": "md-syntax-comment",
+    "text": "<!-- 注释 -->",
+  },
+]
+`;

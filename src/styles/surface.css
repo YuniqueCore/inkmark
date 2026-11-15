@@ -72,11 +72,16 @@
   font-weight: var(--doc-font-weight, 400);
 }
 .md-syntax-heading, .md-syntax-strong { font-weight: 650; }
+.md-syntax-heading { color: var(--syntax-heading); }
+.md-syntax-strong, .md-syntax-emphasis, .md-syntax-meta { color: var(--syntax-emphasis); }
 .md-syntax-emphasis, .md-syntax-quote { font-style: italic; }
 .md-syntax-strike { text-decoration: line-through; }
 .md-syntax-link { text-decoration: underline; text-underline-offset: 3px; }
-.md-syntax-url, .md-syntax-mark { color: color-mix(in srgb, var(--foreground) 75%, var(--background)); }
-.md-syntax-code { font-family: var(--font-doc-mono); background: color-mix(in srgb, var(--foreground) 7%, transparent); border-radius: 3px; }
+.md-syntax-link, .md-syntax-url { color: var(--syntax-link); }
+.md-syntax-mark { color: var(--syntax-mark); }
+.md-syntax-comment, .md-syntax-quote { color: var(--syntax-muted); }
+.md-syntax-literal, .md-syntax-code { color: var(--syntax-code); }
+.md-syntax-code { font-family: var(--font-doc-mono); }
 .seg-hl {
   @apply rounded-[4px] cursor-pointer transition-shadow duration-300;
   padding: 1.5px 0;
@@ -86,6 +91,8 @@
 .seg-hl.k-question { background: var(--kind-question-bg); }
 .seg-hl.k-highlight { background: var(--kind-highlight-bg); }
 .seg-hl.k-praise { background: var(--kind-praise-bg); }
+/* An annotation or search result owns the emphasis; syntax keeps its typography. */
+.seg-hl [class^='md-syntax-'], .seg-search [class^='md-syntax-'] { color: inherit; }
 .seg-hl.k-slop {
   background: var(--kind-slop-bg);
   text-decoration: underline wavy var(--kind-slop) 1px;

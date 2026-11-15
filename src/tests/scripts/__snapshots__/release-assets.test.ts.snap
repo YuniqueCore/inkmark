@@ -1,0 +1,81 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`five platform deliveries form one verifiable release; repair preserves exact assets and refuses mixed, partial or modified inputs 1`] = `
+{
+  "build": 7,
+  "nsh": {
+    "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "version": "0.5.1",
+  },
+  "platforms": [
+    {
+      "files": [
+        {
+          "name": "InkMark-1.2.3-macos-arm64.zip",
+          "sha256": "663aeb7b8cbead97cd547e1b749ae9943314b79816fe549a99480c43b88dfd20",
+        },
+      ],
+      "signing": "ad-hoc; not notarized",
+      "target": "macos",
+    },
+    {
+      "files": [
+        {
+          "name": "InkMark-1.2.3-linux-x64.tar.gz",
+          "sha256": "6a4755a6fb267062a073033a91c48bd5bbdac01952d87cecaeb7718444b1218a",
+        },
+      ],
+      "signing": "unsigned",
+      "target": "linux",
+    },
+    {
+      "files": [
+        {
+          "name": "InkMark-1.2.3-windows-x64-setup.exe",
+          "sha256": "0a6ab87670c9361245d19f31a70250edae35a1942aba8f508df9e004701d0913",
+        },
+        {
+          "name": "InkMark-1.2.3-windows-x64.zip",
+          "sha256": "bcd1b2119c41aa41ab77caa27bcf7f74ff88e25a1f50b797447fae6eb91f4da5",
+        },
+      ],
+      "signing": "unsigned",
+      "target": "windows",
+    },
+    {
+      "files": [
+        {
+          "name": "InkMark-1.2.3-android-debug.apk",
+          "sha256": "26a604063369263fde185e0b11e8d71955022f074c6c1c997a8a360d733fa052",
+        },
+        {
+          "name": "InkMark-1.2.3-android-unsigned.aab",
+          "sha256": "87a003fbf2a29879c594fca3039ca01fe3503d19428a58c2611e03ef20e06fb8",
+        },
+      ],
+      "signing": "APK: Android debug key; AAB: unsigned, requires release signing",
+      "target": "android",
+    },
+    {
+      "files": [
+        {
+          "name": "InkMark-1.2.3-ios-arm64-simulator.zip",
+          "sha256": "07b067e261c9b51e5504a86adc7401bedf6f837442ce44f1fb57f6080b4ee484",
+        },
+        {
+          "name": "InkMark-1.2.3-ios-arm64-unsigned.zip",
+          "sha256": "69528a5f53de093e6b649179d3bb34200b3c0a805fd24e0112a87bc5332cda88",
+        },
+      ],
+      "signing": "unsigned; device installation requires an Apple identity and provisioning profile",
+      "target": "ios",
+    },
+  ],
+  "run": "https://github.com/example/inkmark/actions/runs/123",
+  "source": {
+    "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "dirty": false,
+  },
+  "version": "1.2.3",
+}
+`;

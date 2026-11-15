@@ -82,10 +82,16 @@ export function fontSizeControlHtml(value: number): string {
     </div>`
 }
 
-export function colorControlsHtml(p: ReadingPrefs): string {
+function colorValues(p: ReadingPrefs): {fg: string; bg: string} {
   const rootStyle = getComputedStyle(document.documentElement)
-  const fg = p.customText ?? (rootStyle.getPropertyValue('--foreground').trim() || '#000000')
-  const bg = p.customBg ?? (rootStyle.getPropertyValue('--background').trim() || '#ffffff')
+  return {
+    fg: p.customText ?? (rootStyle.getPropertyValue('--foreground').trim() || '#000000'),
+    bg: p.customBg ?? (rootStyle.getPropertyValue('--background').trim() || '#ffffff'),
+  }
+}
+
+export function colorControlsHtml(p: ReadingPrefs): string {
+  const {fg, bg} = colorValues(p)
   const ratio = contrastRatio(p.customText ?? fg, p.customBg ?? bg)
   const ok = ratio >= 4.5
   return `
@@ -121,9 +127,10 @@ export function bindPrefControls(
   onChange: (patch: Partial<ReadingPrefs>) => void,
 ): void {
   root.addEventListener('click', (e) => {
-    const t = (e.target as HTMLElement).closest<HTMLElement>('[data-set-theme],[data-set-texture],[data-set-font],[data-set-weight]')
+    const t = (e.target as HTMLElement).closest<HTMLElement>('[data-set-theme],[data-set-texture],[data-set-font],[data-set-weight],[data-clear-colors]')
     if (!t) return
-    if (t.dataset.setTheme) onChange({theme: t.dataset.setTheme as ThemeId})
+    if (t.hasAttribute('data-clear-colors')) onChange({customText: null, customBg: null})
+    else if (t.dataset.setTheme) onChange({theme: t.dataset.setTheme as ThemeId})
     else if (t.dataset.setTexture) onChange({texture: t.dataset.setTexture as TextureId})
     else if (t.dataset.setFont) onChange({font: t.dataset.setFont as FontId})
     else if (t.dataset.setWeight) onChange({fontWeight: t.dataset.setWeight as FontWeightId})
@@ -137,10 +144,6 @@ export function bindPrefControls(
       return
     }
     if (t.matches('[data-set-text],[data-set-bg]')) {
-      const root2 = t.closest('[data-color-controls]') ?? t.parentElement?.parentElement
-      const fg = (root2?.querySelector('[data-set-text]') as HTMLInputElement | null)?.value ?? '#000000'
-      const bg = (root2?.querySelector('[data-set-bg]') as HTMLInputElement | null)?.value ?? '#ffffff'
-      syncContrastLabel(root, fg, bg)
       if (t.matches('[data-set-text]')) onChange({customText: t.value})
       else onChange({customBg: t.value})
     }
@@ -149,16 +152,20 @@ export function bindPrefControls(
 
 /** 按当前偏好同步所有控件的选中态（不重渲染，滑杆拖动不中断） */
 export function syncPrefControls(root: HTMLElement, prefs: ReadingPrefs): void {
-  root.querySelectorAll<HTMLElement>('[data-set-theme]').forEach((el) =>
-    el.classList.toggle('on', el.dataset.setTheme === prefs.theme),
-  )
-  root.querySelectorAll<HTMLElement>('[data-set-texture]').forEach((el) =>
-    el.classList.toggle('on', el.dataset.setTexture === prefs.texture),
-  )
-  root.querySelectorAll<HTMLElement>('[data-set-font]').forEach((el) =>
-    el.classList.toggle('on', el.dataset.setFont === prefs.font),
-  )
-  root.querySelectorAll<HTMLElement>('[data-set-weight]').forEach((el) =>
-    el.classList.toggle('on', el.dataset.setWeight === prefs.fontWeight),
-  )
+  const {fg, bg} = colorValues(prefs)
+  for (const [selector, value] of [['[data-set-text]', fg], ['[data-set-bg]', bg]] as const) {
+    const input = root.querySelector<HTMLInputElement>(selector)
+    if (input && input.value !== value) input.value = value
+  }
+  const clear = root.querySelector<HTMLButtonElement>('[data-clear-colors]')
+  if (clear) clear.disabled = !prefs.customText && !prefs.customBg
+  syncContrastLabel(root, fg, bg)
+  for (const [setting, value] of [['theme', prefs.theme], ['texture', prefs.texture], ['font', prefs.font], ['weight', prefs.fontWeight]]) {
+    const attribute = `data-set-${setting}`
+    root.querySelectorAll<HTMLElement>(`[${attribute}]`).forEach(el => {
+      const selected = el.getAttribute(attribute) === value
+      el.classList.toggle('on', selected)
+      el.setAttribute('aria-pressed', String(selected))
+    })
+  }
 }

@@ -28,6 +28,8 @@ UI 按 shadcn/ui 语系构建（Tailwind CSS v4 + 设计 token，灵感来自 ra
 
 **原生应用（NSH）**：同一工作台现提供 macOS / Windows / Linux 桌面宿主与 Android / iOS 嵌入宿主；Web 继续作为纯静态 Pages 构建。构建产物、签名状态、存储边界与本地/CI 测试命令见 [跨平台构建说明](docs/native-platforms.md)。
 
+安装包从 [GitHub Releases](https://github.com/YuniqueCore/inkmark/releases/latest) 下载；每个版本提供五平台应用、构建来源与 SHA256 校验文件。自动版本 PR、附件发布与中断恢复见 [发布说明](docs/releases.md)。
+
 ## 功能
 
 - **图片区域批注**：直接粘贴截图、拖入或打开 PNG / JPEG / WebP；框选、移动、调整边界、数值坐标输入与触屏平移，共用右侧类型/状态/删除恢复流程。单图上限 12 MB、3200 万像素、最长边 16384 px。评审 ZIP 包含原图、坐标意见和按当前筛选导出的 JSON；W3C 使用 `FragmentSelector`，只导回同一图片文档。旋转、多边形和 EditHere 的智能选块不在当前范围内。
