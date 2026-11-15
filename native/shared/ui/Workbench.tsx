@@ -15,7 +15,7 @@ export function NativeWorkbench(props: {view: Accessor<NativeView | null>; send:
   const chrome = () => props.view()?.chrome
   const execute = (action: WorkspaceAction) => props.send({type: 'workspace', action})
   const toggle = (target: 'documents' | 'reviews') => {
-    if (compact()) pane.set(pane() === target ? null : target)
+    if (compact()) pane.set(target)
     else if (target === 'documents') navigator.set(!navigator())
     else inspector.set(!inspector())
   }
@@ -33,7 +33,7 @@ export function NativeWorkbench(props: {view: Accessor<NativeView | null>; send:
   ]
   return <View testID="native-workbench" style={{flex: 1, backgroundColor: colors().chrome}}>
     <Toolbar accessibilityLabel="工作区工具栏" style={{flexDirection: 'row', alignItems: 'center', minHeight: 52, paddingHorizontal: 12, gap: 6, borderBottomWidth: 1, borderColor: colors().border}}>
-      <Action label="文档" testID="documents-toggle" colors={colors} onPress={() => toggle('documents')} />
+      <Action label="文档" testID="documents-toggle" colors={colors} selected={compact() ? pane() === 'documents' : navigator()} disabled={!chrome()?.ready} onPress={() => toggle('documents')} />
       <Text style={{flex: 1, minWidth: 0, fontSize: 14, fontWeight: '600', color: colors().text, numberOfLines: 1}}>{chrome()?.active?.name ?? 'InkMark'}</Text>
       <If when={chrome()?.active?.kind === 'text' && chrome()?.mode === 'annotate'}>
         <If when={!compact()}><View accessibilityLabel="阅读模式" style={{flexDirection: 'row', gap: 2}}>
@@ -48,7 +48,7 @@ export function NativeWorkbench(props: {view: Accessor<NativeView | null>; send:
           </MenuItem>}</Each>
         </Menu></If>
       </If>
-      <Action label={`批注 ${chrome()?.active?.openCount ?? 0}`} testID="reviews-toggle" colors={colors} onPress={() => toggle('reviews')} />
+      <Action label={`批注 ${chrome()?.active?.openCount ?? 0}`} testID="reviews-toggle" colors={colors} selected={compact() ? pane() === 'reviews' : inspector()} disabled={!chrome()?.ready} onPress={() => toggle('reviews')} />
       <If when={!compact()}><Action label="导出" testID="export-review" colors={colors} disabled={!chrome()?.active?.annotationCount} onPress={() => execute('export')} /></If>
       <Menu popupStyle={{backgroundColor: colors().chrome, borderRadius: 8, padding: 6}} trigger={<Text accessibilityLabel="工作区操作" testID="workspace-menu" style={{padding: 12, color: colors().text, fontSize: 17}}>···</Text>}>
         <If when={compact()}><MenuItem testID="action-export" onSelect={() => execute('export')} disabled={!chrome()?.active?.annotationCount} style={{padding: 12}}><Text style={{color: colors().text}}>导出批注</Text></MenuItem></If>

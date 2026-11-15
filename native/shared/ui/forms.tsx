@@ -1,6 +1,6 @@
 import {validRegion} from '../../../src/core/image'
 import {isComposing} from './input-state'
-import {keymap, signal, Text, View, Scroll, windowSize, type Accessor, type InputRef} from 'nsh'
+import {cleanup, Keyboard, keymap, signal, Text, View, Scroll, windowSize, type Accessor, type InputRef} from 'nsh'
 import {Sheet} from 'nsh/base'
 import type {NativeInteraction, InteractionOf, ShellCommand} from '../../../src/workbench/shell-protocol'
 import {MANUAL_KINDS, KIND_LABEL, QUICK_PHRASES, toggleQuickPhrase} from '../../../src/core/types'
@@ -12,6 +12,7 @@ type Send = (command: ShellCommand) => void
 interface FormProps<T extends NativeInteraction['type']> {value: Accessor<InteractionOf<T>>; colors: Colors; send: Send}
 
 function Frame(props: {value: Accessor<NativeInteraction>; colors: Colors; cancel: () => void; dismiss?: () => void; submit?: () => void; children?: import('nsh').JSX.Element; actions?: import('nsh').JSX.Element; input?: () => InputRef | undefined; discardChanges?: () => boolean}) {
+  cleanup(() => Keyboard.dismiss())
   const confirming = signal(false)
   const dismiss = () => { if (props.discardChanges?.()) confirming.set(true); else (props.dismiss ?? props.cancel)() }
   keymap.bind('mod+enter', () => { if (!isComposing() && !confirming()) props.submit?.() }, {when: 'always'})

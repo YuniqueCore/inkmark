@@ -29,7 +29,14 @@ final class WorkspaceUITests: XCTestCase {
         waitForExpectations(timeout: 10)
         app.terminate(); app.launch()
         XCTAssertTrue(app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Native iOS review")).firstMatch.waitForExistence(timeout: 20))
-        app.buttons["documents-toggle"].tap()
+        expectation(for: NSPredicate(format: "label == %@", "已保存"), evaluatedWith: app.staticTexts["native-save-status"])
+        let library = app.buttons["documents-toggle"]
+        expectation(for: NSPredicate(format: "hittable == true AND enabled == true"), evaluatedWith: library)
+        waitForExpectations(timeout: 10)
+        XCTAssertFalse(library.isSelected)
+        library.tap()
+        expectation(for: NSPredicate(format: "selected == true"), evaluatedWith: library)
+        waitForExpectations(timeout: 10)
         XCTAssertTrue(app.buttons["new-document"].waitForExistence(timeout: 5), app.debugDescription)
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = "native-library-after-offline-restart"; attachment.lifetime = .keepAlways
