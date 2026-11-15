@@ -77,6 +77,7 @@ jobs:
       - name: Package desktop application
         env:
           NATIVE_TARGET: ${{ matrix.target }}
+          NSH_VERBOSE: '1' # Keep successful Cargo builds and release cache diagnostics visible.
         run: |
           bun run nsh package native/desktop --target "$NATIVE_TARGET" --out .local-build/packages/desktop
           node scripts/native-artifact.mjs "$NATIVE_TARGET"
