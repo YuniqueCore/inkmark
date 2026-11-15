@@ -24,7 +24,7 @@ function Frame(props: {value: Accessor<NativeInteraction>; colors: Colors; cance
       <Text style={{flex: 1, fontSize: 18, fontWeight: '600', color: props.colors().text}}>{props.value().title}</Text>
       <Action label="关闭" testID="form-close" colors={props.colors} onPress={dismiss} />
     </View>
-    <Scroll style={{minHeight: 0, flexShrink: 1, maxHeight: windowSize().height * .72}} contentStyle={{gap: 14}}>
+    <Scroll testID="form-fields" style={{minHeight: 0, flexShrink: 1, maxHeight: windowSize().height * .72}} contentStyle={{gap: 14}}>
       {props.children}
       <If when={Boolean(props.value().error)}><Text style={{color: props.colors().danger, fontSize: 14}}>{props.value().error}</Text></If>
     </Scroll>

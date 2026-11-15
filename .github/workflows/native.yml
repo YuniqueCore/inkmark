@@ -117,7 +117,7 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-animations: true
-          script: bash scripts/android-test.sh
+          script: native/android/gradlew -p native/android connectedDebugAndroidTest
       - run: node scripts/native-artifact.mjs android
       - uses: actions/upload-artifact@v7.0.2
         with:
@@ -130,7 +130,7 @@ jobs:
           name: native-tests-android
           include-hidden-files: true
           path: |
-            .local-build/android-evidence/
+            native/android/app/build/outputs/connected_android_test_additional_output/
             native/android/app/build/reports
             native/android/app/build/outputs/androidTest-results
           if-no-files-found: ignore

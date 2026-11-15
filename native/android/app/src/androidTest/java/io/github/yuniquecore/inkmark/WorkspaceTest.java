@@ -18,6 +18,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.uiautomator.UiDevice;
 import androidx.test.uiautomator.UiObject2;
+import androidx.test.uiautomator.UiScrollable;
+import androidx.test.uiautomator.UiSelector;
 import androidx.test.uiautomator.By;
 import androidx.test.uiautomator.Until;
 import com.longbridge.nsh.FilesProvider;
@@ -76,12 +78,16 @@ public class WorkspaceTest {
                 .setPrimaryClip(ClipData.newUri(activity.getContentResolver(), "picture", FilesProvider.uriFor(activity, image))));
             action(device, "paste-image");
             await(scenario, "document.querySelector('#image-view img')?.naturalWidth === 240"); saved(device);
-            control(device, "image-coordinates").click();
-            control(device, "region-x").setText("20"); control(device, "region-y").setText("20");
-            control(device, "region-width").setText("9999"); control(device, "region-height").setText("80");
-            control(device, "annotation-comment").setText("Native image review");
+            UiObject2 coordinates = control(device, "image-coordinates");
+            assertTrue("Image must be ready for annotation", coordinates.wait(Until.enabled(true), 10000));
+            coordinates.click();
+            control(device, "annotation-save");
+            capture(device, "image-coordinate-form");
+            fillField(device, "region-x", "20"); fillField(device, "region-y", "20");
+            fillField(device, "region-width", "9999"); fillField(device, "region-height", "80");
+            fillField(device, "annotation-comment", "Native image review");
             assertFalse("Out-of-bounds region must not be saved", control(device, "annotation-save").isEnabled());
-            control(device, "region-width").setText("100");
+            fillField(device, "region-width", "100");
             assertTrue("Correcting the region must enable saving", control(device, "annotation-save").wait(Until.enabled(true), 10000));
             control(device, "annotation-save").click();
             boolean submitted = device.wait(Until.gone(By.res("annotation-save")), 10000);
@@ -162,12 +168,25 @@ public class WorkspaceTest {
         assertNotNull("Missing native control: " + id, control); return control;
     }
     private static void capture(UiDevice device, String name) {
-        File evidence = new File(InstrumentationRegistry.getInstrumentation().getTargetContext().getExternalFilesDir(null), "test-evidence");
+        String output = InstrumentationRegistry.getArguments().getString("additionalTestOutputDir");
+        assertNotNull("Run instrumentation with Gradle's additional test output enabled", output);
+        File evidence = new File(output);
         if (evidence.isDirectory() || evidence.mkdirs()) {
             device.takeScreenshot(new File(evidence, name + ".png"));
             try { device.dumpWindowHierarchy(new File(evidence, name + ".xml")); }
             catch (java.io.IOException error) { android.util.Log.w("InkMarkTest", "Could not capture accessibility hierarchy", error); }
         }
+    }
+    private static void fillField(UiDevice device, String id, String value) throws androidx.test.uiautomator.UiObjectNotFoundException {
+        // Focusing the comment opens the keyboard and can scroll coordinates out
+        // of view. Follow the native form's real scroll surface to each field.
+        new UiScrollable(new UiSelector().resourceId("form-fields"))
+            .scrollIntoView(new UiSelector().resourceId(id));
+        // NSH assigns testID to InputBox; Android's editable child owns text actions.
+        UiObject2 input = control(device, id).findObject(By.clazz(android.widget.EditText.class));
+        assertNotNull("Native text editor must exist within " + id, input);
+        input.setText(value);
+        assertTrue("Native editor must accept the value for " + id, input.wait(Until.textEquals(value), 10000));
     }
     private static void action(UiDevice device, String action) {
         control(device, "workspace-menu").click();
