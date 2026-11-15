@@ -45,6 +45,7 @@ test('native controls and real WebView: import, CRLF edit, preview review, close
   // NSH 0.5.1 Windows traversal reaches text inputs only; other desktop hosts enter tabs.
   if (app.shows('id:journey-platform-macos') || app.shows('id:journey-platform-linux')) {
     await app.press('id:reading-source')
+    if (app.shows('id:journey-platform-linux')) await app.keyboard.press('ctrl+tab')
     // Enter a standalone menu before closing it, so focus returns to its trigger.
     await app.press('label:批注操作')
     await app.keyboard.press('down')
