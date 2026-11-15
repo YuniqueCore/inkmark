@@ -40,7 +40,7 @@ test('mixed workspace: route a backup and W3C together, select reviews, export, 
     await saved(page)
     expect((await workspace(page)).docs.map((doc: {annotations: unknown[]}) => doc.annotations.length)).toEqual([1, 3])
     await page.locator('#filetree [data-doc="screen"]').click()
-    await expect(page.locator('.a9s-annotationlayer')).toBeVisible()
+    await expect(page.locator('.image-canvas canvas')).toBeVisible()
   })
   await test.step('When filtering and selecting by keyboard, export only visible selected opinions', async () => {
     await page.locator('#sidebar [data-filter="open"]').click()

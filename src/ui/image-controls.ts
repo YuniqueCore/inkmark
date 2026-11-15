@@ -14,9 +14,6 @@ export class BrowserImageControls implements ImageControls {
     const doc = {name: '', image: {width: 0, height: 0}}
     root.insertAdjacentHTML('afterbegin', `      <div class="image-toolbar" aria-label="图片工具栏">
         <div class="image-actions">
-          <button class="btn btn-default btn-sm" data-image-action="draw" disabled aria-pressed="true">框选区域</button>
-          <button class="btn btn-outline btn-sm" data-image-action="select" disabled aria-pressed="false">选择 / 调整</button>
-          <button class="btn btn-ghost btn-sm" data-image-action="pan" title="触屏滑动或用滚动条浏览放大的图片" aria-pressed="false">平移浏览</button>
           <button class="btn btn-ghost btn-sm" data-image-action="coordinates" disabled>坐标批注</button>
           <button class="btn btn-ghost btn-sm" data-image-action="edit" disabled>编辑批注</button>
         </div>
@@ -30,7 +27,7 @@ export class BrowserImageControls implements ImageControls {
       </div>
       <div class="image-caption"><span>${escapeHtml(doc.name)} · ${doc.image.width} × ${doc.image.height} px</span><span data-image-count></span></div>
 `)
-    root.insertAdjacentHTML('beforeend', '<p class="image-hint">拖动框选，写下意见。选择区域可调整边界；也可用坐标精确输入。</p><div class="image-composer" hidden></div>')
+    root.insertAdjacentHTML('beforeend', '<p class="image-hint" title="方向键微调选中区域；Shift 加速。Space + 方向键或 PageUp / PageDown 浏览图片，Home / End 到达边缘。">空白处拖动批注 · 点击区域调整 · 按住 Space 拖动浏览 · 双指移动或缩放</p><div class="image-composer" hidden></div>')
     root.querySelectorAll<HTMLButtonElement>('[data-image-action]').forEach(button => button.addEventListener('click', () => act(button.dataset.imageAction as ImageAction)))
   }
   render(state: ImageControlState): void {
@@ -39,9 +36,8 @@ export class BrowserImageControls implements ImageControls {
     this.root.querySelector('.image-caption span')!.textContent = `${state.name} · ${state.width} × ${state.height} px`
     this.root.querySelector('[data-image-count]')!.textContent = `${state.count} 处批注`
     this.root.querySelector('output')!.textContent = `${state.scale < .01 ? (state.scale * 100).toFixed(2) : Math.round(state.scale * 100)}%`
-    for (const action of ['draw', 'select', 'coordinates']) this.root.querySelector<HTMLButtonElement>(`[data-image-action="${action}"]`)!.disabled = !state.usable
+    for (const action of ['coordinates']) this.root.querySelector<HTMLButtonElement>(`[data-image-action="${action}"]`)!.disabled = !state.usable
     this.root.querySelector<HTMLButtonElement>('[data-image-action="edit"]')!.disabled = !state.selected
-    for (const action of ['draw', 'select', 'pan']) this.root.querySelector(`[data-image-action="${action}"]`)!.setAttribute('aria-pressed', String(action === state.tool))
   }
   compose(draft: RegionDraft, actions: RegionDraftActions): void {
     if (!this.root) return

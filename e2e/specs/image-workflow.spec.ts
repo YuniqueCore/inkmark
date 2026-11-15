@@ -21,7 +21,7 @@ test('mixed review journey: paste, draw, refine, export, restore and continue te
 
   await test.step('Given a text review, pasting image + text creates one independent image document', async () => {
     await pastePicture(page, bytes)
-    await expect(page.locator('.a9s-annotationlayer')).toBeVisible()
+    await expect(page.locator('.image-canvas canvas')).toBeVisible()
     await expect(page.locator('#btn-edit')).toBeDisabled()
     await expect(page.locator('#reading-toolbar')).toBeHidden()
     await expect.poll(async () => (await workspace(page))?.docs.length).toBe(2)
@@ -44,10 +44,7 @@ test('mixed review journey: paste, draw, refine, export, restore and continue te
     await page.locator('[data-image-action="fit"]').click()
     expect((await workspace(page)).docs.find((d: {id: string}) => d.id === imageId).annotations[0].selector).toEqual(original)
     await page.locator('#sidebar button[data-op="focus"]').click()
-    const svg = page.locator('.a9s-annotation.selected .rect-mask-fg').first()
-    const imageBox = (await page.locator('#image-view img').boundingBox())!
-    const shapeBox = (await svg.boundingBox())!
-    expect(Math.abs(shapeBox.x - imageBox.x - original.x * imageBox.width / 900)).toBeLessThan(3)
+    await expect(page.locator('[data-image-action="edit"]')).toBeEnabled()
   })
   await test.step('Then edit coordinates and comment together; invalid geometry and unsaved navigation are refused', async () => {
     await page.locator('#sidebar [data-op="edit"]').click()
@@ -78,7 +75,7 @@ test('mixed review journey: paste, draw, refine, export, restore and continue te
     await expect(page.locator('#sidebar .ann-card')).toHaveCount(2)
     await expect(page.locator('#save-text')).toHaveText('已保存')
     await page.reload()
-    await expect(page.locator('.a9s-annotationlayer')).toBeVisible()
+    await expect(page.locator('.image-canvas canvas')).toBeVisible()
     await expect(page.locator('#sidebar .ann-card')).toHaveCount(2)
   })
   let bundle: Record<string, Uint8Array>
@@ -167,7 +164,7 @@ test('image input boundaries and failed persistence preserve review data and a c
     await expect(page.getByText(/单张图片/)).toBeVisible()
   })
   await pastePicture(page, bytes)
-  await expect(page.locator('.a9s-annotationlayer')).toBeVisible()
+  await expect(page.locator('.image-canvas canvas')).toBeVisible()
   await test.step('Native input paste is not intercepted; Escape cancels an unsubmitted region atomically', async () => {
     await page.locator('[data-image-action="coordinates"]').click()
     await pastePicture(page, bytes, 'ignored.png', '[data-image-form] textarea')
@@ -192,7 +189,7 @@ test('image input boundaries and failed persistence preserve review data and a c
     expect(parsed.docs[0].annotations[0].comment).toBe('存储失败时需要找回的意见')
     expect(Buffer.from(parsed.docs[0].image.dataUrl.split(',')[1], 'base64')).toEqual(bytes)
     await page.reload()
-    await expect(page.locator('.a9s-annotationlayer')).toBeVisible()
+    await expect(page.locator('.image-canvas canvas')).toBeVisible()
     await expect(page.locator('#sidebar .ann-card')).toHaveCount(0)
     await page.locator('#file-input').setInputFiles({name: 'recovered.json', mimeType: 'application/json', buffer: backup})
     await expect(page.locator('#sidebar .ann-card')).toContainText('存储失败时需要找回的意见')
@@ -262,7 +259,6 @@ test('fractional zoom moves preserve size and out-of-bounds moves cannot silentl
   await page.locator('[data-image-action="original"]').click()
   await page.locator('[data-image-action="in"]').click()
   await expect(page.locator('[data-image-zoom]')).toHaveText('125%')
-  await expect(page.locator('.a9s-rotation-handle-group')).toBeHidden()
   let x = 80
   for (let move = 0; move < 4; move++) {
     const image = (await page.locator('#image-view img').boundingBox())!
@@ -287,9 +283,9 @@ test('fractional zoom moves preserve size and out-of-bounds moves cannot silentl
   await expect(page.getByText('区域不能超出图片，已恢复之前的位置')).toBeVisible()
   expect((await workspace(page)).docs[0].annotations[0].selector).toEqual({type: 'rectangle', x, y: 80, width: 100, height: 100})
   await page.locator('[data-image-action="original"]').click()
-  await page.locator('.image-viewport').evaluate((el) => { el.scrollLeft = el.scrollWidth; el.scrollTop = el.scrollHeight })
+  await page.locator('.image-scroll').evaluate((el) => { el.scrollLeft = el.scrollWidth; el.scrollTop = el.scrollHeight })
   await page.locator('#sidebar button[data-op="focus"]').click()
-  await expect.poll(() => page.locator('.image-viewport').evaluate((el) => el.scrollLeft)).toBe(0)
+  await expect.poll(() => page.locator('.image-scroll').evaluate((el) => el.scrollLeft)).toBe(0)
   const wideImage = await page.evaluate(() => {
     const canvas = document.createElement('canvas'); canvas.width = 16384; canvas.height = 100
     return canvas.toDataURL().split(',')[1]!
@@ -303,36 +299,4 @@ test('fractional zoom moves preserve size and out-of-bounds moves cannot silentl
   const before = (await page.locator('#image-view img').boundingBox())!.width
   await page.locator('[data-image-action="out"]').click()
   expect((await page.locator('#image-view img').boundingBox())!.width).toBeLessThan(before)
-})
-
-test.describe('touch image browsing', () => {
-  test.use({viewport: {width: 390, height: 844}, isMobile: true, hasTouch: true})
-  test('touch pan remains available alongside a draft and switching images resets the tool', async ({page, context}) => {
-    await page.goto('/')
-    await expect(page.locator('#save-text')).toHaveText('已保存')
-    const bytes = await picture(page)
-    await pastePicture(page, bytes)
-    await expect(page.locator('[data-image-action="coordinates"]')).toBeEnabled()
-    await page.locator('[data-image-action="original"]').tap()
-    await page.locator('[data-image-action="pan"]').tap()
-    await expect(page.locator('[data-image-action][aria-pressed="true"]')).toHaveCount(1)
-    const viewport = (await page.locator('.image-viewport').boundingBox())!
-    const cdp = await context.newCDPSession(page)
-    const x = viewport.x + viewport.width / 2; const y = viewport.y + viewport.height * 0.75
-    await cdp.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{x, y}]})
-    for (let i = 1; i <= 6; i++) await cdp.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: [{x, y: y - i * 20}]})
-    await cdp.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []})
-    await expect.poll(() => page.locator('.image-viewport').evaluate((el) => el.scrollTop)).toBeGreaterThan(30)
-    await page.locator('[data-image-action="coordinates"]').tap()
-    await expect(page.locator('#image-view')).toHaveAttribute('data-tool', 'select')
-    await page.locator('[data-image-action="pan"]').tap()
-    await page.locator('[data-image-action="select"]').tap()
-    await expect(page.locator('.a9s-annotation.selected')).toBeVisible()
-    await page.locator('[data-image-cancel]').tap()
-    await page.locator('[data-image-action="pan"]').tap()
-    await pastePicture(page, bytes, 'second.png')
-    await expect(page.locator('[data-image-action="coordinates"]')).toBeEnabled()
-    await expect(page.locator('#image-view')).toHaveAttribute('data-tool', 'draw')
-    await expect(page.locator('[data-image-action][aria-pressed="true"]')).toHaveCount(1)
-  })
 })

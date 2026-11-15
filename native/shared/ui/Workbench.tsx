@@ -64,10 +64,8 @@ export function NativeWorkbench(props: {view: Accessor<NativeView | null>; send:
         <View style={{flex: 1, backgroundColor: colors().canvas}}>
           <If when={Boolean(props.view()?.image)}>
             <Toolbar accessibilityLabel="图片工具栏" style={{flexDirection: 'row', flexWrap: 'wrap', padding: 8, gap: 2, backgroundColor: colors().chrome}}>
-              <Each of={['draw', 'select', 'pan', 'coordinates'] as const}>{action => <Action colors={colors}
-                testID={`image-${action()}`} label={{draw: '框选', select: '调整', pan: '平移', coordinates: '坐标批注', edit: '编辑批注', out: '−', in: '+', fit: '适应', original: '100%'}[action()]}
-                disabled={!props.view()?.image?.usable} selected={props.view()?.image?.tool === action()}
-                onPress={() => props.send({type: 'image', action: action()})} />}</Each>
+              <Action colors={colors} testID="image-coordinates" label="坐标批注" disabled={!props.view()?.image?.usable}
+                onPress={() => props.send({type: 'image', action: 'coordinates'})} />
               <View style={{flex: 1}} />
               <Menu popupStyle={{backgroundColor: colors().chrome, padding: 6, borderRadius: 8}} trigger={<Text accessibilityLabel="图片缩放与编辑" style={{padding: 12, fontSize: 13, color: colors().secondary}}>{Math.round((props.view()?.image?.scale ?? 1) * 100)}% ▾</Text>}>
                 <Each of={['out', 'in', 'fit', 'original', 'edit'] as const}>{action => <MenuItem testID={`image-${action()}`}
@@ -77,6 +75,9 @@ export function NativeWorkbench(props: {view: Accessor<NativeView | null>; send:
                 </MenuItem>}</Each>
               </Menu>
             </Toolbar>
+          </If>
+          <If when={Boolean(props.view()?.image)}>
+            <Text style={{fontSize: 11, color: colors().secondary, paddingHorizontal: 12, paddingVertical: 6}}>拖动空白处批注 · 点击区域调整 · Space / 双指浏览</Text>
           </If>
           <View style={{flex: 1, position: 'relative'}}>
             {props.canvas}

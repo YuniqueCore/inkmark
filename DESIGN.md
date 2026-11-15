@@ -10,6 +10,8 @@ The agreed direction is restrained Apple/Linear-inspired productivity UI: clear 
 - Lists use quiet separators and clear selected/focused states. Avoid nested cards, decorative gradients, glass, excessive badges, and hover-only essential actions.
 - Forms keep inputs stable during composition. Errors appear next to the action and retain entered text. Destructive actions name their scope and consequences.
 
+Image review uses direct canvas interaction: empty-space drag creates a region, existing objects select and move, handles resize, and Space/middle mouse temporarily pans. Two fingers pan/pinch without a tool switch. Coordinate fields remain the precise alternative. Selection is cleared consistently when hidden or removed. The browser and native shell share this geometry engine, while native sheets retain their platform form semantics. See [image-review.md](docs/image-review.md) for cancellation, keyboard and persistence contracts.
+
 ## Tokens
 
 Use system UI typography for controls, with independent reading-font preferences for the document. Light surfaces: canvas `#ffffff`, chrome `#f7f7f8`, inset `#ededf0`, text `#202124`, secondary `#60636b`, border `#dddfe3`, accent `#0866ce`. Dark surfaces: canvas `#17181a`, chrome `#202124`, inset `#2b2d31`, text `#f2f3f5`, secondary `#acafb8`, border `#373a40`, accent `#71b3ff`.

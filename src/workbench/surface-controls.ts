@@ -7,7 +7,7 @@ export interface SourceEditing {
   value(): string | null
   close(): void
 }
-export type ImageAction = 'draw' | 'select' | 'pan' | 'coordinates' | 'edit' | 'in' | 'out' | 'fit' | 'original'
+export type ImageAction = 'coordinates' | 'edit' | 'in' | 'out' | 'fit' | 'original'
 export interface ImageControlState {
   name: string
   width: number
@@ -15,7 +15,6 @@ export interface ImageControlState {
   count: number
   usable: boolean
   selected: boolean
-  tool: 'draw' | 'select' | 'pan'
   scale: number
 }
 export interface RegionDraft {

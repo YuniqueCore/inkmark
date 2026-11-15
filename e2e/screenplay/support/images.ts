@@ -28,7 +28,6 @@ export async function pastePicture(page: Page, bytes: Buffer, name = 'design.png
 }
 
 export async function drawRegion(page: Page, from: [number, number], to: [number, number]): Promise<void> {
-  await page.locator('[data-image-action="draw"]').click()
   const box = (await page.locator('#image-view img').boundingBox())!
   const point = ([x, y]: [number, number]) => ({x: box.x + x * box.width / 900, y: box.y + y * box.height / 600})
   const start = point(from); const end = point(to)

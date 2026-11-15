@@ -3,6 +3,32 @@ import {test, expect} from '@playwright/test'
 import {sealNativeDocument} from '../../scripts/native-document.ts'
 import {clipboardBitmap} from '../../native/tests/fixtures'
 import {selectText, workspace} from '../screenplay/support/markdown'
+import {picture} from '../screenplay/support/images'
+
+test('native canvas gestures open host forms and share persistent geometry without web controls', async ({page}) => {
+  await page.setViewportSize({width: 1440, height: 1000})
+  await openNativeCanvas(page)
+  await nativeFiles(page, [{name: 'canvas.png', type: 'image/png', base64: (await picture(page)).toString('base64')}])
+  await expect(page.locator('.image-canvas canvas')).toBeVisible()
+  for (const offset of [50, 400]) {
+    const box = (await page.locator('#image-view img').boundingBox())!
+    const scale = box.width / 900
+    await page.mouse.move(box.x + offset * scale, box.y + 100 * scale); await page.mouse.down()
+    await page.mouse.move(box.x + (offset + 200) * scale, box.y + 250 * scale, {steps: 8}); await page.mouse.up()
+    await expect.poll(async () => (await nativeView(page)).interactions[0]?.type).toBe('annotation')
+    const form = (await nativeView(page)).interactions[0]!
+    if (form.type !== 'annotation') throw new Error('Expected native region form')
+    expect(form.region?.width).toBeCloseTo(200, -1)
+    await expect(page.locator('button,input,textarea,select,[role="dialog"],header,aside')).toHaveCount(0)
+    await nativeCommand(page, {type: 'annotation', id: form.id, action: 'submit', value: {kind: 'suggestion', comment: `Region ${offset}`, replacement: ''}, region: form.region})
+    await expect.poll(async () => (await nativeView(page)).save.status).toBe('saved')
+  }
+  const before = (await workspace(page)).docs[0].annotations
+  await page.reload()
+  await expect(page.locator('.image-canvas canvas')).toBeVisible()
+  expect((await workspace(page)).docs[0].annotations).toEqual(before)
+  expect((await nativeView(page)).reviews.total).toBe(2)
+})
 
 test('native document: Windows newlines execute trusted scripts while injected scripts stay blocked', async ({page}) => {
   const source = '<!doctype html><html><head></head><body><script>\r\n' +

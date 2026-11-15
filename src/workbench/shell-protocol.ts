@@ -45,7 +45,7 @@ export const nativeViewSchema = v.strictObject({
   save: v.strictObject({status: v.picklist(['saved', 'dirty', 'error']), message: label, rawRecovery: v.boolean()}),
   documents: v.strictObject({rows: v.array(rowSchema), selected: ids, activeId: v.string(), total: count, page: count, pages: count}),
   reviews: v.strictObject({rows: v.array(annotationSchema), selected: ids, activeId: v.nullable(id), filter: status, kinds: v.array(kind), highlightFiltered: v.boolean(), availableKinds: v.array(kind), total: count, page: count, pages: count, report: v.nullable(v.strictObject({score: finite, units: count, band: label, candidates: count, categories: v.array(v.strictObject({categoryId: label, label, count})), history: v.array(finite), delta: v.nullable(finite)}))}),
-  image: v.nullable(v.strictObject({name: label, width: count, height: count, count, usable: v.boolean(), selected: v.boolean(), tool: v.picklist(['draw', 'select', 'pan']), scale: v.number()})),
+  image: v.nullable(v.strictObject({name: label, width: count, height: count, count, usable: v.boolean(), selected: v.boolean(), scale: v.number()})),
   selection: v.nullable(v.strictObject({excerpt: label, x: v.number(), y: v.number()})),
   interactions: v.pipe(v.array(interactionSchema), v.maxLength(8)),
   notice: label,
@@ -72,7 +72,7 @@ export const shellCommandSchema = v.variant('type', [
   v.variant('action', [v.strictObject({type: v.literal('export'), id, action: v.literal('close')}), v.strictObject({type: v.literal('export'), id, action: v.picklist(['change', 'copy', 'save', 'import']), format, includeResolved: v.boolean(), includeFileInfo: v.boolean()})]),
   v.variant('action', [v.strictObject({type: v.literal('trash'), id, action: v.literal('close')}), v.strictObject({type: v.literal('trash'), id, action: v.picklist(['search', 'select', 'all', 'invert', 'restore', 'purge', 'clear', 'next', 'previous']), query: label, keys: ids})]),
   v.variant('action', [v.strictObject({type: v.literal('import'), id, action: v.literal('cancel')}), v.strictObject({type: v.literal('import'), id, action: v.picklist(['row', 'preset', 'submit']), index: count, decision: v.picklist(['overwrite', 'rename', 'skip']), preset: v.picklist(['overwrite-all', 'overwrite-unannotated', 'overwrite-annotated'])})]),
-  v.strictObject({type: v.literal('image'), action: v.picklist(['draw', 'select', 'pan', 'coordinates', 'edit', 'in', 'out', 'fit', 'original'])}),
+  v.strictObject({type: v.literal('image'), action: v.picklist(['coordinates', 'edit', 'in', 'out', 'fit', 'original'])}),
 ])
 export type ShellCommand = v.InferOutput<typeof shellCommandSchema>
 const envelope = {session: id, request: count}

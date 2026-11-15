@@ -36,7 +36,7 @@ export function validRegion(region: ImageRegion, image: Pick<RasterImage, 'width
 }
 
 /** Interaction boundary: clamp and round outward once; stored/imported regions must already be valid. */
-export function normalizeRegion(x: number, y: number, width: number, height: number, image: RasterImage): ImageRegion | null {
+export function normalizeRegion(x: number, y: number, width: number, height: number, image: Pick<RasterImage, 'width' | 'height'>): ImageRegion | null {
   if (![x, y, width, height].every(Number.isFinite) || width === 0 || height === 0) return null
   const left = Math.max(0, Math.floor(Math.min(x, x + width)))
   const top = Math.max(0, Math.floor(Math.min(y, y + height)))
