@@ -117,7 +117,13 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-animations: true
-          script: native/android/gradlew -p native/android connectedDebugAndroidTest
+          script: |
+            inkmark_test_status=0
+            native/android/gradlew -p native/android connectedDebugAndroidTest || inkmark_test_status=$?
+            if adb shell test -d /sdcard/Android/data/io.github.yuniquecore.inkmark/files/test-evidence; then
+              adb pull /sdcard/Android/data/io.github.yuniquecore.inkmark/files/test-evidence .local-build/android-evidence
+            fi
+            exit "$inkmark_test_status"
       - run: node scripts/native-artifact.mjs android
       - uses: actions/upload-artifact@v7.0.2
         with:
@@ -128,7 +134,9 @@ jobs:
         if: always()
         with:
           name: native-tests-android
+          include-hidden-files: true
           path: |
+            .local-build/android-evidence/
             native/android/app/build/reports
             native/android/app/build/outputs/androidTest-results
           if-no-files-found: ignore

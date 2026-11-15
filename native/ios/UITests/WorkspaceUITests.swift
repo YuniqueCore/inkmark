@@ -8,7 +8,7 @@ final class WorkspaceUITests: XCTestCase {
         let create = app.buttons["welcome-new"]
         XCTAssertTrue(create.waitForExistence(timeout: 20), app.debugDescription)
         create.tap()
-        let input = app.textViews["text-entry"]
+        let input = app.otherElements["text-entry"].textViews.firstMatch
         XCTAssertTrue(input.waitForExistence(timeout: 5), app.debugDescription)
         // A fresh simulator may show the system keyboard's introduction on autofocus.
         let introduction = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Speed up your typing")).firstMatch

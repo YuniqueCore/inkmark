@@ -11,7 +11,7 @@ import {Action, Field, Choice, touch, type Colors} from './controls'
 type Send = (command: ShellCommand) => void
 interface FormProps<T extends NativeInteraction['type']> {value: Accessor<InteractionOf<T>>; colors: Colors; send: Send}
 
-function Frame(props: {value: Accessor<NativeInteraction>; colors: Colors; cancel: () => void; dismiss?: () => void; submit?: () => void; children?: import('nsh').JSX.Element; input?: () => InputRef | undefined; discardChanges?: () => boolean}) {
+function Frame(props: {value: Accessor<NativeInteraction>; colors: Colors; cancel: () => void; dismiss?: () => void; submit?: () => void; children?: import('nsh').JSX.Element; actions?: import('nsh').JSX.Element; input?: () => InputRef | undefined; discardChanges?: () => boolean}) {
   const confirming = signal(false)
   const dismiss = () => { if (props.discardChanges?.()) confirming.set(true); else (props.dismiss ?? props.cancel)() }
   keymap.bind('mod+enter', () => { if (!isComposing() && !confirming()) props.submit?.() }, {when: 'always'})
@@ -20,14 +20,15 @@ function Frame(props: {value: Accessor<NativeInteraction>; colors: Colors; cance
     popupStyle={{width: touch() ? windowSize().width : Math.min(620, windowSize().width - 64), maxHeight: windowSize().height * .92,
       backgroundColor: props.colors().chrome, padding: 20, paddingBottom: 'calc(env(keyboard-inset-height) + 20px)', gap: 12}}
     backdropStyle={{backgroundColor: '#00000040'}}>
-    <View style={{flexDirection: 'row', alignItems: 'center', gap: 12}}>
+    <View style={{flexDirection: 'row', flexShrink: 0, alignItems: 'center', gap: 12}}>
       <Text style={{flex: 1, fontSize: 18, fontWeight: '600', color: props.colors().text}}>{props.value().title}</Text>
       <Action label="关闭" testID="form-close" colors={props.colors} onPress={dismiss} />
     </View>
-    <Scroll style={{maxHeight: windowSize().height * .72}} contentStyle={{gap: 14}}>
+    <Scroll style={{minHeight: 0, flexShrink: 1, maxHeight: windowSize().height * .72}} contentStyle={{gap: 14}}>
       {props.children}
       <If when={Boolean(props.value().error)}><Text style={{color: props.colors().danger, fontSize: 14}}>{props.value().error}</Text></If>
     </Scroll>
+    <View style={{flexShrink: 0}}>{props.actions}</View>
   </Sheet>
     <Sheet open={confirming()} onCancel={() => confirming.set(false)} side={touch() ? 'bottom' : 'right'} closeOnEscape={false} closeOnBackdropPress={false}
       popupStyle={{width: Math.min(420, windowSize().width), padding: 24, gap: 16, backgroundColor: props.colors().chrome}} backdropStyle={{backgroundColor: '#00000050'}}>
@@ -62,14 +63,13 @@ function TextForm(props: FormProps<'text'>) {
   const text = signal(initial)
   let input: InputRef | undefined
   const send = (action: 'change' | 'submit' | 'cancel') => action === 'cancel' ? props.send({type: 'text', id: props.value().id, action}) : props.send({type: 'text', id: props.value().id, action, value: text()})
-  return <Frame value={props.value} colors={props.colors} cancel={() => send('cancel')} submit={() => send('submit')} input={() => input} discardChanges={() => text() !== initial}>
+  return <Frame value={props.value} colors={props.colors} cancel={() => send('cancel')} submit={() => send('submit')} input={() => input} discardChanges={() => text() !== initial} actions={<View style={{flexDirection: 'row', justifyContent: 'flex-end', gap: 8}}>
+      <Action label="取消" testID="form-cancel" colors={props.colors} onPress={() => send('cancel')} />
+      <Action label={props.value().confirmText} testID="text-submit" primary colors={props.colors} onPress={() => send('submit')} />
+    </View>}>
     <Text style={{color: props.colors().secondary, fontSize: 14}}>{props.value().description}</Text>
     <Field label={props.value().inputLabel} testID="text-entry" colors={props.colors} value={text()} multiline placeholder={props.value().placeholder} inputRef={ref => { input = ref }}
       onChange={value => { text.set(value); send('change') }} />
-    <View style={{flexDirection: 'row', justifyContent: 'flex-end', gap: 8}}>
-      <Action label="取消" testID="form-cancel" colors={props.colors} onPress={() => send('cancel')} />
-      <Action label={props.value().confirmText} testID="text-submit" primary colors={props.colors} onPress={() => send('submit')} />
-    </View>
   </Frame>
 }
 
@@ -95,7 +95,10 @@ function AnnotationForm(props: FormProps<'annotation'>) {
     }
     props.send({type: 'annotation', id: props.value().id, action, value: value(), region: region()})
   }
-  return <Frame value={props.value} colors={props.colors} cancel={() => send('cancel')} dismiss={() => send('dismiss')} submit={() => send('submit')} input={() => input} discardChanges={() => props.value().dismissal === 'discard' && changed()}>
+  return <Frame value={props.value} colors={props.colors} cancel={() => send('cancel')} dismiss={() => send('dismiss')} submit={() => send('submit')} input={() => input} discardChanges={() => props.value().dismissal === 'discard' && changed()} actions={<View style={{flexDirection: 'row', justifyContent: 'flex-end', gap: 8}}>
+      <Action label="取消" testID="form-cancel" colors={props.colors} onPress={() => send('cancel')} />
+      <Action label="保存批注" testID="annotation-save" primary colors={props.colors} disabled={!canSubmitComposition(value()) || !validCoordinates()} onPress={() => send('submit')} />
+    </View>}>
     <Text style={{color: props.colors().secondary, fontSize: 14, numberOfLines: 5}}>{props.value().excerpt}</Text>
     <If when={props.value().image}>
       <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 8}}>
@@ -106,10 +109,6 @@ function AnnotationForm(props: FormProps<'annotation'>) {
     </If>
     <Composer value={value} colors={props.colors} image={props.value().image} input={ref => { input = ref }} change={next => { value.set(next); send('change') }} />
     <Text style={{color: props.colors().danger, fontSize: 13}}>{coordinateError}</Text>
-    <View style={{flexDirection: 'row', justifyContent: 'flex-end', gap: 8}}>
-      <Action label="取消" testID="form-cancel" colors={props.colors} onPress={() => send('cancel')} />
-      <Action label="保存批注" testID="annotation-save" primary colors={props.colors} disabled={!canSubmitComposition(value()) || !validCoordinates()} onPress={() => send('submit')} />
-    </View>
   </Frame>
 }
 
@@ -126,7 +125,7 @@ function SearchForm(props: FormProps<'search'>) {
     if (action === 'close') props.send({type: 'search', id: props.value().id, action})
     else props.send({type: 'search', id: props.value().id, action, query: query(), caseSensitive: caseSensitive(), regex: regex(), crossDoc: crossDoc(), value: value()})
   }
-  return <Frame value={props.value} colors={props.colors} cancel={() => send('close')} submit={() => send('submit')} input={() => input} discardChanges={() => Boolean(value().comment.trim() || value().replacement.trim())}>
+  return <Frame value={props.value} colors={props.colors} cancel={() => send('close')} submit={() => send('submit')} input={() => input} discardChanges={() => Boolean(value().comment.trim() || value().replacement.trim())} actions={<Action label={`批量批注 ${props.value().hits} 处`} primary colors={props.colors} disabled={!canSubmit()} onPress={() => send('submit')} />}>
     <Field label="搜索正文" testID="search-query" maxLength={4096} value={query()} colors={props.colors} inputRef={ref => { input = ref }} onChange={next => { query.set(next); send('change') }} />
     <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 4}}>
       <Action label="区分大小写" selected={caseSensitive()} colors={props.colors} onPress={() => { caseSensitive.set(!caseSensitive()); send('change') }} />
@@ -137,13 +136,16 @@ function SearchForm(props: FormProps<'search'>) {
     </View>
     <Text style={{color: props.value().invalid ? props.colors().danger : props.colors().secondary}}>{props.value().invalid ? '正则表达式无效' : `命中 ${props.value().hits} 处`}</Text>
     <Composer value={value} colors={props.colors} change={next => { value.set(next); send('change') }} />
-    <Action label={`批量批注 ${props.value().hits} 处`} primary colors={props.colors} disabled={!canSubmit()} onPress={() => send('submit')} />
   </Frame>
 }
 
 function ExportForm(props: FormProps<'export'>) {
   const send = (action: Extract<ShellCommand, {type: 'export'}>['action'], patch: Partial<Pick<InteractionOf<'export'>, 'format' | 'includeResolved' | 'includeFileInfo'>> = {}) => action === 'close' ? props.send({type: 'export', id: props.value().id, action}) : props.send({type: 'export', id: props.value().id, action, format: props.value().format, includeResolved: props.value().includeResolved, includeFileInfo: props.value().includeFileInfo, ...patch})
-  return <Frame value={props.value} colors={props.colors} cancel={() => send('close')}>
+  return <Frame value={props.value} colors={props.colors} cancel={() => send('close')} actions={<View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 4}}>
+      <If when={props.value().format === 'w3c'}><Action label="导入 W3C JSON" colors={props.colors} disabled={props.value().busy} onPress={() => send('import')} /></If>
+      <Action label="复制" colors={props.colors} disabled={props.value().busy} onPress={() => send('copy')} />
+      <Action label={`保存 .${props.value().suffix}`} testID="export-save" primary colors={props.colors} disabled={props.value().busy} onPress={() => send('save')} />
+    </View>}>
     <View style={{flexDirection: 'row', flexWrap: 'wrap'}}>
       <Each of={props.value().hasImages ? ['review', 'w3c'] as const : ['inline', 'snippets', 'review', 'w3c'] as const}>{format => <Action label={{inline: '原文 + 批注', snippets: '片段 + 批注', review: '评审引用块', w3c: 'W3C 批注'}[format()]}
         selected={props.value().format === format()} colors={props.colors} onPress={() => send('change', {format: format()})} />}</Each>
@@ -152,11 +154,6 @@ function ExportForm(props: FormProps<'export'>) {
     </View>
     <Text style={{color: props.colors().secondary, fontSize: 13}}>{props.value().description}</Text>
     <Field label="导出预览" value={props.value().preview} onChange={() => {}} colors={props.colors} multiline readonly />
-    <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 4}}>
-      <If when={props.value().format === 'w3c'}><Action label="导入 W3C JSON" colors={props.colors} disabled={props.value().busy} onPress={() => send('import')} /></If>
-      <Action label="复制" colors={props.colors} disabled={props.value().busy} onPress={() => send('copy')} />
-      <Action label={`保存 .${props.value().suffix}`} testID="export-save" primary colors={props.colors} disabled={props.value().busy} onPress={() => send('save')} />
-    </View>
   </Frame>
 }
 
@@ -164,7 +161,7 @@ function SettingsForm(props: FormProps<'settings'>) {
   const prefs = signal(props.value().prefs)
   const send = (action: 'change' | 'close') => action === 'close' ? props.send({type: 'settings', id: props.value().id, action}) : props.send({type: 'settings', id: props.value().id, action, prefs: prefs()})
   const change = (patch: Partial<ReadingPrefs>) => { prefs.set({...prefs(), ...patch}); send('change') }
-  return <Frame value={props.value} colors={props.colors} cancel={() => send('close')}>
+  return <Frame value={props.value} colors={props.colors} cancel={() => send('close')} actions={<Action label="完成" primary colors={props.colors} onPress={() => send('close')} />}>
     <Choice label="主题" colors={props.colors} value={prefs().theme} items={Object.entries(THEME_META).map(([value, item]) => ({value, title: item.label}))} onChange={theme => change({theme: theme as ReadingPrefs['theme']})} />
     <Choice label="纹理" colors={props.colors} value={prefs().texture} items={Object.entries(TEXTURE_META).map(([value, item]) => ({value, title: item.label}))} onChange={texture => change({texture: texture as ReadingPrefs['texture']})} />
     <Choice label="字体" colors={props.colors} value={prefs().font} items={Object.entries(FONT_META).map(([value, item]) => ({value, title: item.label}))} onChange={font => change({font: font as ReadingPrefs['font']})} />
@@ -182,14 +179,13 @@ function SettingsForm(props: FormProps<'settings'>) {
         <If when={!valid()}><Text style={{color: props.colors().danger}}>请输入 #rgb 或 #rrggbb</Text></If>
       </View>
     }}</Each>
-    <Action label="完成" primary colors={props.colors} onPress={() => send('close')} />
   </Frame>
 }
 
 function TrashForm(props: FormProps<'trash'>) {
   const query = signal(props.value().query)
   const send = (action: Extract<ShellCommand, {type: 'trash'}>['action'], keys = props.value().selected) => action === 'close' ? props.send({type: 'trash', id: props.value().id, action}) : props.send({type: 'trash', id: props.value().id, action, query: query(), keys})
-  return <Frame value={props.value} colors={props.colors} cancel={() => send('close')}>
+  return <Frame value={props.value} colors={props.colors} cancel={() => send('close')} actions={<Action label="清空回收站" danger colors={props.colors} disabled={!props.value().total} onPress={() => send('clear')} />}>
     <Text style={{color: props.colors().secondary, fontSize: 13}}>删除的文档与批注保留 7 天。恢复冲突时保留回收站原项。</Text>
     <Field label="搜索回收站" maxLength={4096} colors={props.colors} value={query()} onChange={next => { query.set(next); send('search') }} />
     <View style={{flexDirection: 'row', flexWrap: 'wrap'}}>
@@ -208,13 +204,12 @@ function TrashForm(props: FormProps<'trash'>) {
       <Text style={{color: props.colors().secondary}}>{props.value().page + 1} / {props.value().pages}</Text>
       <Action label="下一页" colors={props.colors} disabled={props.value().page + 1 >= props.value().pages} onPress={() => send('next')} />
     </View></If>
-    <Action label="清空回收站" danger colors={props.colors} disabled={!props.value().total} onPress={() => send('clear')} />
   </Frame>
 }
 
 function ImportForm(props: FormProps<'import'>) {
   const send = (action: Extract<ShellCommand, {type: 'import'}>['action'], index = 0, decision: 'overwrite' | 'rename' | 'skip' = 'rename', preset: 'overwrite-all' | 'overwrite-unannotated' | 'overwrite-annotated' = 'overwrite-all') => action === 'cancel' ? props.send({type: 'import', id: props.value().id, action}) : props.send({type: 'import', id: props.value().id, action, index, decision, preset})
-  return <Frame value={props.value} colors={props.colors} cancel={() => send('cancel')}>
+  return <Frame value={props.value} colors={props.colors} cancel={() => send('cancel')} actions={<Action label="确认导入" primary colors={props.colors} disabled={!props.value().canSubmit} onPress={() => send('submit')} />}>
     <Text style={{fontSize: 13, color: props.colors().secondary}}>覆盖保留原有批注并重新定位；重命名保留两个版本。</Text>
     <View style={{flexDirection: 'row', flexWrap: 'wrap'}}>
       <Action label="全部覆盖" colors={props.colors} onPress={() => send('preset')} />
@@ -229,19 +224,17 @@ function ImportForm(props: FormProps<'import'>) {
       </If>
       <If when={row().action === 'direct' || row().action === 'identical'}><Text style={{color: props.colors().secondary}}>{row().action === 'direct' ? '直接导入' : '内容相同，跳过'}</Text></If>
     </View>}</Each>
-    <Action label="确认导入" primary colors={props.colors} disabled={!props.value().canSubmit} onPress={() => send('submit')} />
   </Frame>
 }
 
 function Confirmation(props: FormProps<'choice'>) {
   const send = (choice: 'confirm' | 'alt' | 'cancel') => props.send({type: 'choice', id: props.value().id, choice})
-  return <Frame value={props.value} colors={props.colors} cancel={() => send('cancel')}>
-    <Text style={{fontSize: 14, color: props.colors().text}}>{props.value().description}</Text>
-    <View style={{flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 8}}>
+  return <Frame value={props.value} colors={props.colors} cancel={() => send('cancel')} actions={<View style={{flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 8}}>
       <Action label={props.value().cancelText} colors={props.colors} onPress={() => send('cancel')} />
       <If when={Boolean(props.value().altText)}><Action label={props.value().altText ?? ''} colors={props.colors} onPress={() => send('alt')} /></If>
       <Action label={props.value().confirmText} primary={!props.value().danger} danger={props.value().danger} colors={props.colors} onPress={() => send('confirm')} />
-    </View>
+    </View>}>
+    <Text style={{fontSize: 14, color: props.colors().text}}>{props.value().description}</Text>
   </Frame>
 }
 

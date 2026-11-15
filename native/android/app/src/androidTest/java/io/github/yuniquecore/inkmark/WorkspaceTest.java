@@ -153,6 +153,14 @@ public class WorkspaceTest {
 
     private static UiObject2 control(UiDevice device, String id) {
         UiObject2 control = device.wait(Until.findObject(By.res(id)), 10000);
+        if (control == null) {
+            File evidence = new File(InstrumentationRegistry.getInstrumentation().getTargetContext().getExternalFilesDir(null), "test-evidence");
+            if (evidence.isDirectory() || evidence.mkdirs()) {
+                device.takeScreenshot(new File(evidence, id + ".png"));
+                try { device.dumpWindowHierarchy(new File(evidence, id + ".xml")); }
+                catch (java.io.IOException error) { android.util.Log.w("InkMarkTest", "Could not capture accessibility hierarchy", error); }
+            }
+        }
         assertNotNull("Missing native control: " + id, control); return control;
     }
     private static void action(UiDevice device, String action) {

@@ -66,7 +66,7 @@ Restoration and close attempts acquire independent input locks and release only 
 
 The native HTML has a hash-based script CSP and embedded fonts/icons/styles. Raw Markdown HTML remains escaped; remote images require the existing explicit user action and HTTPS on native. External http/https/mailto links go to the system; document fragment links stay in the WebView. Android does not request broad filesystem, camera or photo-library permission. Clipboard image import uses granted content URIs on Android and the NSH clipboard on Apple/desktop platforms.
 
-Mobile hosts own safe-area and keyboard insets. Native forms use native text editors and keyboard-aware sheets; browser forms use the visible viewport. Source/preview selection mapping and image geometry stay in the shared canvas. Window width controls pane layout independently of the platform control size.
+Mobile hosts own safe-area and keyboard insets. Native forms use native text editors and keyboard-aware sheets with submission controls outside the scrollable content; browser forms use the visible viewport. Source/preview selection mapping and image geometry stay in the shared canvas. Window width controls pane layout independently of the platform control size.
 
 ## Build and test
 
