@@ -1,3 +1,4 @@
+import {documentAction} from './actions'
 /** Markdown 业务旅程共享的浏览器交互。 */
 import type { Locator, Page } from '@playwright/test'
 import { Workbench } from '../screens/Workbench'
@@ -35,10 +36,7 @@ export function setStoredWorkspace(page: Page, raw: string): Promise<void> {
 
 export async function openNew(page: Page, empty = false): Promise<void> {
   if (empty) await page.locator('#btn-empty-paste').click()
-  else {
-    await page.locator('#btn-import').click()
-    await page.getByRole('menuitem', {name: '粘贴新建文档'}).click()
-  }
+  else await documentAction(page, 'new')
 }
 
 export async function createDoc(page: Page, text: string, empty = false): Promise<void> {

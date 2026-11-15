@@ -1,0 +1,270 @@
+/* ---------------------------------------------------------------- 组件（shadcn 语汇） */
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md text-sm font-medium
+      transition-all duration-150 outline-none
+      focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:border-ring
+      disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98]
+      [&_svg]:size-4 [&_svg]:shrink-0;
+  }
+  .btn-default {
+    @apply bg-primary text-primary-foreground shadow-xs hover:bg-primary/90;
+  }
+  .btn-outline {
+    @apply border border-border bg-card shadow-xs hover:bg-accent hover:text-accent-foreground;
+  }
+  .btn-ghost {
+    @apply hover:bg-accent hover:text-accent-foreground;
+  }
+  .btn-destructive {
+    @apply text-destructive hover:bg-destructive/10;
+  }
+  .btn-sm { @apply h-8 px-3 text-[13px]; }
+  .btn-md { @apply h-9 px-4; }
+
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium leading-4;
+  }
+  .card {
+    @apply rounded-lg border border-border bg-card text-card-foreground;
+  }
+  .kbd {
+    @apply inline-flex h-5 min-w-5 items-center justify-center rounded border border-border bg-muted
+      px-1 font-mono text-[10px] font-medium text-muted-foreground;
+  }
+  .input-base {
+    @apply w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground
+      placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px]
+      focus-visible:ring-ring/40 focus-visible:border-ring transition-colors;
+  }
+  .popover-panel {
+    @apply rounded-lg border border-border bg-popover text-popover-foreground shadow-lg;
+    animation: pop-in 0.12s ease-out;
+  }
+  .chip-toggle {
+    @apply inline-flex h-7 items-center gap-1 rounded-md border border-transparent px-2.5 text-[12.5px]
+      text-muted-foreground transition-colors hover:text-foreground;
+  }
+  .chip-toggle.on {
+    @apply border-border bg-secondary text-secondary-foreground shadow-xs;
+  }
+  /* 分段迷你控件（导入诊断树逐行动作）：容器给边框，选项选中态同 chip */
+  .seg-opt {
+    @apply rounded-md px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:text-foreground;
+  }
+  .seg-opt.on {
+    @apply bg-secondary text-secondary-foreground shadow-xs;
+  }
+  /* 开关（toggle）：轨道 + 滑钮，aria-checked 驱动，位移走 transform 动画 */
+  .ui-switch {
+    @apply relative inline-flex h-[18px] w-8 shrink-0 cursor-pointer items-center rounded-full border
+      border-border bg-input/50 transition-colors hover:border-ring/60;
+  }
+  .ui-switch::after {
+    content: '';
+    @apply absolute left-[2px] top-1/2 size-3.5 rounded-full bg-card shadow-sm;
+    transform: translate(0, -50%);
+    transition: transform 0.18s ease-out;
+  }
+  .ui-switch[aria-checked='true'] {
+    @apply border-primary bg-primary;
+  }
+  .ui-switch[aria-checked='true']::after {
+    transform: translate(14px, -50%);
+  }
+  /* 侧栏卡片多选：勾选框悬停浮现，有选中项后常驻；卡片选中态过渡 */
+  .ann-card .ann-check {
+    @apply size-3.5 shrink-0 cursor-pointer accent-[var(--primary)] opacity-100 transition-opacity;
+  }
+  .ann-card:hover .ann-check,
+  .ann-card .ann-check:checked {
+    @apply opacity-100;
+  }
+  .sel-active .ann-card .ann-check {
+    @apply opacity-100;
+  }
+  .ann-card.sel-on {
+    @apply border-ring bg-secondary/50;
+  }
+  /* 批量操作簇：从无到有时滑入反馈（只在出现瞬间挂动画类） */
+  .bulk-pop {
+    animation: bulk-in 0.16s ease-out;
+  }
+  @keyframes bulk-in {
+    from {
+      opacity: 0;
+      transform: translateX(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+  /* 快捷语 chips 容器：grid 列流式布局，纵向封顶两行、超出转水平滚动，
+     不让词表撑高卡片（隐藏滚动条，边缘截断的 chip 即可滚动暗示） */
+  .chip-scroll {
+    display: grid;
+    grid-template-rows: repeat(2, minmax(0, max-content));
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    gap: 4px 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .chip-scroll::-webkit-scrollbar {
+    display: none;
+  }
+  /* 类型 chips：激活态使用对应标注色（筛选行与编辑 chips 共用） */
+  .kind-chip.on[data-kind="issue"] { color: var(--kind-issue); border-color: color-mix(in oklab, var(--kind-issue) 45%, transparent); background: var(--kind-issue-bg); }
+  .kind-chip.on[data-kind="suggestion"] { color: var(--kind-suggestion); border-color: color-mix(in oklab, var(--kind-suggestion) 45%, transparent); background: var(--kind-suggestion-bg); }
+  .kind-chip.on[data-kind="question"] { color: var(--kind-question); border-color: color-mix(in oklab, var(--kind-question) 45%, transparent); background: var(--kind-question-bg); }
+  .kind-chip.on[data-kind="highlight"] { color: var(--kind-highlight); border-color: color-mix(in oklab, var(--kind-highlight) 45%, transparent); background: var(--kind-highlight-bg); }
+  .kind-chip.on[data-kind="praise"] { color: var(--kind-praise); border-color: color-mix(in oklab, var(--kind-praise) 45%, transparent); background: var(--kind-praise-bg); }
+  .kind-chip.on[data-kind="slop"] { color: var(--kind-slop); border-color: color-mix(in oklab, var(--kind-slop) 45%, transparent); background: var(--kind-slop-bg); }
+  .dark .kind-chip.on[data-kind] { color: var(--foreground); }
+}
+
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(3px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+/* ---------------------------------------------------------------- 文档树 */
+
+@layer components {
+  .tree-row {
+    @apply flex w-full items-center gap-1.5 rounded-md px-1.5 py-[5px] text-left text-[13px]
+      cursor-pointer select-none transition-colors
+      hover:bg-accent hover:text-accent-foreground;
+  }
+  .tree-remove {
+    @apply ml-auto flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground
+      hover:bg-destructive/10 hover:text-destructive;
+  }
+}
+
+/* 破坏性确认按钮 */
+.confirm-danger {
+  @apply bg-destructive text-white shadow-xs hover:bg-destructive/90;
+}
+/* ---------------------------------------------------------------- 设置控件（设置弹层与悬浮球共用） */
+
+.theme-card {
+  @apply rounded-lg border border-transparent p-2 text-left transition-colors hover:bg-accent/50;
+}
+.texture-card,
+.font-card {
+  @apply rounded-lg border border-transparent p-1.5 text-center transition-colors hover:bg-accent/50;
+}
+.theme-card.on,
+.texture-card.on,
+.font-card.on {
+  @apply border-ring ring-2 ring-ring/30;
+}
+
+/* 主题缩略示意：迷你界面（头部 / 侧栏 / 正文行）直接用真实 token 上色，
+   根节点带 data-theme（+ 深色主题补 .dark），token 级联即可换装 */
+.theme-preview {
+  @apply flex flex-col overflow-hidden rounded-md border;
+  border-color: var(--border);
+  height: 44px;
+  background: var(--background);
+}
+.tp-head {
+  @apply w-full shrink-0;
+  height: 7px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+.tp-body {
+  @apply flex min-h-0 flex-1;
+}
+.tp-side {
+  @apply h-full shrink-0;
+  width: 27%;
+  background: var(--sidebar-bg);
+}
+.tp-main {
+  @apply min-w-0 flex-1 px-2 py-1.5;
+}
+.tp-line {
+  display: block;
+  height: 3px;
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--foreground) 24%, transparent);
+}
+.tp-line + .tp-line {
+  margin-top: 5px;
+}
+.tp-line.short {
+  width: 62%;
+}
+
+.texture-swatch {
+  @apply block h-12 w-full rounded-md border bg-card;
+  border-color: var(--border);
+}
+/* 选中态对勾角标：主题/纹理/字体卡共用（右下角小圆标，主色底 + 白勾） */
+.theme-card,
+.texture-card,
+.font-card {
+  position: relative;
+}
+.theme-card.on::after,
+.texture-card.on::after,
+.font-card.on::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: var(--primary) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center/9px no-repeat;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
+}
+.theme-card:not(.on):hover,
+.texture-card:not(.on):hover,
+.font-card:not(.on):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.08);
+}
+.font-sample {
+  @apply block text-[15px] leading-6;
+}
+
+.image-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 10px 20px; border-bottom: 1px solid var(--border); background: var(--card); }
+.image-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.image-actions output { min-width: 3.5em; text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; }
+.image-actions [aria-pressed='true'] { background: var(--primary); color: var(--primary-foreground); }
+.image-actions [aria-pressed='false'] { background: transparent; color: var(--foreground); }
+.image-caption { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px; padding: 10px 20px; color: var(--muted-foreground); font-size: 12px; font-variant-numeric: tabular-nums; }
+.image-hint { padding: 10px 20px; font-size: 12px; line-height: 1.6; color: var(--muted-foreground); border-top: 1px solid var(--border); }
+.image-composer { position: absolute; z-index: 20; right: 20px; bottom: 52px; width: min(360px, calc(100% - 32px)); max-height: calc(100% - 110px); overflow-y: auto; padding: 16px; border-radius: 12px; border: 1px solid var(--border); color: var(--popover-foreground); background: var(--popover); }
+.image-composer-title, .image-composer-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.image-composer-title { margin-bottom: 6px; font-size: 14px; }
+.image-composer-footer { margin-top: 12px; }
+.image-coordinates { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+.image-coordinates label { display: grid; gap: 4px; color: var(--muted-foreground); font-size: 11px; }
+.image-coordinates input { width: 100%; padding: 5px; font-variant-numeric: tabular-nums; font-size: 12px; }
+.image-view [data-region-error]:not(:empty) { margin-bottom: 10px; }
+@media (max-width: 639px) {
+  .image-toolbar { padding: 8px 12px; }
+  .image-caption, .image-hint { padding: 8px 12px; }
+  .image-composer { right: 12px; bottom: 12px; width: calc(100% - 24px); }
+}
+.viewport-dialog { top: calc(var(--visible-top, 0px) + var(--visible-height, 100dvh) / 2); max-height: calc(var(--visible-height, 100dvh) - 24px); overflow-y: auto; }
+#drawer-backdrop { top: var(--workspace-top, 57px); }
+@media (pointer: coarse) {
+  .btn { min-height: 44px; }
+  #selection-pin { min-width: 40px; min-height: 40px; }
+  .viewport-dialog textarea { font-size: 16px; }
+}
+
+.search-panel {
+  top: calc(var(--visible-top, 0px) + 65px);
+  max-height: calc(var(--visible-height, 100dvh) - 80px);
+  overflow-y: auto;
+}

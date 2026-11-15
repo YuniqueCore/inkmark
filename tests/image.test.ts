@@ -6,7 +6,7 @@ import { entryKey, restoreFromTrash, trashFromDoc } from '../src/core/trash'
 import { prepareSessionDocs } from '../src/core/import'
 import { buildReviewExport } from '../src/core/review-export'
 import { filterAnnotations } from '../src/core/document'
-import { presentAnnotations } from '../src/ui/annotation-presentation'
+import { presentAnnotations } from '../src/workbench/annotation-presentation'
 import type { Annotation, DocItem, ImageDocument, RegionAnnotation } from '../src/core/types'
 
 const dataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aL1sAAAAASUVORK5CYII='

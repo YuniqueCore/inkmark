@@ -1,0 +1,11 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`search navigation and grouped review keep one visible selection through resolution and re-filtering 1`] = `
+[
+  {
+    "excerpt": "stable",
+    "id": "ann-0",
+    "status": "resolved",
+  },
+]
+`;

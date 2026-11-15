@@ -1,3 +1,4 @@
+import {documentAction} from '../support/actions'
 /** 任务：业务意图层的组合。一个 Task = 一个人类可描述的工作流步骤。 */
 
 import { BrowseTheWorkbench } from '../abilities/BrowseTheWorkbench'
@@ -18,8 +19,7 @@ export const OpenSampleDocument = (): Task =>
     '#actor 载入示例文档',
     Interaction.where('点顶栏导入菜单里的载入示例', async (actor) => {
       const page = BrowseTheWorkbench.as(actor).page
-      await Workbench.headerButton(page, /导入：打开文件/).hover()
-      await page.getByRole('menuitem', { name: '载入示例' }).click()
+      await documentAction(page, 'sample')
     }),
     Interaction.where('等正文首块渲染', async (actor) => {
       await Workbench.firstBlock(BrowseTheWorkbench.as(actor).page).waitFor({ state: 'visible' })

@@ -10,12 +10,10 @@ export interface ResizerOptions {
   layout: HTMLElement
   leftHandle: HTMLElement
   rightHandle: HTMLElement
-  treeEl: HTMLElement
-  sidebarEl: HTMLElement
 }
 
 const KEY = 'inkmark:panels'
-const DEFAULTS = {treeW: 240, sideW: 380}
+const DEFAULTS = {treeW: 240, sideW: 340}
 const CLAMP = {tree: [170, 440] as const, side: [300, 620] as const}
 
 export function loadPanelWidths(): {treeW: number; sideW: number} {

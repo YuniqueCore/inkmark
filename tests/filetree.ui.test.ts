@@ -6,15 +6,15 @@
 
 import { beforeEach, describe, expect, it } from 'vitest'
 import { FileTreeView } from '../src/ui/filetree'
-import type { DocItem } from '../src/core/types'
+import {DocumentList, type DocumentSummary} from '../src/workbench/documents'
 
-const doc = (id: string, name: string): DocItem => ({
+const doc = (id: string, name: string): DocumentSummary => ({
   id,
   name,
   path: '',
-  text: `${name} 的内容。`,
-  annotations: [],
-  addedAt: 1,
+  kind: 'text',
+  annotationCount: 0,
+  openCount: 0,
 })
 
 let root: HTMLElement
@@ -32,7 +32,7 @@ beforeEach(() => {
     onExportDoc: (id) => events.push({op: 'export-doc', ids: [id]}),
     onBulkExport: (ids) => events.push({op: 'bulk-export', ids}),
     onBulkDelete: (ids) => events.push({op: 'bulk-delete', ids}),
-  })
+  }, new DocumentList())
 })
 
 const checkbox = (id: string): HTMLInputElement => root.querySelector(`[data-select="${id}"]`)!
@@ -45,13 +45,13 @@ const check = (id: string): void => {
 
 describe('FileTreeView 特殊字符转义', () => {
   it('文件名/目录名含引号：属性转义渲染，目录折叠正常（回归：data-dir 曾未转义）', () => {
-    const quoted: DocItem = {
+    const quoted: DocumentSummary = {
       id: 'q1',
       name: '含"引号"的文档.txt',
       path: '目录"A"',
-      text: '内容。',
-      annotations: [],
-      addedAt: 1,
+      kind: 'text',
+      annotationCount: 0,
+      openCount: 0,
     }
     tree.render([quoted], 'q1')
     const dirBtn = root.querySelector('[data-dir]') as HTMLElement
@@ -91,7 +91,7 @@ describe('FileTreeView 多选', () => {
       onExportDoc: () => {},
       onBulkExport: () => {},
       onBulkDelete: () => {},
-    })
+    }, new DocumentList())
     tree.render([doc('a', '一.md')], 'a')
     const box = root.querySelector('[data-select="a"]') as HTMLInputElement
     box.click()

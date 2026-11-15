@@ -4,7 +4,7 @@
 
 import { buildReviewExport, type ReviewFormat } from '../core/review-export'
 import { escapeHtml } from '../core/text'
-import { strToU8, zipSync } from 'fflate'
+import {artifactFile} from '../platform/export-artifact'
 import type { ReviewDocument } from '../core/types'
 import { isImageDocument } from '../core/types'
 import {exportFile} from './file-transfer'
@@ -143,10 +143,7 @@ export class ExporterView {
     this.modal.querySelector('[data-op="download"]')?.addEventListener('click', async (event) => {
       const button = event.currentTarget as HTMLButtonElement
       button.disabled = true
-      const blob = artifact.kind === 'bundle'
-        ? new Blob([zipSync(Object.fromEntries(Object.entries(artifact.entries).map(([name, data]) => [name, typeof data === 'string' ? strToU8(data) : data])))], {type: 'application/zip'})
-        : new Blob([artifact.preview], {type: artifact.mediaType})
-      try { await exportFile(new File([blob], artifact.name, {type: blob.type})) }
+      try { await exportFile(artifactFile(artifact)) }
       finally { button.disabled = false }
     })
     this.modal.querySelector('[data-op="import"]')?.addEventListener('click', () => {

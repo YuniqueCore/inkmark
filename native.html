@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>InkMark review canvas</title>
+    <link rel="stylesheet" href="/src/canvas.css" />
+  </head>
+  <body class="native-canvas flex h-dvh flex-col overflow-hidden">
+    <main id="layout" class="flex min-h-0 flex-1">
+      <section id="editor-wrap" class="relative flex min-h-0 min-w-0 flex-1 flex-col">
+        <div id="reading-panes" data-layout="source" class="reading-panes min-h-0 flex-1">
+          <article id="editor" class="editor reading-pane min-h-0 overflow-auto px-6 py-8" aria-label="文档原文"></article>
+          <article id="markdown-preview" class="reading-pane markdown-preview min-h-0 overflow-auto" aria-label="Markdown 预览" tabindex="0" hidden><div class="markdown-body"></div></article>
+        </div>
+        <p id="preview-hint" class="reading-hint" hidden>预览批注按 Markdown 原文定位。</p>
+        <section id="image-view" class="image-view" hidden></section>
+      </section>
+    </main>
+    <script type="module" src="/src/native.ts"></script>
+  </body>
+</html>

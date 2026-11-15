@@ -5,7 +5,6 @@
 import { FONT_WEIGHT_META, isDarkContent, normalizePrefs } from '../core/prefs'
 import { ensureReadable } from '../core/contrast'
 import type { ReadingPrefs } from '../core/prefs'
-import { icon } from './icons'
 
 // 键与 index.html 防闪烁内联脚本镜像——改动必须两处同步
 const KEY = 'inkmark:prefs:v1'
@@ -38,8 +37,7 @@ export function applyPrefs(p: ReadingPrefs): void {
     pane.setAttribute('data-font', p.font)
     applyEditorColors(pane, p)
   })
-  const btn = document.querySelector('#btn-theme')
-  if (btn) btn.innerHTML = icon(isDarkContent(p.theme) ? 'sun' : 'moon', 'size-4')
+
 }
 
 function parsePrefs(raw: string | null): ReadingPrefs {

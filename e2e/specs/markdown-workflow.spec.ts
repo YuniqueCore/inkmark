@@ -1,3 +1,4 @@
+import {workspaceAction} from '../screenplay/support/actions'
 /** 业务旅程：从粘贴新建到双视图批注、重载、异常恢复与安全边界。 */
 import { readFile } from 'node:fs/promises'
 import { expect, test } from '../screenplay/fixtures/screenplay'
@@ -77,11 +78,11 @@ test('重复粘贴、编辑草稿、删除与恢复组成完整文档生命周�
     await expect(page.locator('#filetree [data-doc]')).toHaveCount(2)
     await expect(page.locator('#filetree')).toContainText('粘贴文档-1.md')
     await page.locator('#filetree [data-doc]').first().click()
-    await page.locator('#btn-edit').click()
+    await workspaceAction(page, 'edit')
     await page.locator('#edit-source').fill('正在修改的草稿')
     await page.locator('#filetree [data-doc]').nth(1).click()
     await expect(page.locator('#edit-source')).toHaveValue('正在修改的草稿')
-    await page.locator('#btn-search').click()
+    await workspaceAction(page, 'search')
     await expect(page.getByText('请先完成或取消原文编辑').last()).toBeVisible()
     await page.getByRole('button', {name: '取消', exact: true}).click()
   })
@@ -91,7 +92,7 @@ test('重复粘贴、编辑草稿、删除与恢复组成完整文档生命周�
     await first.locator('[data-remove]').click()
     await page.getByRole('alertdialog').getByRole('button', {name: '移除', exact: true}).click()
     await createDoc(page, '新文档占用了原来的名称。')
-    await page.locator('#btn-edit').click()
+    await workspaceAction(page, 'edit')
     await page.locator('#btn-trash').click()
     await page.locator('[data-entry] [data-op="restore"]').first().click()
     await page.getByRole('dialog', {name: '回收站'}).getByRole('button', {name: '关闭'}).click()
@@ -164,7 +165,7 @@ test('实体、隐藏链接和危险内容不会产生错误锚点或隐式网�
   await expect(page.locator('#sidebar .ann-card')).toHaveCount(3)
 
   await page.getByRole('button', {name: /图片：示意图/}).click()
-  await page.locator('#btn-search').click()
+  await workspaceAction(page, 'search')
   await page.locator('#sp-input').fill('重复')
   await page.locator('#sp-input').fill('粗体')
   await expect(page.locator('#markdown-preview img[alt="示意图"]')).toBeVisible()
@@ -184,7 +185,7 @@ test('存储损坏时分别导出原始数据和新工作，并在用户确认�
 
   let downloads = 0
   page.on('download', () => { downloads++ })
-  await page.locator('#btn-edit').click()
+  await workspaceAction(page, 'edit')
   await page.locator('#edit-source').fill('存储异常时还在编辑的内容。')
   await page.locator('#btn-recovery-backup').click()
   await expect(page.getByText('请先完成或取消原文编辑')).toBeVisible()
@@ -217,7 +218,7 @@ test('空工作台直接粘贴可建文档，输入框粘贴与恶意会话不�
   }, pasted)
   await expect(page.locator('#editor')).toContainText('直接粘贴')
   await expect.poll(async () => (await workspace(page))?.docs[0]?.text ?? '').toBe(pasted)
-  await page.locator('#btn-edit').click()
+  await workspaceAction(page, 'edit')
   const intercepted = await page.locator('#edit-source').evaluate((textarea) => {
     const data = new DataTransfer(); data.setData('text/plain', '不应创建新文档')
     return !textarea.dispatchEvent(new ClipboardEvent('paste', {bubbles: true, cancelable: true, clipboardData: data}))

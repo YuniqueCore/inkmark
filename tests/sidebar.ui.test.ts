@@ -5,18 +5,21 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest'
-import { presentAnnotations } from '../src/ui/annotation-presentation'
+import { presentAnnotations } from '../src/workbench/annotation-presentation'
 import type { SidebarRenderOptions } from '../src/ui/sidebar'
 import { SidebarView } from '../src/ui/sidebar'
+import {ReviewList} from '../src/workbench/review-list'
 import type { Annotation, DocItem, SlopSample } from '../src/core/types'
 
 let root: HTMLElement
 let sidebar: SidebarView
+let model: ReviewList
 const notify: string[] = []
 
 beforeEach(() => {
   document.body.innerHTML = ''
   notify.length = 0
+  model = new ReviewList()
   root = document.createElement('div')
   document.body.append(root)
   sidebar = new SidebarView(root, {
@@ -29,7 +32,7 @@ beforeEach(() => {
     onKindFilterChange: () => {},
     onHighlightModeChange: () => {},
     onNotify: (m) => notify.push(m),
-  })
+  }, model)
 })
 
 const ann = (over: Partial<Annotation> = {}): Annotation => ({
@@ -134,7 +137,7 @@ describe('类型 chips 与撰写卡一致', () => {
   })
 
   it('正被筛选的机器类型保留 0 计数 chip 以便取消', () => {
-    sidebar.setKindFilter(new Set(['slop' as const]))
+    model.kinds = new Set(['slop'])
     render(doc([ann({ kind: 'issue' })]).text, [ann({ kind: 'issue' })], {})
     const kinds = [...root.querySelectorAll('.kind-chip')].map((c) => c.getAttribute('data-kind'))
     expect(kinds).toEqual(['suggestion', 'question', 'highlight', 'praise', 'issue', 'slop'])
@@ -177,7 +180,7 @@ describe('侧栏卡片多选与批量操作', () => {
       onKindFilterChange: () => {},
       onHighlightModeChange: () => {},
       onNotify: () => {},
-    })
+    }, model)
     render(doc(three()).text, three(), {})
     checkCard('[data-select="a1"]')
     expect(focused).toEqual([])
@@ -195,7 +198,7 @@ describe('侧栏卡片多选与批量操作', () => {
       onKindFilterChange: () => {},
       onHighlightModeChange: () => {},
       onNotify: () => {},
-    })
+    }, model)
     const anns = three()
     render(doc(anns).text, anns, {})
     checkCard('[data-select="a1"]')
@@ -251,7 +254,7 @@ describe('侧栏卡片多选与批量操作', () => {
       onKindFilterChange: () => {},
       onHighlightModeChange: () => {},
       onNotify: () => {},
-    })
+    }, model)
     render(doc([a1, a2]).text, [a1, a2], {})
     checkCard('[data-select-group]')
     expect(root.querySelector('[data-bulk-actions]')?.textContent).toContain('已选 2')
@@ -273,14 +276,14 @@ describe('正文只高亮开关', () => {
       onKindFilterChange: () => {},
       onHighlightModeChange: (only) => modes.push(only),
       onNotify: () => {},
-    })
+    }, model)
     render(doc([ann()]).text, [ann()], {})
     const sw = root.querySelector('#only-hl') as HTMLButtonElement
     expect(sw.getAttribute('role')).toBe('switch')
     expect(sw.getAttribute('aria-checked')).toBe('false')
     sw.click()
     expect(modes).toEqual([true])
-    sidebar.setHighlightMode(true)
+    model.highlightFiltered = true
     render(doc([ann()]).text, [ann()], {})
     expect((root.querySelector('#only-hl') as HTMLButtonElement).getAttribute('aria-checked')).toBe('true')
   })

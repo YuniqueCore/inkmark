@@ -13,11 +13,8 @@ import type { AnnotationKind } from '../core/types'
 import { escapeHtml } from '../core/text'
 import { icon } from './icons'
 
-export interface ComposerState {
-  kind: AnnotationKind
-  comment: string
-  replacement: string
-}
+import {canSubmitComposition, type ComposerState} from '../workbench/composition'
+export type {ComposerState} from '../workbench/composition'
 
 export interface ComposerCallbacks {
   /** 任意字段变化（宿主据此记账草稿 / 刷新提交按钮态 / 同步徽标） */
@@ -53,7 +50,7 @@ export class ComposerForm {
 
   /** 认可类型允许只划不写；其余类型需要批注语 */
   canSubmit(): boolean {
-    return this.comment.trim() !== '' || this.kind === 'praise'
+    return canSubmitComposition(this.state())
   }
 
   /** 清空批注语与替换词（类型保留；宿主在提交成功后调用） */

@@ -1,3 +1,4 @@
+import {workspaceAction} from '../screenplay/support/actions'
 import {test, expect, type Page} from '@playwright/test'
 import {readFile} from 'node:fs/promises'
 import {unzipSync} from 'fflate'
@@ -273,7 +274,7 @@ test('a delayed import cannot steal the document owned by a revision input sessi
   })
   await page.locator('#file-input').setInputFiles({name: 'B.md', mimeType: 'text/markdown', buffer: Buffer.from('Original document B')})
   await page.waitForFunction(() => 'releaseImport' in window)
-  await page.locator('#btn-diff').click()
+  await workspaceAction(page, 'diff')
   const dialog = page.getByRole('dialog', {name: '贴入「A.md」的 AI 改稿'})
   await dialog.locator('textarea').fill('Revision intended for document A')
   await page.evaluate(() => (window as unknown as {releaseImport: () => void}).releaseImport())

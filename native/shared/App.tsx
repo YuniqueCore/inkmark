@@ -1,4 +1,9 @@
-import {Clipboard, Text, View, WebView, effect, lifecycle, signal, openUrl, type WebViewRef} from 'nsh'
+import {Action, light, dark} from './ui/controls'
+import {isDarkContent} from '../../src/core/prefs'
+import {isComposing} from './ui/input-state'
+import {Clipboard, Text, View, WebView, effect, keymap, lifecycle, signal, openUrl, type WebViewRef} from 'nsh'
+import {NativeWorkbench} from './ui/Workbench'
+import {createShellClient} from './shell-client'
 import {AlertDialog} from 'nsh/base'
 import {currentWindow, Application, Menu, isAvailable} from 'nsh/desktop'
 import {parseRequest, encodeBytes, type HostResponse, type SaveReceipt, type TransferFile, type PickOptions} from '../../src/platform/protocol'
@@ -12,6 +17,7 @@ export interface FileBindings {
 export function Workspace(props: {document: {html: string; baseUrl: string}; files: FileBindings}) {
   let web!: WebViewRef
   const error = signal('')
+  const shell = createShellClient(message => web.postMessage(message), error.set)
   let transferPending = false
   let closePending: string | undefined
   let closeSequence = 0
@@ -22,6 +28,9 @@ export function Workspace(props: {document: {html: string; baseUrl: string}; fil
   Application.on('quit', () => { web?.postMessage('inkmark:flush') })
   const requestClose = (): void => {
     if (closePending) return
+    if (isComposing()) { error.set('请先完成输入法候选，再关闭窗口'); return }
+    if (shell.view()?.interactions.some(item => ['text', 'annotation', 'search'].includes(item.type))) { error.set('请先提交或取消当前编辑，再关闭窗口'); return }
+    if (shell.pending()) { error.set('当前输入尚未确认，请稍后再关闭窗口'); return }
     if (!ready) { Application.quit(); return }
     if (transferPending) { error.set('文件操作尚未完成，请完成或取消系统对话框后再关闭'); return }
     const attempt = String(++closeSequence)
@@ -49,8 +58,12 @@ export function Workspace(props: {document: {html: string; baseUrl: string}; fil
     ])
   }
 
+  keymap.bind('mod+f', () => shell.send({type: 'workspace', action: 'search'}))
+  keymap.bind('mod+s', () => shell.send({type: 'workspace', action: 'export'}))
+
   const send = (response: HostResponse): void => web.postMessage(JSON.stringify(response))
   const receive = async (message: string): Promise<void> => {
+    if (shell.receive(message)) return
     if (message === 'inkmark:ready') { ready = true; return }
     if (message === 'inkmark:flush-saved' || message === 'inkmark:flush-failed') return
     if (closePending && message === `inkmark:close-ready:${closePending}` && isAvailable) { clearTimeout(closeTimer); Application.quit(); return }
@@ -96,11 +109,17 @@ export function Workspace(props: {document: {html: string; baseUrl: string}; fil
       send({id: request.id, status: 'error', message: (cause instanceof Error ? cause.message : '原生文件操作失败').slice(0, 1000)})
     } finally { if (transfer) transferPending = false }
   }
-  return <View style={{flex: 1, backgroundColor: '#faf9f6'}}>
-    {() => error() ? <Text style={{padding: 24, color: '#9f1239'}}>{error()}</Text> : null}
-    <WebView ref={web} testID="workspace" html={props.document.html} baseUrl={props.document.baseUrl} style={{flex: 1}}
+  const colors = () => isDarkContent(shell.view()?.chrome?.prefs.theme ?? 'light') ? dark : light
+  return <View style={{flex: 1, backgroundColor: colors().chrome}}>
+    <If when={Boolean(error())}><View style={{flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 4}}>
+      <Text testID="native-error" style={{flex: 1, fontSize: 13, color: colors().danger, numberOfLines: 2}}>{error}</Text>
+      <Action label="关闭提示" colors={colors} onPress={() => error.set('')} />
+    </View></If>
+    <NativeWorkbench view={shell.view} send={shell.send} directories={isAvailable} canvas={
+      <WebView ref={web} testID="workspace" html={props.document.html} baseUrl={props.document.baseUrl} style={{flex: 1}}
       injectedJavaScriptBeforeContentLoaded={`window.inkmarkHost = {directories: ${isAvailable}};`}
       onMessage={event => void receive(event.data)}
       onError={() => error.set('工作台无法加载。请确认系统 WebView 可用，再重新打开 InkMark。')} />
+    } />
   </View>
 }

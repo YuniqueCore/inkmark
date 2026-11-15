@@ -21,3 +21,6 @@ native/android/local.properties
 native/ios/*.xcodeproj/
 native/ios/build/
 native/tests/nsh.json
+
+# NSH CLI output when invoked from the repository root
+/.nsh/

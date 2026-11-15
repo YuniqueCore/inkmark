@@ -11,6 +11,7 @@
 
 import { computePosition, offset, shift, size, limitShift } from '@floating-ui/dom'
 import { escapeHtml } from '../core/text'
+import {SelectionDrafts, hasComposition} from '../workbench/composition'
 import { MANUAL_KINDS } from '../core/types'
 import type { AnnotationKind } from '../core/types'
 import { ComposerForm, type ComposerState } from './composer'
@@ -44,14 +45,6 @@ export interface PinCallbacks {
   onDismiss: () => void
 }
 
-interface Draft {
-  docId: string
-  side: 'a' | 'b'
-  text: string
-  kind: AnnotationKind
-  replacement: string
-}
-
 export class SelectionPin {
   private pin: HTMLElement
   private card: HTMLElement
@@ -63,8 +56,7 @@ export class SelectionPin {
   /** card 已展开（hover 进入过） */
   private expanded = false
   /** 不同文本版本的相同偏移不能复用草稿。 */
-  private drafts = new Map<string, Map<string, Draft>>()
-  private draftKey = ''
+  private drafts = new SelectionDrafts()
   /** 展开期间挂载的共用撰写表单（类型 chips + 快捷语 + 批注语 + 替换词） */
   private composer: ComposerForm | null = null
 
@@ -146,7 +138,6 @@ export class SelectionPin {
       void this.placePin().then(() => { if (this.expanded) void this.placeCard() })
       return
     }
-    this.draftKey = `${info.docId}:${info.side ?? 'a'}:${info.start}:${info.end}`
     ;({side: this.pinSide, vertical: this.pinVertical} = pickPinPlacement(info.rect, info.forward))
     this.collapse()
     // 先定位再显示，避免小点闪现在上一次的位置
@@ -182,7 +173,7 @@ export class SelectionPin {
     if (this.expanded && !force) return
     this.expanded = true
     this.cancelCollapse()
-    const draft = this.drafts.get(this.draftKey)?.get(this.info.sourceText)
+    const draft = this.drafts.read(this.info)
     // 历史草稿可能存着已下架的类型（issue/slop）：回退到默认，避免 chips 无选中态
     const dk = draft?.kind ?? 'suggestion'
     const quoted = this.info.quoted
@@ -208,7 +199,7 @@ export class SelectionPin {
       {onChange: (s) => this.onComposerChange(s)},
       {
         kind: MANUAL_KINDS.includes(dk) ? dk : 'suggestion',
-        comment: draft?.text ?? '',
+        comment: draft?.comment ?? '',
         replacement: draft?.replacement ?? '',
       },
     )
@@ -250,37 +241,24 @@ export class SelectionPin {
 
   /** 草稿账本里当前范围是否留有撰写内容（批注语或替换词） */
   private hasDraftContent(): boolean {
-    const draft = this.info && this.drafts.get(this.draftKey)?.get(this.info.sourceText)
-    return Boolean(draft && draftHasContent(draft))
+    const draft = this.info && this.drafts.read(this.info)
+    return Boolean(draft && hasComposition(draft))
   }
 
   /** 查询当前页面内未提交的划词草稿，可限制文档和文本侧。 */
   hasDrafts(docIds?: ReadonlySet<string>, side?: 'a' | 'b'): boolean {
-    return Array.from(this.drafts.values()).some((versions) =>
-      Array.from(versions.values()).some((draft) =>
-        (!docIds || docIds.has(draft.docId)) && (!side || draft.side === side) && draftHasContent(draft),
-      ),
-    )
+    return this.drafts.has(docIds, side)
   }
 
   /** 在用户明确同意放弃后，清除受影响文档及文本侧的草稿。 */
   discardDrafts(docIds: ReadonlySet<string>, side?: 'a' | 'b'): void {
-    for (const [key, versions] of this.drafts) {
-      for (const [sourceText, draft] of versions) {
-        if (docIds.has(draft.docId) && (!side || draft.side === side)) versions.delete(sourceText)
-      }
-      if (versions.size === 0) this.drafts.delete(key)
-    }
+    this.drafts.discard(docIds, side)
     if (this.info && docIds.has(this.info.docId) && (!side || (this.info.side ?? 'a') === side)) this.dismiss()
   }
 
   /** 撰写变化：记账草稿 + 提交按钮态（表单自身已保证只做定向更新） */
   private onComposerChange(s: ComposerState): void {
-    if (this.draftKey && this.info) {
-      const versions = this.drafts.get(this.draftKey) ?? new Map<string, Draft>()
-      versions.set(this.info.sourceText, {docId: this.info.docId, side: this.info.side ?? 'a', text: s.comment, kind: s.kind, replacement: s.replacement})
-      this.drafts.set(this.draftKey, versions)
-    }
+    if (this.info) this.drafts.write(this.info, s)
     this.refreshSubmit()
   }
 
@@ -304,9 +282,7 @@ export class SelectionPin {
 
   private discardDraft(): void {
     if (!this.info) return
-    const versions = this.drafts.get(this.draftKey)
-    versions?.delete(this.info.sourceText)
-    if (versions?.size === 0) this.drafts.delete(this.draftKey)
+    this.drafts.remove(this.info)
   }
 
   /** 滚动 / 缩放后重新锚定：选区还活着就跟随其视口矩形（卡片一并重定位）；
@@ -349,7 +325,6 @@ export class SelectionPin {
   /** 收起一切（选区清除、点外部、Esc） */
   dismiss(): void {
     this.info = null
-    this.draftKey = ''
     this.expanded = false
     this.pin.classList.add('hidden')
     this.collapse()
@@ -383,10 +358,6 @@ export class SelectionPin {
       this.card.style.transformOrigin = CARD_ORIGIN[placement] ?? 'top left'
     })
   }
-}
-
-function draftHasContent(draft: Draft): boolean {
-  return draft.text.trim() !== '' || draft.replacement.trim() !== '' || draft.kind !== 'suggestion'
 }
 
 const CARD_ORIGIN: Record<string, string> = {

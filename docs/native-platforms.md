@@ -1,23 +1,27 @@
 # Shared workspace, native capabilities
 
-InkMark keeps one document model, one DOM workspace and one IndexedDB persistence implementation. The static website remains a Vite output: it needs neither a server nor NSH/Wasm. Native applications embed that same offline document in an NSH WebView. NSH is pinned to **0.5.1**, including archive checksums in `native/toolchain.json`; updating the manifest is an explicit dependency change.
+InkMark keeps one document model, one workspace command owner and one IndexedDB persistence implementation. The static website remains a Vite output: it needs neither a server nor NSH/Wasm. Native applications render navigation, toolbars, lists, forms and dialogs with NSH. Only the text/Markdown/image canvas stays in a sealed offline WebView. NSH is pinned to **0.5.1**, including archive checksums in `native/toolchain.json`; updating the manifest is an explicit dependency change.
 
 ## Boundaries
 
 ```text
-ReviewDocument + Selector + Annotation       src/core (unchanged domain)
-                 |
-DOM workspace + IndexedDB CAS                src/ui + src/main.ts
-                 |
-Typed file / clipboard / link protocol       src/platform
-                 |
-NSH Workspace(document, files)               native/shared
-        /                         \
+ReviewDocument + Selector + Annotation          src/core
+                    |
+Workspace commands + IndexedDB CAS             src/workbench
+       /                              \
+BrowserShell + DOM controls       NativeShell + typed projections
+src/ui                            src/platform/native
+       \                              |
+        Shared document canvas     NSH native controls / interaction sessions
+        Markdown / images          native/shared/ui
+                    |
+Typed file / clipboard / link capabilities      src/platform
+       /                              \
 Desktop Rust bindings             Mobile host.call bindings
 system dialogs / atomic files     Android Activity / iOS ViewController
 ```
 
-`Workspace` composes a document artifact (`html`, stable `baseUrl`) with `FileBindings`. It does not own reviews, duplicate storage or reinterpret annotations. Text and image review continue to share export, selection, filtering and trash behavior. Rust, Java and Swift implement only operations that require their operating system. There is no plugin registry, provider selector or second database.
+`Workspace` composes a canvas artifact (`html`, stable `baseUrl`) with `FileBindings`. It does not own reviews, duplicate storage or reinterpret annotations. Text and image review continue to share export, selection, filtering and trash behavior. Rust, Java and Swift implement only operations that require their operating system. There is no plugin registry, provider selector or second database.
 
 The web chooses ordinary file inputs, downloads and the browser clipboard at build time. Native builds use a strict, bounded request/response protocol. No filesystem path or executable JavaScript can be requested through that protocol. Desktop folder imports return relative display paths and do not follow directory symlinks. Mobile document providers and share sheets remain user-mediated.
 
@@ -26,6 +30,16 @@ Review filenames share one portable naming rule across web downloads, native sav
 Native transfers are limited to **32 MiB in aggregate and 100 files** per selection. Hosts check metadata and enforce the bound again while reading; they never return a partially read selection. Image domain limits remain 12 MiB / 32 million pixels. NSH's default picker eagerly reads selected files, so these hosts use bounded operating-system adapters instead. JSON/base64 is deliberately bounded rather than treated as a streaming transport. Larger browser backups remain supported by the web implementation; oversized native backups fail visibly and retain the workspace.
 
 Desktop export reports `saved` only after an atomic file replacement succeeds. Android reports `shared` after handing a granted content URI to the chooser, not after a recipient saves it. iOS waits for the share completion/cancellation callback. `downloaded` means the browser initiated a download. Cancellation produces no success message. Mobile export files stay in an app-owned cache for at most 24 hours before the next export cleans them; the cache has a 512 MiB quota. iOS cancels remove their temporary file immediately. Uninstalling the app removes its local workspace; Android cloud/device backup is disabled.
+
+## Presentation protocol and ownership
+
+`BrowserShell` and `NativeShell` implement one presentation boundary. Shared models own review grouping/filtering/selection, document navigation, search navigation, selection drafts and trash scope. Neither view stores another workspace. Native projections contain summaries and current interaction values; original image bytes remain in IndexedDB and the canvas.
+
+Native commands carry a page session and monotonically increasing request ID. The host retires old page sessions; the workspace rejects replayed requests and stale interaction owners. Cancel/close commands carry no editable fields so invalid intermediate input can always be dismissed. Field values are bounded to 8,388,608 UTF-16 code units; complete JSON messages are bounded to 32 Mi code units. Interaction validation and aggregate-size checks precede registration or updates, preserving the previous draft when rejected. Documents, reviews and trash render 100-row pages; bulk actions retain the entire filtered scope. Export previews are explicitly shortened without truncating the saved artifact.
+
+Native IME composition and unacknowledged commands block explicit desktop close. Open text, annotation and search forms also block close, including empty forms whose first input may not yet have reached the canvas. New text-selection dismissal retains its owned draft; explicit cancel discards it. Other changed native editing forms ask before dismissing; Escape/Android back use the native Sheet cancellation event. Modal image coordinates have one local input owner and do not accept stale projection echoes. No implicit autosave converts drafts into annotations.
+
+This replaces the old full-web-shell native path and removes the radial reading settings widget, duplicated header actions and edge collapse controls. The native build has its own canvas entry and cannot accidentally mount the browser navigation. The static Web build still provides every capability independently of NSH. Adding another document selector should compose the existing annotation/list/export/storage rules rather than add a second workspace or persistence layer.
 
 ## Platform artifacts
 
@@ -52,7 +66,7 @@ Restoration and close attempts acquire independent input locks and release only 
 
 The native HTML has a hash-based script CSP and embedded fonts/icons/styles. Raw Markdown HTML remains escaped; remote images require the existing explicit user action and HTTPS on native. External http/https/mailto links go to the system; document fragment links stay in the WebView. Android does not request broad filesystem, camera or photo-library permission. Clipboard image import uses granted content URIs on Android and the NSH clipboard on Apple/desktop platforms.
 
-Mobile hosts own safe-area and keyboard insets. DOM floating editors and search panels use the visible viewport, preserve focused composer nodes and scroll their actions into view. Source/preview text selection and image coordinates stay in the shared UI.
+Mobile hosts own safe-area and keyboard insets. Native forms use native text editors and keyboard-aware sheets; browser forms use the visible viewport. Source/preview selection mapping and image geometry stay in the shared canvas. Window width controls pane layout independently of the platform control size.
 
 ## Build and test
 
@@ -107,11 +121,11 @@ Use an available simulator name from `xcrun simctl list devices available`. XCTe
 - Existing browser BDD journeys cover text and image annotations, source/preview anchors, import conflicts, W3C idempotency, backups, bulk export/delete/recovery, storage conflicts and security boundaries. Reviewed snapshots cover desktop/mobile layouts; the touch journey adds selectionchange-only input, stable focus/drafts and a keyboard-sized search panel.
 - Native protocol tests exercise a real 32 MiB payload in both the browser and NSH QuickJS (including forwarding without exceeding its 256 MiB heap), malformed envelopes, traversal, pending-request cleanup, external versus fragment links, and late close attempts.
 - Rust tests use actual temporary files for atomic overwrite/failure, bounded folder imports, relative paths and symlink exclusion.
-- The NSH journey runs the production DOM in a real platform WebView with deterministic file bindings. It tests bridge integration, not an OS file-picker click. Its script exists only in the generated test artifact. Its separate `inkmark-tests.localhost` origin is reset before bootstrap because NSH's fresh test data directory does not isolate every engine's WebView store.
+- The NSH journey operates native navigation, reading controls, source/annotation/search forms and export actions around the real canvas-only WebView. It covers CRLF edits, selection-to-native-focus handoff, close protection, malformed coordinates and export cancellation/failure/retry with deterministic file bindings. It does not simulate an OS file-picker click. Its script exists only in the generated test artifact. Its separate `inkmark-tests.localhost` origin is reset before bootstrap because NSH's fresh test data directory does not isolate every engine's WebView store.
 - Desktop close-refusal checks use the real NSH window close button and application-menu shortcut. All desktop journeys inject BMP bytes at the file boundary: `nsh test` replaces the system clipboard with its own text-only backend. A separate Windows probe seeds a bitmap-only system clipboard and uses `nsh run` to check NSH's actual CF_DIB acquisition. Run it with `powershell.exe -NoProfile -STA -File native/tests/clipboard.ps1`; this intentionally replaces the test machine's clipboard. The ordinary business journey leaves that clipboard untouched.
 - `bun run check` builds the offline HTML before browser BDD and CI passes that same artifact to every native build. Browser tests exercise restoration concurrent with a close request, retained modal input during delayed imports, malformed/oversized BMP rejection, exact PNG preservation and operation cleanup after failure.
 - Android instrumentation runs the installed host, imports a real clipboard image URI, validates and annotates its region, opens the real system share sheet, checks the exported ZIP bytes and recreates the Activity to check persistence. On API 29+ the same journey opens the real system file picker, recreates the background Activity while the picker remains open, observes the interruption notice and retries selection to import successfully without losing existing reviews. Separate adapter checks read granted content URIs and reject oversized selections.
-- iOS unit tests exercise coordinated filesystem reads and bounded export/import. XCUITest creates Markdown and terminates/relaunches the app to check its WebView persistence. Packaging also checks the actual app for its compiled NSH bundle, manifests and asset catalog; an executable without its workspace resources is not a valid artifact.
+- iOS unit tests exercise coordinated filesystem reads and bounded export/import. XCUITest creates Markdown through a native text editor, selects rendered preview through native navigation, verifies the WebView has no editing forms, and terminates/relaunches the app to check IndexedDB persistence. Packaging also checks the actual app for its compiled NSH bundle, manifests and asset catalog; an executable without its workspace resources is not a valid artifact.
 
 Build success alone is not device execution evidence. CI reports are bound to their source commit. OS selection handles, third-party cloud-file providers, IME composition, recipient-specific share completion, accessibility readers and release signing still need device acceptance on the owner's intended devices. Tests do not pretend injected DOM selection is a physical long press. Xcode emits its generic AppIntents metadata warning for this application, which declares no App Intents, and NSH's prebuilt iOS SDK references unavailable upstream Rust object paths during dSYM generation. Android Gradle Plugin 9.5.1 uses a Gradle API deprecated by Gradle 9.9.1. These upstream toolchain diagnostics are not hidden with application-wide warning suppression.
 

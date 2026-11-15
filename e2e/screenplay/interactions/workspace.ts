@@ -1,3 +1,4 @@
+import {documentAction, workspaceAction} from '../support/actions'
 /** 工作台级原子交互：顶栏、抽屉、文件树、导出弹层。 */
 
 import { Buffer } from 'node:buffer'
@@ -14,7 +15,7 @@ export const ResizeViewport = (width: number, height: number): Interaction =>
 /** 打开导出弹层 */
 export const OpenExportModal = (): Interaction =>
   Interaction.where('点顶栏「导出」', async (actor) => {
-    await Workbench.headerButton(BrowseTheWorkbench.as(actor).page, /^导出批注/).click()
+    await workspaceAction(BrowseTheWorkbench.as(actor).page, 'export')
   })
 
 /** 关闭导出弹层 */
@@ -26,15 +27,14 @@ export const CloseExportModal = (): Interaction =>
 /** 运行 slop 预扫描（生成 AI 味候选批注） */
 export const RunSlopScan = (): Interaction =>
   Interaction.where('点顶栏 slop 预扫描', async (actor) => {
-    await Workbench.headerButton(BrowseTheWorkbench.as(actor).page, /词库预扫描/).click()
+    await workspaceAction(BrowseTheWorkbench.as(actor).page, 'scan')
   })
 
 /** 点顶栏「导入 ▾」菜单里的「载入示例」（悬停展开菜单后选择） */
 export const ClickSampleButton = (): Interaction =>
   Interaction.where('点顶栏导入菜单里的载入示例', async (actor) => {
     const page = BrowseTheWorkbench.as(actor).page
-    await Workbench.headerButton(page, /导入：打开文件/).hover()
-    await page.getByRole('menuitem', { name: '载入示例' }).click()
+    await documentAction(page, 'sample')
   })
 
 /** 导入一个内存中的 .txt 文件（不经真实文件选择器） */
@@ -49,7 +49,7 @@ export const ImportTextFile = (name: string, content: string): Interaction =>
 /** 进入「编辑原文」模式 */
 export const EnterSourceEditMode = (): Interaction =>
   Interaction.where('点顶栏「编辑原文」', async (actor) => {
-    await Workbench.headerButton(BrowseTheWorkbench.as(actor).page, /编辑原文：直接修改规范文本/).click()
+    await workspaceAction(BrowseTheWorkbench.as(actor).page, 'edit')
     await BrowseTheWorkbench.as(actor).page.locator('#edit-source').waitFor({ state: 'visible' })
   })
 
@@ -68,12 +68,12 @@ export const SaveSourceEdit = (): Interaction =>
 /** 切换文档树抽屉 / 批注栏抽屉（移动端语义） */
 export const ToggleTreeDrawer = (): Interaction =>
   Interaction.where('切换文档树抽屉', async (actor) => {
-    await Workbench.headerButton(BrowseTheWorkbench.as(actor).page, /文档树抽屉/).click()
+    await BrowseTheWorkbench.as(actor).page.locator('#btn-tree-drawer').click()
   })
 
 export const ToggleSidebarDrawer = (): Interaction =>
   Interaction.where('切换批注栏抽屉', async (actor) => {
-    await Workbench.headerButton(BrowseTheWorkbench.as(actor).page, /批注栏抽屉/).click()
+    await BrowseTheWorkbench.as(actor).page.locator('#btn-sidebar-drawer').click()
   })
 
 /** 点击抽屉背板 */

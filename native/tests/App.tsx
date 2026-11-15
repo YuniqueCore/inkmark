@@ -7,7 +7,7 @@ import {clipboardBitmap} from './fixtures'
 const result = signal('running')
 let exports = 0
 const files: FileBindings = {
-  pickFiles: async () => [{name: '中'.repeat(80) + '.md', type: 'text/markdown', base64: encodeBytes(new TextEncoder().encode('# Native review\n\nA **stable primitive** composes.'))}],
+  pickFiles: async () => [{name: '中'.repeat(80) + '.md', type: 'text/markdown', base64: encodeBytes(new TextEncoder().encode('# Native review\r\n\r\nA **stable primitive** composes.'))}],
   // nsh test owns a text-only clipboard; OS acquisition is checked by the separate Windows probe.
   readClipboardImage: async () => [clipboardBitmap],
   saveFile: async file => {

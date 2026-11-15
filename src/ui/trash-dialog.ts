@@ -8,6 +8,7 @@
  * 之后查询与勾选只重绘列表与状态条——输入框不重建，焦点与光标不丢。
  */
 
+import {TrashList} from '../workbench/trash-list'
 import { escapeHtml } from '../core/text'
 import { TRASH_RETENTION_MS } from '../core/trash'
 import type { TrashEntry } from '../core/types'
@@ -24,23 +25,13 @@ export interface TrashDialogCallbacks {
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
-/** 展示顺序：最近删除的在前（回收站惯例），core 存储保持追加序 */
-function byDeletedDesc(a: TrashEntry, b: TrashEntry): number {
-  return b.deletedAt - a.deletedAt
-}
-
 export class TrashDialog {
   private panel: HTMLElement | null = null
   private overlay: HTMLElement | null = null
   private listEl: HTMLElement | null = null
   private searchEl: HTMLInputElement | null = null
-  private lastTrash: TrashEntry[] = []
+  private model = new TrashList()
   private lastNow = 0
-  /** 搜索词：匹配批语 / 出处文档名 / 类型标签 / 文档条目名（大小写不敏感） */
-  private query = ''
-  /** 多选集合（entryKey）：update 时剪除已不存在的条目 */
-  private selected = new Set<string>()
-
   constructor(private callbacks: TrashDialogCallbacks) {}
 
   get isOpen(): boolean {
@@ -49,10 +40,10 @@ export class TrashDialog {
 
   open(trash: TrashEntry[], now: number): void {
     if (this.panel) this.close()
-    this.lastTrash = trash
+    this.model.entries = trash
     this.lastNow = now
-    this.query = ''
-    this.selected = new Set()
+    this.model.query = ''
+    this.model.selected = new Set()
     this.overlay = document.createElement('div')
     this.overlay.className = 'fixed inset-0 z-100 bg-black/50 backdrop-blur-[2px]'
     this.panel = document.createElement('div')
@@ -76,11 +67,9 @@ export class TrashDialog {
   /** 动作落地后由调用方刷新列表（trash 变了但弹层保持打开） */
   update(trash: TrashEntry[], now: number): void {
     if (!this.panel) return
-    this.lastTrash = trash
+    this.model.entries = trash
     this.lastNow = now
-    // 剪除已不存在的选中项（恢复/彻底删除/过期清理后失效）
-    const alive = new Set(trash.map((t) => this.keyOf(t)))
-    for (const k of this.selected) if (!alive.has(k)) this.selected.delete(k)
+    this.model.update(trash)
     this.renderList()
   }
 
@@ -99,19 +88,7 @@ export class TrashDialog {
   }
 
   private visible(): TrashEntry[] {
-    const q = this.query.trim().toLowerCase()
-    const all = [...this.lastTrash].sort(byDeletedDesc)
-    if (!q) return all
-    return all.filter((t) => {
-      if (t.type === 'doc') {
-        return t.doc.name.toLowerCase().includes(q)
-      }
-      return (
-        t.annotation.comment.toLowerCase().includes(q) ||
-        t.docName.toLowerCase().includes(q) ||
-        KIND_LABEL[t.annotation.kind].toLowerCase().includes(q)
-      )
-    })
+    return this.model.visible()
   }
 
   private onKey = (e: KeyboardEvent): void => {
@@ -139,13 +116,13 @@ export class TrashDialog {
         <div class="relative">
           <span class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground">${icon('search', 'size-3.5')}</span>
           <input data-role="search" class="input-base h-8 w-full pl-8 pr-8 text-[13px]" placeholder="搜索批语、出处文档、类型…" value=""/>
-          <button class="btn btn-ghost btn-sm absolute right-1 top-1/2 h-6 w-6 -translate-y-1/2 p-0 text-muted-foreground ${this.query ? '' : 'invisible'}" data-op="clear-search" aria-label="清除搜索">${icon('x', 'size-3')}</button>
+          <button class="btn btn-ghost btn-sm absolute right-1 top-1/2 h-6 w-6 -translate-y-1/2 p-0 text-muted-foreground ${this.model.query ? '' : 'invisible'}" data-op="clear-search" aria-label="清除搜索">${icon('x', 'size-3')}</button>
         </div>
         <div data-role="bulk" class="hidden"></div>
       </div>
       <div data-role="list" class="min-h-0 flex-1 overflow-y-auto px-5 py-3"></div>
       <div class="flex shrink-0 items-center justify-between border-t px-5 py-3">
-        <button class="btn btn-ghost btn-sm text-xs text-destructive hover:text-destructive" data-op="clear-all" ${this.lastTrash.length === 0 ? 'disabled' : ''}>清空回收站</button>
+        <button class="btn btn-ghost btn-sm text-xs text-destructive hover:text-destructive" data-op="clear-all" ${this.model.entries.length === 0 ? 'disabled' : ''}>清空回收站</button>
         <span class="text-xs text-muted-foreground">删除的文档与批注可随时回到这里恢复</span>
       </div>`
   }
@@ -163,7 +140,7 @@ export class TrashDialog {
     })
     // Esc：搜索有词先清词（阻止冒泡），再按才落到 document 监听关弹层
     this.searchEl?.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && this.query !== '') {
+      if (e.key === 'Escape' && this.model.query !== '') {
         e.stopPropagation()
         this.setQuery('')
       }
@@ -174,15 +151,15 @@ export class TrashDialog {
       if (target.matches('[data-select-all]')) {
         const all = (target as HTMLInputElement).checked
         const visible = this.visible()
-        if (all) for (const t of visible) this.selected.add(this.keyOf(t))
-        else this.selected.clear()
+        if (all) for (const t of visible) this.model.selected.add(this.keyOf(t))
+        else this.model.selected.clear()
         this.renderList()
         return
       }
       if (target.matches('[data-select-key]')) {
         const key = target.dataset.selectKey!
-        if ((target as HTMLInputElement).checked) this.selected.add(key)
-        else this.selected.delete(key)
+        if ((target as HTMLInputElement).checked) this.model.selected.add(key)
+        else this.model.selected.delete(key)
         this.renderList()
       }
     })
@@ -197,19 +174,20 @@ export class TrashDialog {
       const el = (e.target as HTMLElement).closest('[data-bulk-op]') as HTMLElement | null
       if (!el) return
       const op = el.dataset.bulkOp
-      const keys = [...this.selected]
+      const keys = [...this.model.selected]
       if (keys.length === 0) return
       if (op === 'restore') this.callbacks.onRestore(keys)
       if (op === 'purge') this.callbacks.onPurge(keys)
       if (op === 'clear') {
-        this.selected.clear()
+        this.model.selected.clear()
         this.renderList()
       }
     })
   }
 
   private setQuery(q: string): void {
-    this.query = q
+    this.model.query = q
+    this.model.update(this.model.entries)
     if (this.searchEl) this.searchEl.value = q
     this.renderList()
   }
@@ -219,7 +197,7 @@ export class TrashDialog {
   private renderList(): void {
     if (!this.panel || !this.listEl) return
     const visible = this.visible()
-    const trash = this.lastTrash
+    const trash = this.model.entries
     const docCount = trash.filter((t) => t.type === 'doc').length
     const annCount = trash.length - docCount
 
@@ -231,10 +209,10 @@ export class TrashDialog {
           : `${trash.length} 项${docCount > 0 ? ` · ${docCount} 文档` : ''}${annCount > 0 ? ` · ${annCount} 批注` : ''}`
     }
     this.panel.querySelector('[data-op="clear-all"]')?.toggleAttribute('disabled', trash.length === 0)
-    this.panel.querySelector('[data-op="clear-search"]')?.classList.toggle('invisible', this.query === '')
+    this.panel.querySelector('[data-op="clear-search"]')?.classList.toggle('invisible', this.model.query === '')
 
-    const allSelected = visible.length > 0 && visible.every((t) => this.selected.has(this.keyOf(t)))
-    const someSelected = visible.some((t) => this.selected.has(this.keyOf(t)))
+    const allSelected = visible.length > 0 && visible.every((t) => this.model.selected.has(this.keyOf(t)))
+    const someSelected = visible.some((t) => this.model.selected.has(this.keyOf(t)))
     const selectAll = this.panel.querySelector('[data-select-all]') as HTMLInputElement | null
     if (selectAll) {
       selectAll.checked = allSelected
@@ -247,10 +225,10 @@ export class TrashDialog {
       trash.length === 0
         ? `<div class="mt-8 rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">回收站是空的</div>`
         : visible.length === 0
-          ? `<div class="mt-8 rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">没有匹配「${escapeHtml(this.query.trim())}」的条目</div>`
+          ? `<div class="mt-8 rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">没有匹配「${escapeHtml(this.model.query.trim())}」的条目</div>`
           : `<div class="flex flex-col gap-2">
               <label class="flex cursor-pointer items-center gap-1.5 px-0.5 text-[11px] text-muted-foreground">
-                <input type="checkbox" data-select-all class="size-3 accent-[var(--primary)]"/> 全选${this.query.trim() ? '（当前筛选结果）' : ''}
+                <input type="checkbox" data-select-all class="size-3 accent-[var(--primary)]"/> 全选${this.model.query.trim() ? '（当前筛选结果）' : ''}
               </label>
               ${visible.map((t) => this.renderEntry(t)).join('')}
             </div>`
@@ -261,14 +239,14 @@ export class TrashDialog {
   private renderBulk(): void {
     const bulk = this.panel?.querySelector('[data-role="bulk"]')
     if (!bulk) return
-    if (this.selected.size === 0) {
+    if (this.model.selected.size === 0) {
       bulk.className = 'hidden'
       bulk.innerHTML = ''
       return
     }
     bulk.className = 'mt-2 flex items-center gap-1.5 rounded-lg border bg-muted/40 px-2 py-1.5'
     bulk.innerHTML = `
-      <span class="shrink-0 text-[11px] text-muted-foreground">已选 ${this.selected.size} 项</span>
+      <span class="shrink-0 text-[11px] text-muted-foreground">已选 ${this.model.selected.size} 项</span>
       <button type="button" class="btn btn-outline btn-sm h-6 px-2 text-[11px]" data-bulk-op="restore">恢复</button>
       <button type="button" class="btn btn-outline btn-sm h-6 px-2 text-[11px] text-destructive hover:text-destructive" data-bulk-op="purge">彻底删除</button>
       <button type="button" class="btn btn-ghost btn-sm h-6 w-6 p-0" data-bulk-op="clear" title="取消选择" aria-label="取消选择">${icon('x', 'size-3')}</button>`
@@ -277,7 +255,7 @@ export class TrashDialog {
   private renderEntry(t: TrashEntry): string {
     const daysLeft = Math.max(0, Math.ceil((t.deletedAt + TRASH_RETENTION_MS - this.lastNow) / DAY_MS))
     const key = this.keyOf(t)
-    const checked = this.selected.has(key)
+    const checked = this.model.selected.has(key)
     const head =
       t.type === 'doc'
         ? `<span class="badge border-sky-500/40 text-sky-600 dark:text-sky-400">文档</span>

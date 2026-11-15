@@ -32,7 +32,7 @@ test.describe('侧栏卡片多选', () => {
       .getByRole('button', {name: '删除', exact: true})
       .click()
     await expect(Workbench.sidebarBulkActions(page)).toHaveCount(0)
-    await expect(page.locator('#sidebar')).toContainText('划选正文写批注')
+    await expect(page.locator('#sidebar')).toContainText('划选正文，写下你的意见')
   })
 
   test('快速选中某类型 → 反选翻转其余', async ({ actor }) => {

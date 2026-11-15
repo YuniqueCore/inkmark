@@ -1,3 +1,4 @@
+import {workspaceAction} from '../screenplay/support/actions'
 import {test, expect} from '@playwright/test'
 import {readFile} from 'node:fs/promises'
 import {unzipSync, strFromU8} from 'fflate'
@@ -206,7 +207,7 @@ test('two tabs never overwrite divergent work; complete recovery preserves the t
   const other = await context.newPage()
   await other.goto('/')
   await expect(other.locator('#editor')).toContainText('First tab original document.')
-  await page.locator('#btn-edit').click()
+  await workspaceAction(page, 'edit')
   await page.locator('#edit-source').fill('First tab updated document.')
   await page.getByRole('button', {name: '完成并重锚批注'}).click()
   await expect(page.locator('#save-text')).toHaveText('已保存')

@@ -4,16 +4,16 @@
  * （统计 + 展开跳转）；聚合是派生状态，不复制可变状态。
  */
 
-import type { AnnotationPresentation as Annotation } from './annotation-presentation'
-import { reportCategoryCounts } from '../core/slop'
+import type { AnnotationPresentation as Annotation } from '../workbench/annotation-presentation'
+import {BAND_LABEL, summarizeSlop} from '../workbench/slop-summary'
 import type { SlopBand, SlopReport, SlopSample } from '../core/types'
 import { ALL_KINDS, KIND_LABEL, MANUAL_KINDS } from '../core/types'
-import type { AnnotationBody, AnnotationKind } from '../core/types'
+import type { AnnotationKind } from '../core/types'
 import { escapeHtml } from '../core/text'
 import { icon } from './icons'
 import { captureKeyedFocus } from './keyed-focus'
 
-export type StatusFilter = 'all' | 'open' | 'resolved'
+import {ReviewList, reviewListItems, type ReviewListItem as ListItem, type StatusFilter} from '../workbench/review-list'
 
 export interface SidebarCallbacks {
   onFocus: (id: string) => void
@@ -45,27 +45,9 @@ const BAND_STYLE: Record<SlopBand, string> = {
   heavy: 'bg-destructive/12 text-destructive',
 }
 
-const BAND_LABEL: Record<SlopBand, string> = {
-  clean: '干净',
-  light: '轻微',
-  noticeable: '明显',
-  heavy: '严重',
-}
-
-/** 列表项：单条批注，或同 groupId 的批量批注聚合 */
-type ListItem = { kind: 'single'; ann: Annotation } | { kind: 'group'; members: Annotation[] }
 
 export class SidebarView {
   private root: HTMLElement
-  private filter: StatusFilter = 'all'
-  /** 空 set = 全部类型；否则只显示勾选类型 */
-  private kindFilter: Set<AnnotationKind> = new Set()
-  private onlyHighlightFiltered = false
-  private activeId: string | null = null
-  /** 展开的批量批注组 */
-  private expandedGroups = new Set<string>()
-  /** 卡片多选（批注 id，组卡选中 = 全部成员 id）：重渲染时剪除已不存在的 */
-  private selected = new Set<string>()
   /** 上次渲染的选中数：0 → N 的瞬间给操作簇挂滑入动画，避免每次勾选重放 */
   private prevSelectedSize = 0
   private lastArgs: { annotations: Annotation[]; opts: SidebarRenderOptions } = {
@@ -73,60 +55,26 @@ export class SidebarView {
     opts: {},
   }
 
-  constructor(root: HTMLElement, private callbacks: SidebarCallbacks) {
+  constructor(root: HTMLElement, private callbacks: SidebarCallbacks, private model: ReviewList) {
     this.root = root
-  }
-
-  setFilter(filter: StatusFilter): void {
-    this.filter = filter
-  }
-
-  setKindFilter(kinds: Set<AnnotationKind>): void {
-    this.kindFilter = kinds
-  }
-
-  setHighlightMode(only: boolean): void {
-    this.onlyHighlightFiltered = only
-  }
-
-  /** 把类型并入当前筛选并返回新集合（调用方据此触发重渲染） */
-  includeKind(kind: AnnotationKind): Set<AnnotationKind> {
-    const next = new Set(this.kindFilter)
-    next.add(kind)
-    this.kindFilter = next
-    return next
-  }
-
-  /** 当前筛选下的可见批注（列表与编辑器高亮共用同一份判定） */
-  visibleOf<A extends AnnotationBody>(annotations: A[]): A[] {
-    return annotations.filter(
-      (a) =>
-        (this.filter === 'all' || a.status === this.filter) &&
-        (this.kindFilter.size === 0 || this.kindFilter.has(a.kind)),
-    )
-  }
-
-  setActive(id: string | null): void {
-    this.activeId = id
   }
 
   render(annotations: Annotation[], opts: SidebarRenderOptions = {}): void {
     const restoreFocus = captureKeyedFocus(this.root)
     this.lastArgs = { annotations, opts }
     const open = annotations.filter((a) => a.status === 'open').length
-    const shown = this.visibleOf(annotations)
+    const shown = this.model.visible(annotations)
     // 选中范围仅包含当前可见批注，筛选后不会误操作隐藏的内容
-    const existing = new Set(shown.map((a) => a.id))
-    for (const id of this.selected) if (!existing.has(id)) this.selected.delete(id)
-    const selectedAnns = annotations.filter((a) => this.selected.has(a.id))
+    this.model.reconcile(annotations)
+    const selectedAnns = annotations.filter((a) => this.model.selected.has(a.id))
     const selectedAnyOpen = selectedAnns.some((a) => a.status === 'open')
-    const popIn = this.prevSelectedSize === 0 && this.selected.size > 0
-    this.prevSelectedSize = this.selected.size
+    const popIn = this.prevSelectedSize === 0 && this.model.selected.size > 0
+    this.prevSelectedSize = this.model.selected.size
 
     const chips = (['all', 'open', 'resolved'] as StatusFilter[])
       .map(
         (f) =>
-          `<button class="chip-toggle ${this.filter === f ? 'on' : ''}" data-filter="${f}">${
+          `<button class="chip-toggle ${this.model.filter === f ? 'on' : ''}" data-filter="${f}">${
             f === 'all'
               ? `全部 ${annotations.length}`
               : f === 'open'
@@ -141,18 +89,18 @@ export class SidebarView {
     const countOf = (k: AnnotationKind) => annotations.filter((a) => a.kind === k).length
     const isManual = (k: AnnotationKind) => (MANUAL_KINDS as readonly string[]).includes(k)
     const chipKinds = ALL_KINDS.filter(
-      (k) => isManual(k) || countOf(k) > 0 || this.kindFilter.has(k),
+      (k) => isManual(k) || countOf(k) > 0 || this.model.kinds.has(k),
     )
     const kindChips = chipKinds
       .map(
         (k) =>
-          `<button class="chip-toggle kind-chip ${this.kindFilter.has(k) ? 'on' : ''}" data-kind="${k}">
+          `<button class="chip-toggle kind-chip ${this.model.kinds.has(k) ? 'on' : ''}" data-kind="${k}">
              ${KIND_LABEL[k]} <span class="opacity-60">${countOf(k)}</span>
            </button>`,
       )
       .join('')
 
-    const items = buildListItems(shown)
+    const items = reviewListItems(shown)
     const cards = items
       .map((item) =>
         item.kind === 'single'
@@ -167,7 +115,7 @@ export class SidebarView {
         : `
       <div class="mb-2 flex flex-wrap items-center gap-1.5 rounded-lg border bg-muted/40 px-2 py-1.5" data-bulk-strip>
         <label class="flex shrink-0 cursor-pointer items-center gap-1 text-[11px] text-muted-foreground">
-          <input type="checkbox" data-select-all class="size-3 accent-[var(--primary)]" ${this.selected.size === shown.length && shown.length > 0 ? 'checked' : ''}/> 全选
+          <input type="checkbox" data-select-all class="size-3 accent-[var(--primary)]" ${this.model.selected.size === shown.length && shown.length > 0 ? 'checked' : ''}/> 全选
         </label>
         <button type="button" data-select-invert class="shrink-0 text-[11px] text-muted-foreground transition-colors hover:text-foreground" title="反选：选中未勾选的，取消已勾选的">反选</button>
         <select data-quick-select class="h-6 min-w-0 flex-1 rounded-md border border-input bg-card px-1 text-[11px] text-muted-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40" aria-label="快速选中">
@@ -179,9 +127,9 @@ export class SidebarView {
           ${chipKinds.map((k) => `<option value="kind:${k}">${KIND_LABEL[k]}</option>`).join('')}
         </select>
         ${
-          this.selected.size > 0
+          this.model.selected.size > 0
             ? `<div class="flex w-full flex-wrap items-center gap-1 border-t pt-1.5 ${popIn ? 'bulk-pop' : ''}" data-bulk-actions>
-                 <span class="mr-auto text-[11px] text-muted-foreground">已选 ${this.selected.size}</span>
+                 <span class="mr-auto text-[11px] text-muted-foreground">已选 ${this.model.selected.size}</span>
                  <button type="button" class="btn btn-outline btn-sm h-6 px-2 text-[11px]" data-bulk="export">导出</button>
                  <button type="button" class="btn btn-outline btn-sm h-6 px-2 text-[11px]" data-bulk="resolve">${selectedAnyOpen ? '解决' : '重开'}</button>
                  <button type="button" class="btn btn-outline btn-sm h-6 px-2 text-[11px] text-destructive hover:text-destructive" data-bulk="delete">删除</button>
@@ -202,15 +150,15 @@ export class SidebarView {
       <div class="mb-1.5 flex flex-wrap gap-1.5 px-1">${chips}</div>
       ${annotations.length > 0 && chipKinds.length > 0 ? `<div class="mb-2 flex flex-wrap gap-1 px-1">${kindChips}</div>` : ''}
       <div class="mb-3 flex items-center gap-2 px-1 text-xs text-muted-foreground">
-        <button type="button" id="only-hl" role="switch" aria-checked="${this.onlyHighlightFiltered}" class="ui-switch" aria-label="${opts.image ? '图片只显示当前筛选区域' : '正文只高亮当前筛选结果'}"></button>
+        <button type="button" id="only-hl" role="switch" aria-checked="${this.model.highlightFiltered}" class="ui-switch" aria-label="${opts.image ? '图片只显示当前筛选区域' : '正文只高亮当前筛选结果'}"></button>
         ${opts.image ? '图片只显示当前筛选区域' : '正文只高亮当前筛选结果'}
       </div>
       ${strip}
       ${items.length === 0
-        ? `<div class="mt-16 rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-             ${annotations.length > 0 ? '当前筛选没有匹配的批注。调整状态或类型筛选即可查看。' : opts.image ? '拖动框选图片区域，写下意见。<br>也可以用「坐标批注」精确选择。' : '划选正文写批注、点顶栏「slop 预扫描」，<br>或按 ⌘F 搜索后一键批量批注'}
+        ? `<div class="mt-12 px-4 py-6 text-center text-sm text-muted-foreground">
+             ${annotations.length > 0 ? '当前筛选没有匹配的批注。调整状态或类型筛选即可查看。' : opts.image ? '拖动框选图片区域，写下意见。<br>也可以用「坐标批注」精确选择。' : '划选正文，写下你的意见。<br>⌘F 搜索可一次批注多处。'}
            </div>`
-        : `<div class="flex flex-col gap-2.5 ${this.selected.size > 0 ? 'sel-active' : ''}">${cards}</div>`}
+        : `<div class="flex flex-col gap-2.5 ${this.model.selected.size > 0 ? 'sel-active' : ''}">${cards}</div>`}
     `
 
     this.wireFilters()
@@ -235,14 +183,14 @@ export class SidebarView {
     this.root.querySelectorAll('.kind-chip[data-kind]').forEach((chip) => {
       chip.addEventListener('click', () => {
         const k = (chip as HTMLElement).dataset.kind as AnnotationKind
-        const next = new Set(this.kindFilter)
+        const next = new Set(this.model.kinds)
         if (next.has(k)) next.delete(k)
         else next.add(k)
         this.callbacks.onKindFilterChange(next)
       })
     })
     this.root.querySelector('#only-hl')?.addEventListener('click', () => {
-      this.callbacks.onHighlightModeChange(!this.onlyHighlightFiltered)
+      this.callbacks.onHighlightModeChange(!this.model.highlightFiltered)
     })
   }
 
@@ -250,11 +198,11 @@ export class SidebarView {
   private wireStrip(annotations: Annotation[]): void {
     this.root.querySelector('[data-select-all]')?.addEventListener('change', (e) => {
       const all = (e.target as HTMLInputElement).checked
-      this.selected = all ? new Set(annotations.map((a) => a.id)) : new Set()
+      this.model.selected = all ? new Set(annotations.map((a) => a.id)) : new Set()
       this.rerender()
     })
     this.root.querySelector('[data-select-invert]')?.addEventListener('click', () => {
-      this.selected = new Set(annotations.filter((a) => !this.selected.has(a.id)).map((a) => a.id))
+      this.model.selected = new Set(annotations.filter((a) => !this.model.selected.has(a.id)).map((a) => a.id))
       this.rerender()
     })
     const quick = this.root.querySelector('[data-quick-select]') as HTMLSelectElement | null
@@ -262,34 +210,22 @@ export class SidebarView {
       const v = quick.value
       quick.value = ''
       if (v === '') return
-      const match = (a: Annotation): boolean =>
-        v === 'lost'
-          ? a.anchorLost === true
-          : v === 'open' || v === 'resolved'
-            ? a.status === v
-            : v === 'revised'
-              ? a.target === 'revised'
-              : v.startsWith('kind:')
-                ? a.kind === (v.slice(5) as AnnotationKind)
-                : false
-      const ids = annotations.filter(match).map((a) => a.id)
-      if (ids.length === 0) {
+      if (this.model.selectMatching(annotations, v) === 0) {
         this.callbacks.onNotify?.('没有匹配的批注')
         return
       }
-      for (const id of ids) this.selected.add(id)
       this.rerender()
     })
     this.root.querySelectorAll('[data-bulk]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const op = (btn as HTMLElement).dataset.bulk
-        const ids = [...this.selected]
+        const ids = [...this.model.selected]
         if (ids.length === 0) return
         if (op === 'resolve') this.callbacks.onToggleStatus(ids)
         if (op === 'export') this.callbacks.onExport(ids)
         if (op === 'delete') this.callbacks.onDelete(ids)
         if (op === 'clear') {
-          this.selected.clear()
+          this.model.selected.clear()
           this.rerender()
         }
       })
@@ -311,8 +247,8 @@ export class SidebarView {
     if (!card) return
     const check = card.querySelector('[data-select]') as HTMLInputElement | null
     check?.addEventListener('change', () => {
-      if (check.checked) this.selected.add(a.id)
-      else this.selected.delete(a.id)
+      if (check.checked) this.model.selected.add(a.id)
+      else this.model.selected.delete(a.id)
       this.rerender()
     })
     // 勾选不触发展开卡片（定位批注）
@@ -337,8 +273,8 @@ export class SidebarView {
     const ids = members.map((m) => m.id)
     const check = card.querySelector('[data-select-group]') as HTMLInputElement | null
     check?.addEventListener('change', () => {
-      if (check.checked) for (const id of ids) this.selected.add(id)
-      else for (const id of ids) this.selected.delete(id)
+      if (check.checked) for (const id of ids) this.model.selected.add(id)
+      else for (const id of ids) this.model.selected.delete(id)
       this.rerender()
     })
     // 勾选不触发展开组卡
@@ -357,8 +293,8 @@ export class SidebarView {
       }),
     )
     card.querySelector('[data-group-op="expand"]')?.addEventListener('click', () => {
-      if (this.expandedGroups.has(groupId)) this.expandedGroups.delete(groupId)
-      else this.expandedGroups.add(groupId)
+      if (this.model.expanded.has(groupId)) this.model.expanded.delete(groupId)
+      else this.model.expanded.add(groupId)
       this.rerender()
     })
     card.querySelector('[data-group-op="toggle"]')?.addEventListener('click', () => {
@@ -371,7 +307,7 @@ export class SidebarView {
 
   /** slop 评分统计卡：评分 / 环比 / 趋势线 / 分档 / 类目分布 */
   private renderSlopCard(report: SlopReport, history: SlopSample[]): string {
-    const cats = reportCategoryCounts(report.hits)
+    const cats = summarizeSlop(report, history).categories
     const top = cats
       .slice(0, 4)
       .map((c) => `${escapeHtml(c.label)} ×${c.count}`)
@@ -432,8 +368,8 @@ export class SidebarView {
     const slopInfo = a.meta
       ? `<span class="badge border-transparent" style="color:var(--kind-slop);background:var(--kind-slop-bg)">${escapeHtml(a.meta.label)}</span>`
       : ''
-    const active = this.activeId === a.id
-    const selected = this.selected.has(a.id)
+    const active = this.model.activeId === a.id
+    const selected = this.model.selected.has(a.id)
     return `
       <div class="card ann-card group p-3 transition-[background-color,border-color,box-shadow] ${a.status === 'resolved' ? 'opacity-60' : ''} ${active ? 'ring-2 ring-ring/40' : 'hover:shadow-md'} ${selected ? 'sel-on' : ''}" data-id="${a.id}">
         <div class="mb-1.5 flex items-center gap-1.5">
@@ -464,8 +400,8 @@ export class SidebarView {
     const resolved = members.filter((m) => m.status === 'resolved').length
     const allResolved = resolved === members.length
     const anyOpen = resolved < members.length
-    const expanded = this.expandedGroups.has(groupId)
-    const active = members.some((m) => m.id === this.activeId)
+    const expanded = this.model.expanded.has(groupId)
+    const active = members.some((m) => m.id === this.model.activeId)
     const rows = expanded
       ? `<div class="mt-2 flex flex-col gap-1">${members
           .map((m) => {
@@ -480,9 +416,9 @@ export class SidebarView {
           .join('')}</div>`
       : ''
     return `
-      <div class="card ann-card group p-3 transition-[background-color,border-color,box-shadow] ${allResolved ? 'opacity-60' : ''} ${active ? 'ring-2 ring-ring/40' : 'hover:shadow-md'} ${members.every((m) => this.selected.has(m.id)) ? 'sel-on' : ''}" data-group="${groupId}">
+      <div class="card ann-card group p-3 transition-[background-color,border-color,box-shadow] ${allResolved ? 'opacity-60' : ''} ${active ? 'ring-2 ring-ring/40' : 'hover:shadow-md'} ${members.every((m) => this.model.selected.has(m.id)) ? 'sel-on' : ''}" data-group="${groupId}">
         <div class="flex items-center gap-1.5">
-          <input type="checkbox" data-select-group class="ann-check" ${members.every((m) => this.selected.has(m.id)) ? 'checked' : ''} aria-label="选中该组全部批注"/>
+          <input type="checkbox" data-select-group class="ann-check" ${members.every((m) => this.model.selected.has(m.id)) ? 'checked' : ''} aria-label="选中该组全部批注"/>
           <button class="flex min-w-0 flex-1 items-center gap-1.5 text-left" data-group-op="expand">
             <span class="badge border-transparent" style="color:var(--kind-${first.kind});background:var(--kind-${first.kind}-bg)">${KIND_LABEL[first.kind]}</span>
             <span class="badge border-border bg-secondary text-secondary-foreground" title="一次搜索批量批注">${members.length} 处</span>
@@ -499,32 +435,4 @@ export class SidebarView {
         </div>
       </div>`
   }
-}
-
-// ---------------------------------------------------------------- 纯辅助
-
-/** 可见批注 → 列表项：无 groupId 的单条 + 同 groupId 聚合，按位置排序 */
-function buildListItems(shown: Annotation[]): ListItem[] {
-  const items: ListItem[] = []
-  const groupIndex = new Map<string, Annotation[]>()
-  for (const a of shown) {
-    if (a.groupId === undefined) {
-      items.push({ kind: 'single', ann: a })
-      continue
-    }
-    const members = groupIndex.get(a.groupId) ?? []
-    members.push(a)
-    groupIndex.set(a.groupId, members)
-  }
-  const groupItems: ListItem[] = [...groupIndex.values()].map((members) => ({
-    kind: 'group' as const,
-    members: [...members].sort((x, y) => x.order - y.order),
-  }))
-  return [...items, ...groupItems].sort(
-    (x, y) => firstStart(x) - firstStart(y),
-  )
-}
-
-function firstStart(item: ListItem): number {
-  return item.kind === 'single' ? item.ann.order : item.members[0]!.order
 }

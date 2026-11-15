@@ -1,5 +1,6 @@
-import {readFile, writeFile} from 'node:fs/promises'
+import {readFile, writeFile, mkdir} from 'node:fs/promises'
 import {sealNativeDocument} from './native-document.ts'
+await mkdir('.local-build/native-evidence', {recursive: true})
 const journey = await readFile('native/tests/journey.js', 'utf8')
 let production = await readFile('.local-build/native-web/index.html', 'utf8')
 // NSH isolates its own test storage; WebView engine profiles can persist between processes.

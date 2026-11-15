@@ -2,7 +2,7 @@
 
 import { escapeHtml } from '../core/text'
 import { icon } from './icons'
-import type { ReviewDocument } from '../core/types'
+import {DocumentList, documentTree, type DocumentNode as TreeNode, type DocumentSummary} from '../workbench/documents'
 import { captureKeyedFocus } from './keyed-focus'
 
 export interface FileTreeCallbacks {
@@ -15,40 +15,21 @@ export interface FileTreeCallbacks {
   onBulkDelete: (ids: string[]) => void
 }
 
-interface TreeNode {
-  name: string
-  dir: boolean
-  /** dir: 子节点；file: 文档 */
-  children: TreeNode[]
-  doc?: ReviewDocument
-}
-
 export class FileTreeView {
   private root: HTMLElement
-  private collapsed = new Set<string>()
-  /** 多选集合：勾选框驱动，重渲染时剪除已不存在的文档 */
-  private selected = new Set<string>()
-  /** 最近一次渲染的入参，目录折叠切换时局部重渲染用 */
-  private lastDocs: ReviewDocument[] = []
-  private lastActiveId = ''
-
-  constructor(root: HTMLElement, private callbacks: FileTreeCallbacks) {
+  constructor(root: HTMLElement, private callbacks: FileTreeCallbacks, private model: DocumentList) {
     this.root = root
   }
 
   /** 折叠/展开目录：切换后立即重渲染（此前只改集合不动视图，是展开失效的根因） */
   toggleDir(key: string): void {
-    if (this.collapsed.has(key)) this.collapsed.delete(key)
-    else this.collapsed.add(key)
-    this.render(this.lastDocs, this.lastActiveId)
+    this.model.toggleDirectory(key)
+    this.render(this.model.docs, this.model.activeId)
   }
 
-  render(docs: ReviewDocument[], activeDocId: string): void {
+  render(docs: DocumentSummary[], activeDocId: string): void {
     const restoreFocus = captureKeyedFocus(this.root)
-    this.lastDocs = docs
-    this.lastActiveId = activeDocId
-    const existing = new Set(docs.map((d) => d.id))
-    for (const id of this.selected) if (!existing.has(id)) this.selected.delete(id)
+    this.model.update(docs, activeDocId)
     if (docs.length === 0) {
       this.root.innerHTML = `
         <div class="px-3 py-6 text-center text-xs leading-relaxed text-muted-foreground">
@@ -56,17 +37,17 @@ export class FileTreeView {
         </div>`
       return
     }
-    const tree = buildTree(docs)
+    const tree = documentTree(docs)
     this.root.innerHTML = `
       <div class="px-2 py-1.5">
         <div class="flex items-center justify-between px-1.5 pb-1">
           <label class="flex cursor-pointer items-center gap-1.5">
-            <input type="checkbox" data-select-all class="size-3 accent-[var(--primary)]" ${this.selected.size === docs.length ? 'checked' : ''} title="全选"/>
+            <input type="checkbox" data-select-all class="size-3 accent-[var(--primary)]" ${this.model.selected.size === docs.length ? 'checked' : ''} title="全选"/>
             <span class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">文档 ${docs.length}</span>
           </label>
           <button type="button" data-select-invert class="text-[11px] text-muted-foreground transition-colors hover:text-foreground" title="反选：勾选未选中的，取消已选中的">反选</button>
         </div>
-        ${this.selected.size > 0 ? this.renderBulkBar() : ''}
+        ${this.model.selected.size > 0 ? this.renderBulkBar() : ''}
         ${this.renderNodes(tree.children, '', activeDocId)}
       </div>`
     this.bindEvents()
@@ -76,7 +57,7 @@ export class FileTreeView {
   private renderBulkBar(): string {
     return `
       <div class="mb-1.5 flex items-center gap-1 rounded-md border bg-muted/50 px-2 py-1.5 text-xs" data-bulk-bar>
-        <span class="text-muted-foreground">已选 ${this.selected.size}</span>
+        <span class="text-muted-foreground">已选 ${this.model.selected.size}</span>
         <span class="ml-auto flex gap-1">
           <button class="btn btn-outline btn-sm h-6 px-2 text-[11px]" data-bulk="export">导出</button>
           <button class="btn btn-outline btn-sm h-6 px-2 text-[11px] text-destructive hover:text-destructive" data-bulk="delete">删除</button>
@@ -90,7 +71,7 @@ export class FileTreeView {
       .map((n) => {
         const key = prefix + '/' + n.name
         if (n.dir) {
-          const isCollapsed = this.collapsed.has(key)
+          const isCollapsed = this.model.collapsed.has(key)
           const chevron = icon('chevron', `size-3.5 transition-transform ${isCollapsed ? '' : 'rotate-90'}`)
           return `
             <div>
@@ -103,11 +84,11 @@ export class FileTreeView {
             </div>`
         }
         const doc = n.doc!
-        const count = doc.annotations.filter((a) => a.status === 'open').length
+        const count = doc.openCount
         const active = doc.id === activeDocId
         return `
           <div class="tree-row group ${active ? 'bg-secondary text-secondary-foreground' : ''}" data-doc="${doc.id}" role="button" tabindex="0">
-            <input type="checkbox" data-select="${doc.id}" aria-label="选中 ${escapeHtml(doc.name)}" class="size-3 shrink-0 accent-[var(--primary)]" ${this.selected.has(doc.id) ? 'checked' : ''}/>
+            <input type="checkbox" data-select="${doc.id}" aria-label="选中 ${escapeHtml(doc.name)}" class="size-3 shrink-0 accent-[var(--primary)]" ${this.model.selected.has(doc.id) ? 'checked' : ''}/>
             ${icon('file', 'size-3.5 shrink-0 text-muted-foreground/80')}
             <span class="truncate flex-1">${escapeHtml(n.name)}</span>
             ${count > 0 ? `<span class="badge h-4 bg-secondary px-1 text-[10px] text-secondary-foreground">${count}</span>` : ''}
@@ -125,9 +106,9 @@ export class FileTreeView {
     this.root.querySelectorAll('[data-select]').forEach((box) => {
       box.addEventListener('change', () => {
         const id = (box as HTMLInputElement).dataset.select!
-        if ((box as HTMLInputElement).checked) this.selected.add(id)
-        else this.selected.delete(id)
-        this.render(this.lastDocs, this.lastActiveId)
+        if ((box as HTMLInputElement).checked) this.model.selected.add(id)
+        else this.model.selected.delete(id)
+        this.render(this.model.docs, this.model.activeId)
       })
       // 勾选不触发行点击（打开文档）
       box.addEventListener('click', (e) => e.stopPropagation())
@@ -135,26 +116,26 @@ export class FileTreeView {
     this.root.querySelectorAll('[data-select-all]').forEach((box) => {
       box.addEventListener('change', () => {
         const all = (box as HTMLInputElement).checked
-        this.selected = new Set(all ? this.lastDocs.map((d) => d.id) : [])
-        this.render(this.lastDocs, this.lastActiveId)
+        this.model.selectAll(all)
+        this.render(this.model.docs, this.model.activeId)
       })
     })
     this.root.querySelectorAll('[data-select-invert]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        this.selected = new Set(this.lastDocs.filter((d) => !this.selected.has(d.id)).map((d) => d.id))
-        this.render(this.lastDocs, this.lastActiveId)
+        this.model.invertSelection()
+        this.render(this.model.docs, this.model.activeId)
       })
     })
     this.root.querySelectorAll('[data-bulk]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const op = (btn as HTMLElement).dataset.bulk
-        const ids = [...this.selected]
+        const ids = [...this.model.selected]
         if (ids.length === 0) return
         if (op === 'export') this.callbacks.onBulkExport(ids)
         if (op === 'delete') this.callbacks.onBulkDelete(ids)
         if (op === 'clear') {
-          this.selected.clear()
-          this.render(this.lastDocs, this.lastActiveId)
+          this.model.selected.clear()
+          this.render(this.model.docs, this.model.activeId)
         }
       })
     })
@@ -182,28 +163,3 @@ export class FileTreeView {
     })
   }
 }
-
-function buildTree(docs: ReviewDocument[]): TreeNode {
-  const root: TreeNode = { name: '', dir: true, children: [] }
-  for (const doc of docs) {
-    const parts = (doc.path ? doc.path + '/' : '').split('/').filter(Boolean)
-    let cur = root
-    for (const part of parts) {
-      let next = cur.children.find((c) => c.dir && c.name === part)
-      if (!next) {
-        next = { name: part, dir: true, children: [] }
-        cur.children.push(next)
-      }
-      cur = next
-    }
-    cur.children.push({ name: doc.name, dir: false, children: [], doc })
-  }
-  const sortNodes = (n: TreeNode) => {
-    n.children.sort((a, b) => (a.dir === b.dir ? a.name.localeCompare(b.name) : a.dir ? -1 : 1))
-    n.children.forEach(sortNodes)
-  }
-  sortNodes(root)
-  return root
-}
-
-

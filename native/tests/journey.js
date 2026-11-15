@@ -1,87 +1,44 @@
-// Runs only in the test artifact, inside the platform's real WebView. No production test API.
+// Test artifact only: assertions and DOM selection inside the real document canvas.
+// Navigation, forms, menus and buttons are operated by nsh/test outside this WebView.
 (async () => {
-  const steps = []
   const q = selector => document.querySelector(selector)
-  const wait = async (predicate, label) => {
-    for (let i = 0; i < 300; i++) { if (predicate()) return; await new Promise(r => setTimeout(r, 50)) }
-    throw new Error(`Timed out: ${label}; ${document.body.innerText.slice(-800)}`)
+  let view = null
+  const post = window.nsh.postMessage.bind(window.nsh)
+  window.nsh.postMessage = message => {
+    if (message.startsWith('{"type":"shell.view"')) view = JSON.parse(message).view
+    post(message)
   }
-  const click = selector => { const element = q(selector); if (!element) throw new Error(`Missing ${selector}`); element.click() }
-  const button = label => {
-    const element = [...document.querySelectorAll('button,[role="menuitem"]')].find(e => e.textContent.trim() === label)
-    if (!element) throw new Error(`Missing button: ${label}`)
-    element.click()
-  }
-  const input = (selector, value) => { const element = q(selector); element.value = value; element.dispatchEvent(new Event('input', {bubbles: true})) }
-  const report = value => window.nsh.postMessage(JSON.stringify({id: 'e2e-report', operation: 'files.save', file: {
+  const report = value => post(JSON.stringify({id: 'e2e-report', operation: 'files.save', file: {
     name: 'e2e-report.json', type: 'application/json', base64: btoa(unescape(encodeURIComponent(JSON.stringify(value)))),
   }}))
-  const saved = () => q('#save-text')?.textContent === '已保存'
-  const nextCloseRequest = () => new Promise(resolve => {
-    const receive = event => {
-      if (typeof event.data !== 'string' || !event.data.startsWith('inkmark:prepare-close:')) return
-      window.removeEventListener('message', receive)
-      resolve()
-    }
-    window.addEventListener('message', receive)
-  })
+  const wait = async (predicate, label) => {
+    for (let i = 0; i < 1800; i++) { if (predicate()) return; await new Promise(r => setTimeout(r, 50)) }
+    throw new Error(`Timed out: ${label}`)
+  }
   try {
-    await wait(() => q('#btn-import') && saved(), 'workspace ready')
-    click('#btn-import'); click('[data-menu-id="files"]')
-    await wait(() => q('#editor')?.textContent.includes('Native review'), 'native file import')
-    steps.push('native-picker-import')
-    button('分栏')
-    await wait(() => q('#markdown-preview strong'), 'Markdown preview')
-    const target = q('#markdown-preview strong')
-    const range = document.createRange(); range.selectNodeContents(target)
+    await wait(() => view?.chrome?.ready, 'workspace ready')
+    if (q('header,aside,input,textarea,select,[role="dialog"]')) throw new Error('Native build contains web application controls')
+    await wait(() => q('#editor')?.textContent.includes('Native review') && view.save.status === 'saved', 'native picker import')
+    report({status: 'imported'})
+    await wait(() => view.chrome.readingMode === 'split' && q('#markdown-preview strong'), 'native reading menu')
+    const target = q('#markdown-preview strong'), range = document.createRange()
+    range.selectNodeContents(target)
     getSelection().removeAllRanges(); getSelection().addRange(range)
     const rect = range.getBoundingClientRect()
     target.dispatchEvent(new MouseEvent('mouseup', {bubbles: true, clientX: rect.right, clientY: rect.bottom}))
-    await wait(() => q('#selection-pin') && !q('#selection-pin').classList.contains('hidden') && q('#selection-pin').getBoundingClientRect().width > 0, 'selection pin')
-    click('#selection-pin')
-    await wait(() => q('[data-role="composer-comment"]'), 'annotation composer')
-    input('[data-role="composer-comment"]', 'Native WebView review')
-    button('添加批注')
-    await wait(() => q('#sidebar')?.textContent.includes('Native WebView review') && saved(), 'persist annotation')
+    await wait(() => view.selection, 'native selection affordance')
+    report({status: 'selected'})
+    await wait(() => view.chrome.active.annotationCount === 1 && view.save.status === 'saved', 'native annotation form')
     if (!q('#editor .seg-hl') || !q('#markdown-preview .seg-hl')) throw new Error('Shared source/preview anchor missing')
-    steps.push('preview-selection-shared-anchor')
-    click('#btn-edit'); input('#edit-source', 'unsaved draft')
-    const windowClose = nextCloseRequest()
-    report({status: 'window-close-ready'})
-    await windowClose
-    await wait(() => document.body.innerText.includes('请先'), 'draft close refusal')
-    if (q('#edit-source').value !== 'unsaved draft' || document.body.inert) throw new Error('Close lost or locked draft')
-    click('[data-op="cancel-edit-text"]')
-    click('#btn-search')
-    input('[data-sp-composer] [data-role="composer-comment"]', 'Unsubmitted batch review')
-    const menuClose = nextCloseRequest()
-    report({status: 'menu-close-ready'})
-    await menuClose
-    await wait(() => !document.body.inert, 'menu close refusal')
-    if (document.body.inert || q('[data-sp-composer] [data-role="composer-comment"]').value !== 'Unsubmitted batch review') throw new Error('Batch draft lost or locked')
-    click('#sp-close')
-    steps.push('draft-close-refused')
-    click('#btn-export'); click('#export-modal [data-tab="w3c"]')
-    const exported = JSON.parse(q('#export-preview').value)
-    if (exported.length !== 1 || !JSON.stringify(exported).includes('Native WebView review')) throw new Error('Wrong export')
-    click('#export-modal [data-op="download"]')
-    await wait(() => !q('#export-modal [data-op="download"]').disabled, 'cancelled export settled')
-    click('#export-modal [data-op="download"]')
-    await wait(() => document.body.innerText.includes('Test disk unavailable'), 'failed export feedback')
-    click('#export-modal [data-op="download"]')
-    await wait(() => document.body.innerText.includes('文件已保存'), 'successful export feedback')
-    click('#export-modal [data-op="close"]')
-    steps.push('export-cancel-failure-retry')
-    click('#btn-import'); click('[data-menu-id="image-paste"]')
-    await wait(() => q('#image-view img')?.naturalWidth > 0 && saved(), 'clipboard image import')
-    if (!q('#image-view img').src.startsWith('data:image/png;')) throw new Error('Bitmap clipboard was not normalized')
-    if (!q('#btn-edit').disabled) throw new Error('Image entered text editor')
-    steps.push('native-clipboard-image')
+    report({status: 'annotated'})
+    await wait(() => view.chrome.active.kind === 'image' && view.chrome.active.annotationCount === 1 && view.save.status === 'saved', 'native image form')
     const db = await new Promise((resolve, reject) => { const r = indexedDB.open('inkmark-workspace'); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error) })
     const snapshot = await new Promise((resolve, reject) => { const r = db.transaction('snapshots').objectStore('snapshots').get('workspace'); r.onsuccess = () => resolve(JSON.parse(r.result)); r.onerror = () => reject(r.error) })
     db.close()
-    if (snapshot.docs.length !== 2 || !snapshot.docs.some(doc => doc.annotations.length === 1)) throw new Error('IndexedDB snapshot incomplete')
-    steps.push('indexeddb-mixed-workspace')
-    report({status: 'passed', steps})
-  } catch (error) { report({status: 'failed', steps, error: String(error)}) }
+    if (snapshot.docs.length !== 2 || !snapshot.docs.every(doc => doc.annotations.length === 1)) throw new Error('Mixed workspace is incomplete')
+    if (snapshot.docs[0].text !== '# Native review\r\n\r\nA **stable primitive** composes.') throw new Error('Native editing changed CRLF source bytes')
+    if (!q('#image-view img').src.startsWith('data:image/png;')) throw new Error('Clipboard bitmap was not normalized')
+    if (q('input,textarea,select,[role="dialog"],header,aside')) throw new Error('A web form leaked into the native canvas')
+    report({status: 'passed', documents: snapshot.docs.length, annotations: snapshot.docs.map(doc => doc.annotations.length)})
+  } catch (error) { report({status: 'failed', error: String(error)}) }
 })()

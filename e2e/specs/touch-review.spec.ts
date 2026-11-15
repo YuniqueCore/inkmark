@@ -1,3 +1,4 @@
+import {workspaceAction} from '../screenplay/support/actions'
 import {test, expect} from '@playwright/test'
 import {createDoc, workspace} from '../screenplay/support/markdown'
 
@@ -35,7 +36,7 @@ test('touch review: selection notifications preserve the draft and keyboard-size
     await expect(submit).toBeInViewport()
     await submit.tap()
     await expect.poll(async () => (await workspace(page))?.docs[0]?.annotations.length ?? 0).toBe(1)
-    await page.locator('#btn-search').tap()
+    await workspaceAction(page, 'search')
     await page.locator('#sp-input').fill('primitive')
     await page.locator('[data-sp-composer] [data-role="composer-comment"]').fill('Reachable above the keyboard')
     const batch = page.locator('#sp-submit')

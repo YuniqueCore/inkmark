@@ -1,3 +1,4 @@
+import {workspaceAction} from '../screenplay/support/actions'
 /** 改稿、W3C、删除恢复和界面快照的真实浏览器旅程。 */
 import { expect, test } from '../screenplay/fixtures/screenplay'
 import { BrowseTheWorkbench } from '../screenplay/abilities/BrowseTheWorkbench'
@@ -13,24 +14,24 @@ test('改稿批注、原文编辑和搜索各自保持正确的文本坐标', as
   const revised = '改稿关键句。\n共同结束。'
   await createDoc(page, original, true)
   await test.step('Given：改稿侧写一条批注，返回原文不应误高亮', async () => {
-    await page.locator('#btn-diff').click()
+    await workspaceAction(page, 'diff')
     const dialog = page.getByRole('dialog')
     await dialog.getByRole('textbox').fill(revised)
     await dialog.getByRole('button', {name: '生成对照'}).click()
     await selectText(page.locator('.diff-add .editor-blk').first(), 0, 4)
     await submitPreviewAnnotation(page, '改稿侧意见')
     await expect(page.locator('.diff-add .seg-hl')).toContainText('改稿关键')
-    await page.locator('#btn-diff').click()
+    await workspaceAction(page, 'diff')
     await expect(page.locator('#editor .seg-hl')).toHaveCount(0)
   })
   await test.step('When：原文增加前缀并保存，改稿批注坐标不变', async () => {
-    await page.locator('#btn-edit').click()
+    await workspaceAction(page, 'edit')
     await page.locator('#edit-source').fill(`新增前言。\n${original}`)
     await page.getByRole('button', {name: '完成并重锚批注'}).click()
     await expect.poll(async () => (await workspace(page))?.docs[0]?.text ?? '').toContain('新增前言')
     const saved = await workspace(page)
     expect(saved.docs[0].annotations[0]).toMatchObject({target: 'revised', start: 0, end: 4, comment: '改稿侧意见'})
-    await page.locator('#btn-diff').click()
+    await workspaceAction(page, 'diff')
     await expect(page.locator('.diff-add .seg-hl')).toContainText('改稿关键')
   })
   await test.step('Then：跨原文与改稿的选区被拒绝，搜索回到原文并显示命中', async () => {
@@ -46,7 +47,7 @@ test('改稿批注、原文编辑和搜索各自保持正确的文本坐标', as
       document.querySelector('#editor')!.dispatchEvent(new MouseEvent('mouseup', {bubbles: true, clientX: rect.right, clientY: rect.bottom}))
     })
     await expect(Workbench.pinDot(page)).toBeHidden()
-    await page.locator('#btn-search').click()
+    await workspaceAction(page, 'search')
     await page.locator('#sp-input').fill('原文关键')
     await expect(page.locator('#editor .seg-search')).toContainText('原文关键')
     await expect(page.locator('.diff-row')).toHaveCount(0)
@@ -104,7 +105,7 @@ test('编辑保留统一换行，混合换行的实际变更先提示', async ({
   await expect.poll(async () => (await workspace(page))?.docs[0]?.annotations.length).toBe(1)
   const annotation = (await workspace(page)).docs[0].annotations[0]
   expect(windows.slice(annotation.start, annotation.end)).toBe('第二行')
-  await page.locator('#btn-edit').click()
+  await workspaceAction(page, 'edit')
   await expect(page.locator('#edit-source')).toHaveValue('第一行\n第二行\n')
   await expect(page.locator('#save-text')).toHaveText('已保存')
   expect(await page.evaluate(() => {
@@ -115,7 +116,7 @@ test('编辑保留统一换行，混合换行的实际变更先提示', async ({
   await page.getByRole('button', {name: '完成并重锚批注'}).click()
   await expect(page.getByRole('alertdialog')).toHaveCount(0)
   expect((await workspace(page)).docs[0].text).toBe(windows)
-  await page.locator('#btn-edit').click()
+  await workspaceAction(page, 'edit')
   await page.locator('#edit-source').fill('第一行已改\n第二行\n第三行\n')
   await page.getByRole('button', {name: '完成并重锚批注'}).click()
   await expect.poll(async () => (await workspace(page))?.docs[0]?.text).toBe('第一行已改\r\n第二行\r\n第三行\r\n')
@@ -142,11 +143,11 @@ test('编辑保留统一换行，混合换行的实际变更先提示', async ({
   const mixed = '第一行\r\n第二行\n第三行\r'
   await page.locator('#file-input').setInputFiles({name: 'mixed.md', mimeType: 'text/markdown', buffer: Buffer.from(mixed)})
   await expect(page.locator('#filetree')).toContainText('mixed.md')
-  await page.locator('#btn-edit').click()
+  await workspaceAction(page, 'edit')
   await page.getByRole('button', {name: '完成并重锚批注'}).click()
   await expect(page.getByRole('alertdialog')).toHaveCount(0)
   await expect.poll(async () => (await workspace(page))?.docs.find((d: {name: string}) => d.name === 'mixed.md')?.text).toBe(mixed)
-  await page.locator('#btn-edit').click()
+  await workspaceAction(page, 'edit')
   await page.locator('#edit-source').fill('第一行已改\n第二行\n第三行\n')
   await page.getByRole('button', {name: '完成并重锚批注'}).click()
   const confirmation = page.getByRole('alertdialog', {name: '保存编辑？'})
@@ -168,7 +169,7 @@ test('编辑保留统一换行，混合换行的实际变更先提示', async ({
   expect(classic.text.slice(classic.annotations[0].start, classic.annotations[0].end)).toBe('第二行')
   await page.getByRole('button', {name: '预览', exact: true}).click()
   await expect(page.locator('#markdown-preview .seg-hl')).toHaveText('第二行')
-  await page.locator('#btn-diff').click()
+  await workspaceAction(page, 'diff')
   const revision = page.getByRole('dialog')
   await revision.getByRole('textbox').fill('第一行\n第二行已改\n\n第三行')
   await revision.getByRole('button', {name: '生成对照'}).click()
@@ -205,7 +206,7 @@ test('草稿跨视图、覆盖和删除时保持归属，恢复后可继续批�
   await download
   await expect(page.getByText('已开始下载；文档与批注备份不含未提交草稿')).toBeVisible()
 
-  await page.locator('#btn-edit').click()
+  await workspaceAction(page, 'edit')
   await page.locator('#edit-source').fill('这次编辑还没有保存。')
   await page.getByRole('button', {name: '完成并重锚批注'}).click()
   const saveEdit = page.getByRole('alertdialog', {name: '保存编辑？'})
@@ -325,7 +326,7 @@ test('桌面和手机分栏的视觉快照', async ({page}) => {
   await expect(page.locator('.toast')).not.toHaveClass(/opacity-95/)
   await expect(page.locator('#editor-wrap')).toHaveScreenshot('markdown-split-desktop.png', {animations: 'disabled', maxDiffPixelRatio: 0.02})
   await page.setViewportSize({width: 390, height: 844})
-  await page.locator('#btn-theme').click()
+  await workspaceAction(page, 'theme')
   await expect(page.locator('#editor-wrap')).toHaveScreenshot('markdown-split-mobile-dark.png', {animations: 'disabled', maxDiffPixelRatio: 0.02})
 })
 

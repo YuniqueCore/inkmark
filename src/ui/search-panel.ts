@@ -9,29 +9,13 @@
  * 正文预览描边经 onQueryChange 交给 main 重渲染编辑器（另一棵子树，安全）。
  */
 
-import { findMatches, regexIssue } from '../core/batch'
-import type { MatchOptions, MatchRange } from '../core/batch'
+import type { MatchOptions } from '../core/batch'
 import { escapeHtml } from '../core/text'
 import type { AnnotationKind } from '../core/types'
 import { icon } from './icons'
 import { ComposerForm } from './composer'
 
-export interface SearchHit {
-  docId: string
-  start: number
-  end: number
-}
-
-export interface BatchTarget {
-  docId: string
-  matches: MatchRange[]
-}
-
-export interface SearchPanelDocs {
-  id: string
-  name: string
-  text: string
-}
+import {Search, type SearchHit, type BatchTarget, type SearchDocument} from '../workbench/search'
 
 export interface SearchPanelCallbacks {
   /** 查询或匹配方式变化 → main 更新编辑器预览描边 */
@@ -48,19 +32,10 @@ const TOGGLE_ON = 'bg-secondary text-secondary-foreground'
 export class SearchPanelView {
   private el: HTMLElement
   private open = false
-  private query = ''
-  /** 匹配开关在会话内记忆（跨开合保留，与编辑器搜索习惯一致） */
-  private caseSensitive = false
-  private useRegex = false
   /** ComposerForm 每次打开重建；lastKind 记住上次选择的类型 */
   private lastKind: AnnotationKind = 'suggestion'
   private composer: ComposerForm | null = null
-  private crossDoc = false
-  private navIndex = 0
-  private docs: SearchPanelDocs[] = []
-  private activeDocId = ''
-
-  constructor(private callbacks: SearchPanelCallbacks) {
+  constructor(private callbacks: SearchPanelCallbacks, private model: Search) {
     this.el = document.createElement('div')
     this.el.className = 'popover-panel search-panel fixed right-4 top-[65px] z-70 hidden w-[min(430px,calc(100vw-16px))]'
     document.body.append(this.el)
@@ -76,15 +51,15 @@ export class SearchPanelView {
   }
 
   /** 打开 / 关闭（⌘F 与侧栏按钮共用） */
-  toggle(docs: SearchPanelDocs[], activeDocId: string): void {
+  toggle(docs: SearchDocument[], activeDocId: string): void {
     if (this.open) this.close()
     else this.openPanel(docs, activeDocId)
   }
 
-  openPanel(docs: SearchPanelDocs[], activeDocId: string): void {
+  openPanel(docs: SearchDocument[], activeDocId: string): void {
     this.open = true
-    this.docs = docs
-    this.activeDocId = activeDocId
+    this.model.docs = docs
+    this.model.activeDocId = activeDocId
     this.render()
     ;(this.el.querySelector('#sp-input') as HTMLInputElement | null)?.focus()
   }
@@ -92,8 +67,8 @@ export class SearchPanelView {
   close(): void {
     if (!this.open) return
     this.open = false
-    this.query = ''
-    this.navIndex = 0
+    this.model.query = ''
+    this.model.navIndex = -1
     this.composer = null
     this.el.classList.add('hidden')
     this.el.innerHTML = ''
@@ -101,38 +76,16 @@ export class SearchPanelView {
   }
 
   /** main 重渲染时同步文档集；面板开着就定向刷新计数（不碰输入焦点） */
-  setDocs(docs: SearchPanelDocs[], activeDocId: string): void {
-    this.docs = docs
-    this.activeDocId = activeDocId
+  setDocs(docs: SearchDocument[], activeDocId: string): void {
+    this.model.docs = docs
+    this.model.activeDocId = activeDocId
     if (this.open) this.refresh()
   }
 
   // ---------------------------------------------------------------- 数据
 
-  private matchOptions(): MatchOptions {
-    return {caseSensitive: this.caseSensitive, regex: this.useRegex}
-  }
-
-  private scopedDocs(): SearchPanelDocs[] {
-    return this.crossDoc ? this.docs : this.docs.filter((d) => d.id === this.activeDocId)
-  }
-
-  private allHits(): SearchHit[] {
-    const hits: SearchHit[] = []
-    for (const d of this.scopedDocs()) {
-      for (const m of findMatches(d.text, this.query, this.matchOptions())) hits.push({ docId: d.id, ...m })
-    }
-    return hits
-  }
-
-  private targets(): BatchTarget[] {
-    return this.scopedDocs()
-      .map((d) => ({ docId: d.id, matches: findMatches(d.text, this.query, this.matchOptions()) }))
-      .filter((t) => t.matches.length > 0)
-  }
-
   private canSubmit(): boolean {
-    return this.allHits().length > 0 && (this.composer?.canSubmit() ?? false)
+    return this.model.hits().length > 0 && (this.composer?.canSubmit() ?? false)
   }
 
   // ---------------------------------------------------------------- 渲染
@@ -143,9 +96,9 @@ export class SearchPanelView {
       <div class="p-3">
         <div class="flex items-center gap-1.5">
           <span class="text-muted-foreground">${icon('search', 'size-4')}</span>
-          <input id="sp-input" class="input-base h-8 min-w-0 flex-1 text-[13px]" placeholder="搜索正文（Enter 下一个，Esc 关闭）…" value="${escapeHtml(this.query)}" />
-          <button id="sp-case" class="btn btn-ghost btn-sm h-7 w-7 p-0 text-[11px] font-semibold ${this.caseSensitive ? TOGGLE_ON : ''}" title="区分大小写" aria-pressed="${this.caseSensitive}">Aa</button>
-          <button id="sp-regex" class="btn btn-ghost btn-sm h-7 w-7 p-0 text-[11px] font-semibold ${this.useRegex ? TOGGLE_ON : ''}" title="使用正则表达式" aria-pressed="${this.useRegex}">.*</button>
+          <input id="sp-input" class="input-base h-8 min-w-0 flex-1 text-[13px]" placeholder="搜索正文（Enter 下一个，Esc 关闭）…" value="${escapeHtml(this.model.query)}" />
+          <button id="sp-case" class="btn btn-ghost btn-sm h-7 w-7 p-0 text-[11px] font-semibold ${this.model.caseSensitive ? TOGGLE_ON : ''}" title="区分大小写" aria-pressed="${this.model.caseSensitive}">Aa</button>
+          <button id="sp-regex" class="btn btn-ghost btn-sm h-7 w-7 p-0 text-[11px] font-semibold ${this.model.useRegex ? TOGGLE_ON : ''}" title="使用正则表达式" aria-pressed="${this.model.useRegex}">.*</button>
           <button id="sp-close" class="btn btn-ghost btn-sm h-7 w-7 p-0" title="关闭 (Esc)" aria-label="关闭搜索">${icon('x', 'size-3.5')}</button>
         </div>
         <div class="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
@@ -159,7 +112,7 @@ export class SearchPanelView {
           <div data-sp-composer></div>
           <div class="mt-2 flex items-center gap-2">
             <label class="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground" title="在整个工作区的所有文档里搜索并批量批注">
-              <input type="checkbox" id="sp-cross" class="size-3 accent-[var(--primary)]" ${this.crossDoc ? 'checked' : ''}/>
+              <input type="checkbox" id="sp-cross" class="size-3 accent-[var(--primary)]" ${this.model.crossDoc ? 'checked' : ''}/>
               跨文档
             </label>
             <button id="sp-submit" class="btn btn-default btn-sm ml-auto"></button>
@@ -183,7 +136,7 @@ export class SearchPanelView {
     const input = this.el.querySelector('#sp-input') as HTMLInputElement
     input.addEventListener('input', () => {
       // 只更新计数与正文预览，绝不重绘面板（输入法组合安全）
-      this.query = input.value
+      this.model.query = input.value
       this.afterMatchChange()
     })
     input.addEventListener('keydown', (e) => {
@@ -201,25 +154,25 @@ export class SearchPanelView {
     this.el.querySelector('#sp-prev')?.addEventListener('click', () => this.navigate(-1))
     this.el.querySelector('#sp-next')?.addEventListener('click', () => this.navigate(1))
     this.el.querySelector('#sp-case')?.addEventListener('click', () => {
-      this.caseSensitive = !this.caseSensitive
-      this.syncToggle('#sp-case', this.caseSensitive)
+      this.model.caseSensitive = !this.model.caseSensitive
+      this.syncToggle('#sp-case', this.model.caseSensitive)
       this.afterMatchChange()
     })
     this.el.querySelector('#sp-regex')?.addEventListener('click', () => {
-      this.useRegex = !this.useRegex
-      this.syncToggle('#sp-regex', this.useRegex)
+      this.model.useRegex = !this.model.useRegex
+      this.syncToggle('#sp-regex', this.model.useRegex)
       this.afterMatchChange()
     })
     this.el.querySelector('#sp-cross')?.addEventListener('change', (e) => {
-      this.crossDoc = (e.target as HTMLInputElement).checked
-      this.navIndex = 0
+      this.model.crossDoc = (e.target as HTMLInputElement).checked
+      this.model.navIndex = -1
       this.refresh()
     })
     this.el.querySelector('#sp-submit')?.addEventListener('click', () => {
       if (!this.composer || !this.canSubmit()) return
       const s = this.composer.state()
       this.callbacks.onBatchAnnotate(
-        this.targets(),
+        this.model.targets(),
         s.kind,
         s.comment.trim(),
         s.replacement.trim() || undefined,
@@ -230,8 +183,8 @@ export class SearchPanelView {
 
   /** 匹配方式或查询变化：重置导航、同步预览描边与命中计数 */
   private afterMatchChange(): void {
-    this.navIndex = 0
-    this.callbacks.onQueryChange(this.query, this.matchOptions())
+    this.model.navIndex = -1
+    this.callbacks.onQueryChange(this.model.query, this.model.options())
     this.refresh()
   }
 
@@ -243,22 +196,21 @@ export class SearchPanelView {
     btn.setAttribute('aria-pressed', String(on))
   }
 
-  private navigate(delta: number): void {
-    const hits = this.allHits()
-    if (hits.length === 0) return
-    this.navIndex = (this.navIndex + delta + hits.length) % hits.length
+  private navigate(delta: 1 | -1): void {
+    const hit = this.model.navigate(delta)
+    if (!hit) return
     this.refresh()
-    this.callbacks.onNavigate(hits[this.navIndex]!)
+    this.callbacks.onNavigate(hit)
   }
 
   /** 定向刷新：命中计数 / 导航可用态 / 提交按钮（不重绘面板、不碰焦点） */
   private refresh(): void {
-    const invalid = this.useRegex && this.query.trim() !== '' && regexIssue(this.query) !== null
-    const hits = this.allHits()
+    const invalid = this.model.invalid()
+    const hits = this.model.hits()
     const count = this.el.querySelector('#sp-count')
     if (count) {
       count.textContent =
-        this.query.trim() === '' ? '' : invalid ? '正则无效' : `命中 ${hits.length} 处`
+        this.model.query.trim() === '' ? '' : invalid ? '正则无效' : `命中 ${hits.length} 处`
     }
     const input = this.el.querySelector('#sp-input') as HTMLInputElement | null
     if (input) input.classList.toggle('text-destructive', invalid)
@@ -268,14 +220,14 @@ export class SearchPanelView {
       prev.disabled = next.disabled = hits.length === 0
     }
     const body = this.el.querySelector('#sp-body') as HTMLElement | null
-    if (body) body.style.display = this.query.trim() === '' ? 'none' : ''
+    if (body) body.style.display = this.model.query.trim() === '' ? 'none' : ''
     this.refreshSubmit()
   }
 
   private refreshSubmit(): void {
     const submit = this.el.querySelector('#sp-submit') as HTMLButtonElement | null
     if (!submit || !this.composer) return
-    submit.textContent = `批量批注 ${this.allHits().length} 处`
+    submit.textContent = `批量批注 ${this.model.hits().length} 处`
     submit.disabled = !this.canSubmit()
   }
 }

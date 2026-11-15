@@ -11,7 +11,7 @@ const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 
 export default defineConfig(({mode}) => {
   const native = mode === 'native'
   return {
-    plugins: [tailwindcss(), ...(native ? [viteSingleFile(), {
+    plugins: [tailwindcss(), ...(native ? [{name: 'native-canvas-entry', transformIndexHtml: {order: 'pre' as const, handler: () => readFileSync(new URL('./native.html', import.meta.url), 'utf8')}}, viteSingleFile(), {
       name: 'inline-native-icon',
       transformIndexHtml: (html: string) => html.replace('href="/favicon.svg"', `href="data:image/svg+xml;base64,${readFileSync(new URL('./public/favicon.svg', import.meta.url)).toString('base64')}"`),
     }] : [])],
