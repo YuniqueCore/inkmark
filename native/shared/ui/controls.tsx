@@ -29,7 +29,9 @@ export function ActionsMenu<T extends string>(props: {label: string; text?: stri
     popupStyle={{backgroundColor: props.colors().chrome, borderRadius: 8, padding: 6}}
     backdropStyle={{backgroundColor: '#00000040'}}
     trigger={<Text accessibilityLabel={props.label} testID={props.testID} style={{minHeight: touch() ? 44 : 30, minWidth: touch() ? 44 : 30,
-      padding: 10, fontSize: touch() ? 15 : 13, color: props.colors().text}}>{props.text ?? props.label}</Text>}>
+      padding: 10, borderRadius: 6, borderWidth: 1, borderColor: 'transparent', fontSize: touch() ? 15 : 13, color: props.colors().text}}
+      hoverStyle={{backgroundColor: props.colors().inset}} activeStyle={{backgroundColor: props.colors().inset}}
+      focusVisibleStyle={{borderColor: props.colors().accent}}>{props.text ?? props.label}</Text>}>
     <Each of={props.groups} key="index">{(group, index) => <>
       <If when={index() > 0}><MenuSeparator style={{height: 1, backgroundColor: props.colors().border, marginVertical: 4}} /></If>
       <Each of={group()} key={item => item.value}>{item => <MenuItem testID={item().testID}
