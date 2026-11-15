@@ -82,14 +82,16 @@ public class WorkspaceTest {
             assertTrue("Image must be ready for annotation", coordinates.wait(Until.enabled(true), 10000));
             coordinates.click();
             control(device, "annotation-save");
+            if (Build.VERSION.SDK_INT >= 30) awaitKeyboard(scenario, true);
             capture(device, "image-coordinate-form");
             fillField(device, "region-x", "20"); fillField(device, "region-y", "20");
             fillField(device, "region-width", "9999"); fillField(device, "region-height", "80");
             fillField(device, "annotation-comment", "Native image review");
             control(device, "annotation-comment").findObject(By.clazz(android.widget.EditText.class)).click();
             if (Build.VERSION.SDK_INT >= 30) awaitKeyboard(scenario, true);
-            new UiScrollable(new UiSelector().resourceId("form-fields"))
-                .scrollIntoView(new UiSelector().resourceId("annotation-kind-question"));
+            assertTrue("Annotation kinds must be reachable with the keyboard open",
+                formFields().scrollIntoView(new UiSelector().resourceId("annotation-kind-question")));
+            if (Build.VERSION.SDK_INT >= 30) awaitKeyboard(scenario, true);
             control(device, "annotation-kind-question").click();
             assertTrue("A single tap must change the kind while the keyboard is open",
                 control(device, "annotation-kind-question").wait(Until.selected(true), 10000));
@@ -116,8 +118,13 @@ public class WorkspaceTest {
                 try (var original = zip.getInputStream(zip.getEntry("image-1.png"))) { assertArrayEquals(Files.readAllBytes(image.toPath()), original.readAllBytes()); }
                 try (var backup = zip.getInputStream(zip.getEntry("inkmark-documents.json"))) {
                     var document = new org.json.JSONObject(new String(backup.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)).getJSONArray("docs").getJSONObject(0);
-                    assertEquals("Native image review", document.getJSONArray("annotations").getJSONObject(0).getString("comment"));
-                    assertEquals("question", document.getJSONArray("annotations").getJSONObject(0).getString("kind"));
+                    var annotation = document.getJSONArray("annotations").getJSONObject(0);
+                    assertEquals("Native image review", annotation.getString("comment"));
+                    assertEquals("question", annotation.getString("kind"));
+                    var selector = annotation.getJSONObject("selector");
+                    assertEquals("rectangle", selector.getString("type"));
+                    assertEquals(20, selector.getInt("x")); assertEquals(20, selector.getInt("y"));
+                    assertEquals(100, selector.getInt("width")); assertEquals(80, selector.getInt("height"));
                 }
             }
             scenario.recreate();
@@ -193,13 +200,26 @@ public class WorkspaceTest {
             catch (java.io.IOException error) { android.util.Log.w("InkMarkTest", "Could not capture accessibility hierarchy", error); }
         }
     }
+    private static UiScrollable formFields() {
+        return new UiScrollable(new UiSelector().resourceId("form-fields")
+            .childSelector(new UiSelector().className(android.widget.ScrollView.class)));
+    }
     private static void fillField(UiDevice device, String id, String value) throws androidx.test.uiautomator.UiObjectNotFoundException {
         // Focusing the comment opens the keyboard and can scroll coordinates out
         // of view. Follow the native form's real scroll surface to each field.
-        new UiScrollable(new UiSelector().resourceId("form-fields"))
-            .scrollIntoView(new UiSelector().resourceId(id));
+        // A clipped InputBox can be visible while its editable child is outside the viewport.
+        final boolean visible;
+        try {
+            visible = formFields().scrollIntoView(new UiSelector().resourceId(id)
+                .childSelector(new UiSelector().className(android.widget.EditText.class)));
+        } catch (androidx.test.uiautomator.UiObjectNotFoundException error) {
+            capture(device, id + "-editor"); throw error;
+        }
+        if (!visible) capture(device, id + "-editor");
+        assertTrue("Scroll the native editor into view: " + id, visible);
         // NSH assigns testID to InputBox; Android's editable child owns text actions.
-        UiObject2 input = control(device, id).findObject(By.clazz(android.widget.EditText.class));
+        UiObject2 input = control(device, id).wait(Until.findObject(By.clazz(android.widget.EditText.class)), 10000);
+        if (input == null) capture(device, id + "-editor");
         assertNotNull("Native text editor must exist within " + id, input);
         input.setText(value);
         assertTrue("Native editor must accept the value for " + id, input.wait(Until.textEquals(value), 10000));
