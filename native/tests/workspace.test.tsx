@@ -45,17 +45,17 @@ test('native controls and real WebView: import, CRLF edit, preview review, close
   // NSH 0.5.1 Windows traversal reaches text inputs only; other desktop hosts enter tabs.
   if (app.shows('id:journey-platform-macos') || app.shows('id:journey-platform-linux')) {
     await app.press('id:reading-source')
-    // GTK uses Ctrl+Tab to leave the embedded content's own focus chain.
-    if (app.shows('id:journey-platform-linux')) await app.keyboard.press('ctrl+tab')
-    console.log('Native tab navigation window focus:', app.window('main').state()?.focused)
-    let attempts = 0
-    while (app.spanStyle('text:分栏').fontWeight !== 600) {
-      expect(++attempts).toBeLessThan(25)
-      await app.keyboard.press('tab')
-      await app.keyboard.press('right')
-      if (attempts === 1 || attempts === 24) console.log('Native tab navigation:', attempts, app.window('main').state()?.focused,
-        ['源码', '分栏', '预览'].map(label => app.spanStyle(`text:${label}`).fontWeight))
-    }
+    // Enter a standalone menu before closing it, so focus returns to its trigger.
+    await app.press('label:批注操作')
+    await app.keyboard.press('down')
+    await app.keyboard.press('escape')
+    await app.waitUntil(() => !app.shows('text:编辑批注'))
+    // Wrap to the toolbar, normalize its roving stop, then enter the independent reading tabs.
+    await app.keyboard.press('tab')
+    await app.keyboard.press('home')
+    await app.keyboard.press('tab')
+    await app.keyboard.press('right')
+    await app.waitUntil(() => app.spanStyle('text:分栏').fontWeight === 600)
     await app.keyboard.press('end')
     await app.waitUntil(() => app.spanStyle('text:预览').fontWeight === 600)
     await app.keyboard.press('home')

@@ -1,9 +1,9 @@
 import XCTest
 
 final class WorkspaceUITests: XCTestCase {
-    @MainActor private func tapReady(_ element: XCUIElement) {
-        expectation(for: NSPredicate(format: "enabled == true AND hittable == true"), evaluatedWith: element)
-        waitForExpectations(timeout: 10)
+    @MainActor private func tapReady(_ element: XCUIElement, app: XCUIApplication) {
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true AND hittable == true"), object: element)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed, app.debugDescription)
         element.tap()
     }
 
@@ -23,22 +23,22 @@ final class WorkspaceUITests: XCTestCase {
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5), app.debugDescription)
         input.typeText("# Native iOS review\n\nA **stable primitive** composes.")
         app.buttons["text-submit"].tap()
-        let reading = app.descendants(matching: .any)["reading-menu"].firstMatch
+        let reading = app.buttons["reading-menu"]
         XCTAssertTrue(reading.waitForExistence(timeout: 5), app.debugDescription)
         reading.tap()
-        tapReady(app.descendants(matching: .any)["reading-preview"].firstMatch)
-        XCTAssertTrue(app.webViews.staticTexts["Native iOS review"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.webViews.textViews.count, 0, "Editing forms must be native, outside the document WebView")
-        let actions = app.descendants(matching: .any)["workspace-menu"].firstMatch
-        tapReady(actions)
-        let firstAction = app.descendants(matching: .any)["action-new"].firstMatch
+        tapReady(app.buttons["reading-preview"], app: app)
+        expectation(for: NSPredicate(format: "label == %@", "阅读模式：预览"), evaluatedWith: reading)
+        waitForExpectations(timeout: 10)
+        let actions = app.buttons["workspace-menu"]
+        tapReady(actions, app: app)
+        let firstAction = app.buttons["action-new"]
         expectation(for: NSPredicate(format: "enabled == true AND hittable == true"), evaluatedWith: firstAction)
         waitForExpectations(timeout: 10)
         // The complete action list can fill a phone: cancellation must remain explicitly reachable.
         app.swipeUp()
-        tapReady(app.descendants(matching: .any)["workspace-menu-cancel"].firstMatch)
-        tapReady(actions)
-        tapReady(app.descendants(matching: .any)["action-search"].firstMatch)
+        tapReady(app.buttons["workspace-menu-cancel"], app: app)
+        tapReady(actions, app: app)
+        tapReady(app.buttons["action-search"], app: app)
         let query = app.otherElements["search-query"].textFields.firstMatch
         XCTAssertTrue(query.waitForExistence(timeout: 5), app.debugDescription)
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
@@ -52,13 +52,17 @@ final class WorkspaceUITests: XCTestCase {
         waitForExpectations(timeout: 5)
         XCTAssertTrue(app.staticTexts["命中 0 处"].waitForExistence(timeout: 5))
         XCTAssertEqual(query.value as? String, "STABLE", "Changing options must preserve native input")
+        let searchEvidence = XCTAttachment(screenshot: app.screenshot())
+        searchEvidence.name = "native-search-options-with-keyboard"; searchEvidence.lifetime = .keepAlways
+        add(searchEvidence)
         app.buttons["form-close"].tap()
         let saved = app.staticTexts["native-save-status"]
         XCTAssertTrue(saved.waitForExistence(timeout: 5))
         expectation(for: NSPredicate(format: "label == %@", "已保存"), evaluatedWith: saved)
         waitForExpectations(timeout: 10)
+        XCTAssertTrue(app.webViews.staticTexts["Native iOS review"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.webViews.textViews.count, 0, "Editing forms must be native, outside the document WebView")
         app.terminate(); app.launch()
-        XCTAssertTrue(app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Native iOS review")).firstMatch.waitForExistence(timeout: 20))
         expectation(for: NSPredicate(format: "label == %@", "已保存"), evaluatedWith: app.staticTexts["native-save-status"])
         let library = app.buttons["documents-toggle"]
         expectation(for: NSPredicate(format: "hittable == true AND enabled == true"), evaluatedWith: library)
@@ -71,5 +75,7 @@ final class WorkspaceUITests: XCTestCase {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = "native-library-after-offline-restart"; attachment.lifetime = .keepAlways
         add(attachment)
+        tapReady(app.buttons["返回阅读"], app: app)
+        XCTAssertTrue(app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Native iOS review")).firstMatch.waitForExistence(timeout: 20))
     }
 }

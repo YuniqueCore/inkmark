@@ -16,6 +16,8 @@ Native action menus share one presentation for grouping, state styling and inter
 
 Mobile menus provide an explicit Cancel action, including when a long action list fills the available screen and leaves no tappable backdrop. Visibility intent is separate from the current entry/exit phase, so cancelling during entry remains safe.
 
+Accessible menu trigger names include the current reading mode or image scale. Native interaction checks wait for the acknowledged control state; rendered document checks still inspect the actual WebView.
+
 Image review uses direct canvas interaction: empty-space drag creates a region, existing objects select and move, handles resize, and Space/middle mouse temporarily pans. Two fingers pan/pinch without a tool switch. Coordinate fields remain the precise alternative. Selection is cleared consistently when hidden or removed. The browser and native shell share this geometry engine, while native sheets retain their platform form semantics. See [image-review.md](docs/image-review.md) for cancellation, keyboard and persistence contracts.
 
 ## Tokens

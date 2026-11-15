@@ -27,6 +27,7 @@ export function ActionsMenu<T extends string>(props: {label: string; text?: stri
     onOpen={() => { if (phase() === 'opening') phase.set(wantsOpen() ? 'open' : 'closing') }}
     onClose={() => { if (phase() === 'closing') phase.set(wantsOpen() ? 'opening' : 'closed') }}
     popupStyle={{backgroundColor: props.colors().chrome, borderRadius: 8, padding: 6}}
+    backdropStyle={{backgroundColor: '#00000040'}}
     trigger={<Text accessibilityLabel={props.label} testID={props.testID} style={{minHeight: touch() ? 44 : 30, minWidth: touch() ? 44 : 30,
       padding: 10, fontSize: touch() ? 15 : 13, color: props.colors().text}}>{props.text ?? props.label}</Text>}>
     <Each of={props.groups} key="index">{(group, index) => <>
@@ -35,8 +36,9 @@ export function ActionsMenu<T extends string>(props: {label: string; text?: stri
         disabled={!actionable() || item().disabled}
         checked={item().checked} role={item().checked === undefined ? undefined : 'menuitemradio'} onSelect={() => props.onSelect(item().value)}
         style={itemStyle()}
+        checkedStyle={{backgroundColor: props.colors().inset}}
         hoverStyle={{backgroundColor: props.colors().inset}} focusVisibleStyle={{borderColor: props.colors().accent}} disabledStyle={{opacity: .4}}>
-        <Text style={{fontSize: touch() ? 15 : 14, color: item().danger ? props.colors().danger : props.colors().text}}>{item().label}</Text>
+        <Text style={{fontSize: touch() ? 15 : 14, fontWeight: item().checked ? '600' : '400', color: item().danger ? props.colors().danger : props.colors().text}}>{item().label}</Text>
       </MenuItem>}</Each>
     </>}</Each>
     <If when={touch()}>

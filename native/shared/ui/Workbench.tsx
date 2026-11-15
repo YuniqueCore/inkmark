@@ -38,6 +38,7 @@ export function NativeWorkbench(props: {view: Accessor<NativeView | null>; send:
     {action: 'remove', label: '移除当前文档', document: true, danger: true},
   ]]
   const readingModes = (['source', 'split', 'preview'] as const).map(mode => ({value: mode, title: {source: '源码', split: '分栏', preview: '预览'}[mode], testID: `reading-${mode}`}))
+  const readingLabel = () => readingModes.find(mode => mode.value === chrome()?.readingMode)?.title ?? '源码'
   return <View testID="native-workbench" style={{flex: 1, backgroundColor: colors().chrome}}>
     <Toolbar accessibilityLabel="工作区工具栏" style={{flexDirection: 'row', alignItems: 'center', minHeight: 52, paddingHorizontal: 12, gap: 6, borderBottomWidth: 1, borderColor: colors().border}}>
       <Action label="文档" testID="documents-toggle" colors={colors} selected={compact() ? pane() === 'documents' : navigator()} disabled={!chrome()?.ready} onPress={() => toggle('documents')} />
@@ -48,8 +49,8 @@ export function NativeWorkbench(props: {view: Accessor<NativeView | null>; send:
       <If when={chrome()?.active?.kind === 'text' && chrome()?.mode === 'annotate'}>
         <If when={!compact()}><Segmented label="阅读模式" value={chrome()?.readingMode ?? 'source'} items={readingModes} colors={colors}
           onChange={mode => props.send({type: 'reading', mode})} /></If>
-        <If when={compact()}><ActionsMenu label="阅读模式" testID="reading-menu" colors={colors}
-          text={`${{source: '源码', split: '分栏', preview: '预览'}[chrome()?.readingMode ?? 'source']} ▾`}
+        <If when={compact()}><ActionsMenu label={`阅读模式：${readingLabel()}`} testID="reading-menu" colors={colors}
+          text={`${readingLabel()} ▾`}
           groups={[readingModes.map(mode => ({value: mode.value, label: mode.title, testID: mode.testID, checked: chrome()?.readingMode === mode.value}))]}
           onSelect={mode => props.send({type: 'reading', mode})} /></If>
       </If>
@@ -74,7 +75,7 @@ export function NativeWorkbench(props: {view: Accessor<NativeView | null>; send:
               <Action colors={colors} testID="image-coordinates" label="坐标批注" disabled={!props.view()?.image?.usable}
                 onPress={() => props.send({type: 'image', action: 'coordinates'})} />
               <View style={{flex: 1}} />
-              <ActionsMenu label="图片缩放与编辑" text={`${Math.round((props.view()?.image?.scale ?? 1) * 100)}% ▾`} colors={colors}
+              <ActionsMenu label={`图片缩放与编辑：${Math.round((props.view()?.image?.scale ?? 1) * 100)}%`} text={`${Math.round((props.view()?.image?.scale ?? 1) * 100)}% ▾`} colors={colors}
                 groups={[(['out', 'in', 'fit', 'original', 'edit'] as const).map(action => ({value: action, testID: `image-${action}`,
                   label: {out: '缩小', in: '放大', fit: '适应窗口', original: '原始尺寸', edit: '编辑选中批注'}[action],
                   disabled: !props.view()?.image?.usable || (action === 'edit' && !props.view()?.image?.selected)}))]}
