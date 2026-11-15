@@ -9,7 +9,12 @@ test('native controls and real WebView: import, CRLF edit, preview review, close
     expect(result.status).toBe(status)
     return result
   }
-  const action = async (id: string) => { await app.press('id:workspace-menu'); await app.press(`id:action-${id}`) }
+  const action = async (id: string) => {
+    await app.press('id:workspace-menu')
+    const item = `id:action-${id}`
+    await app.waitUntil(() => app.shows(item) && app.enabled(item))
+    await app.press(item)
+  }
   await app.waitUntil(() => app.shows('id:welcome-new'), {timeout: 20000})
   await app.press('id:import-files')
   await stage('imported')
