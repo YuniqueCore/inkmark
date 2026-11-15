@@ -8,6 +8,8 @@ Use Conventional Commits: `fix:` proposes a patch and `feat:` proposes a minor v
 
 Review and merge that PR. Its main delivery builds the exact release commit, runs browser/native tests, creates a draft, attaches the verified application files and only then publishes it. No tag-event workflow is needed: publication stays in the same verified delivery, so `GITHUB_TOKEN` suffices. PR creation and publication permissions belong only to the final release job; ordinary build jobs remain read-only.
 
+Publication and version proposals are mutually exclusive. The first release-please call only creates Releases; when it creates one, this run uploads and publishes it without proposing another version. Otherwise, the workflow refuses any unfinished draft before a second, PR-only call. A tagless draft is not yet usable release history in release-please 17.6.0; combining both calls before publication would replay old commits into a duplicate next-version PR. Interrupted publication must be resumed through the manual workflow before new proposals proceed.
+
 GitHub can require approval for CI started by bot-created PRs. Approve that run or dispatch the existing delivery workflow on the Release PR branch to validate it before merging; do not add a personal token merely to bypass this behavior. See [GitHub's current token trigger rules](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow#triggering-a-workflow-from-a-workflow).
 
 ## Download contract

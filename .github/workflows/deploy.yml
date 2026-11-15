@@ -108,12 +108,7 @@ jobs:
         id: release
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Advance the native install counter in the release PR
-        if: steps.release.outputs.prs_created == 'true'
-        run: node scripts/release-version.ts prepare-pr
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_PR: ${{ steps.release.outputs.pr }}
+          skip-github-pull-request: true
       - uses: actions/download-artifact@v8.0.2
         if: steps.release.outputs.release_created == 'true'
         with:
@@ -127,3 +122,25 @@ jobs:
           DELIVERY_RUN: ${{ github.run_id }}
           RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
           RELEASE_SOURCE: ${{ steps.release.outputs.sha }}
+      - name: Require completed publication before proposing another version
+        if: steps.release.outputs.releases_created != 'true'
+        run: |
+          inkmark_pending_drafts=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" --jq '.[] | select(.draft) | .id')
+          if [ -n "$inkmark_pending_drafts" ]; then
+            echo '::error::A release draft is still pending. Resume it with release.yml before proposing another version.'
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: proposal
+        if: steps.release.outputs.releases_created != 'true'
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          skip-github-release: true
+      - name: Advance the native install counter in the release PR
+        if: steps.proposal.outputs.prs_created == 'true'
+        run: node scripts/release-version.ts prepare-pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_PR: ${{ steps.proposal.outputs.pr }}
