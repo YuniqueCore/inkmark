@@ -1,0 +1,36 @@
+{
+  "dark": [
+    {
+      "name": "fenced code",
+      "foreground": "#fafafa",
+      "background": "#1c1c1f"
+    },
+    {
+      "name": "inline code",
+      "foreground": "#fafafa",
+      "background": "#1c1c1f"
+    },
+    {
+      "name": "quote",
+      "foreground": "#f6f6f7",
+      "background": "#8658bf"
+    }
+  ],
+  "light": [
+    {
+      "name": "fenced code",
+      "foreground": "#202124",
+      "background": "#f4f4f5"
+    },
+    {
+      "name": "inline code",
+      "foreground": "#202124",
+      "background": "#f4f4f5"
+    },
+    {
+      "name": "quote",
+      "foreground": "#f7f7f8",
+      "background": "#8658bf"
+    }
+  ]
+}

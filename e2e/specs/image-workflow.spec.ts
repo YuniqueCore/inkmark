@@ -135,13 +135,15 @@ test('mixed review journey: paste, draw, refine, export, restore and continue te
     const {version} = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8'))
     // Version is asserted semantically so a release bump alone cannot invalidate layout goldens.
     await expect(page.locator('#app-version')).toHaveText(`v${version}`)
-    if (process.platform === 'darwin') await expect(page).toHaveScreenshot('image-workspace-desktop.png', {animations: 'disabled', mask: [page.locator('#app-version')]})
+    const versionStyle = process.platform === 'darwin' ? await page.addStyleTag({content: '#app-version { visibility: hidden }'}) : null
+    if (process.platform === 'darwin') await expect(page).toHaveScreenshot('image-workspace-desktop.png', {animations: 'disabled'})
     await page.setViewportSize({width: 390, height: 844})
     await expect(page.locator('[data-image-action="coordinates"]')).toBeVisible()
     await page.locator('[data-image-action="coordinates"]').click()
     await page.locator('[data-coordinate="x"]').fill('25')
     await saveRegion(page, '手机上也能精确批注')
-    if (process.platform === 'darwin') await expect(page).toHaveScreenshot('image-workspace-mobile.png', {animations: 'disabled', mask: [page.locator('#app-version')]})
+    if (process.platform === 'darwin') await expect(page).toHaveScreenshot('image-workspace-mobile.png', {animations: 'disabled'})
+    await versionStyle?.evaluate(node => node.parentNode!.removeChild(node))
     await page.setViewportSize({width: 1440, height: 1000})
     const textId = current.docs.find((d: {kind?: string}) => d.kind !== 'image').id
     await page.locator(`#filetree [data-doc="${textId}"]`).click()

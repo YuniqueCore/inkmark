@@ -64,9 +64,9 @@ function applyEditorColors(editor: HTMLElement | null, p: ReadingPrefs): void {
     }
   }
   if (!p.customBg && !p.customText) {
-    editor.style.removeProperty('--foreground')
-    editor.style.removeProperty('--background')
-    editor.style.removeProperty('--texture-line')
+    for (const property of ['--foreground', '--background', '--texture-line', '--code-foreground', '--muted-foreground']) {
+      editor.style.removeProperty(property)
+    }
     return
   }
   const themeFg = rootStyle.getPropertyValue('--foreground').trim() || '#000000'
@@ -74,4 +74,10 @@ function applyEditorColors(editor: HTMLElement | null, p: ReadingPrefs): void {
   editor.style.setProperty('--foreground', text)
   editor.style.setProperty('--background', bg)
   editor.style.setProperty('--texture-line', `color-mix(in oklab, ${text} 8%, transparent)`)
+  if (editor.id === 'markdown-preview') {
+    const codeBg = rootStyle.getPropertyValue('--muted').trim() || themeBg
+    const quoteText = rootStyle.getPropertyValue('--muted-foreground').trim() || themeFg
+    editor.style.setProperty('--code-foreground', ensureReadable(p.customText ?? themeFg, codeBg).text)
+    editor.style.setProperty('--muted-foreground', ensureReadable(quoteText, bg).text)
+  }
 }

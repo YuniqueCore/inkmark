@@ -30,6 +30,8 @@ Use a 4 px spacing grid, 6–8 px control radii, 13–14 px desktop control text
 
 Markdown Source uses Lezer GFM ranges and a small light/dark syntax palette independent of shell accents. Literal markers, headings, emphasis, links, labels and code have visible hues; ordinary prose stays neutral. Syntax colors use the same contrast correction as reading text, including custom paper. Annotation/search backgrounds take visual priority by inheriting the readable prose color inside their range while preserving syntax typography. Preview remains fully rendered micromark output with its separate source-position mapping.
 
+Rendered code derives its readable foreground from the code surface, while quoted text uses the reading paper. Both start from the intended theme/user colors rather than reusing a foreground already corrected for a different background. Resetting reading colors retires these derived overrides without replacing the document or its selection.
+
 The workspace owns documents, revisions, annotations, trash, persistence, and command validation. Shared presentation models own filtering, selection, grouping, and search navigation. Web and native views render their projections and submit semantic actions. They do not reimplement business rules.
 
 The document surface owns DOM selection/source mapping, Markdown, image geometry, and scrolling. It does not own navigation or form widgets in native builds. Full source and image data stay with the workspace/surface; the native shell receives summaries, not a second durable workspace.

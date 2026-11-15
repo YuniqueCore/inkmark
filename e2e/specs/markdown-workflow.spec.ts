@@ -15,7 +15,7 @@ test.describe.configure({timeout: 45_000})
 test('Source syntax stays colored and readable across themes and custom paper without changing nested review anchors', async ({actor}) => {
   const page = BrowseTheWorkbench.as(actor).page
   await page.setViewportSize({width: 1440, height: 900})
-  const source = '# 彩色源文 😀\r\n\r\n正文 **粗体 _斜体_** 与 [链接](https://example.test "标题")。\r\n\r\n- [x] 已完成\r\n- [ ] 待办\r\n\r\n> 引用\r\n\r\n---\r\n\r\n| 名称 | 状态 |\r\n| --- | --- |\r\n| 文档 | 完成 |\r\n\r\n```ts\r\nconst value = 42\r\n```\r\n\r\n转义 \\* 和 &amp; <!-- 注释 --> **对照文字**'
+  const source = '# 彩色源文 😀\r\n\r\n正文 **粗体 _斜体_** 与 [链接](https://example.test "标题")。`行内代码`\r\n\r\n- [x] 已完成\r\n- [ ] 待办\r\n\r\n> 引用\r\n\r\n---\r\n\r\n| 名称 | 状态 |\r\n| --- | --- |\r\n| 文档 | 完成 |\r\n\r\n```ts\r\nconst value = 42\r\n```\r\n\r\n转义 \\* 和 &amp; <!-- 注释 --> **对照文字**'
   await actor.attemptsTo(ImportTextFile('彩色源文.md', source))
   const palette = () => page.locator('#editor').evaluate(root => {
     const hex = (value: string) => '#' + value.match(/\d+/g)!.slice(0, 3).map(part => Number(part).toString(16).padStart(2, '0')).join('')
@@ -37,6 +37,22 @@ test('Source syntax stays colored and readable across themes and custom paper wi
       }
     }
   }
+  const previewColors = async () => {
+    const surfaces = await page.locator('#markdown-preview').evaluate(pane => {
+      const hex = (value: string) => '#' + value.match(/\d+/g)!.slice(0, 3).map(part => Number(part).toString(16).padStart(2, '0')).join('')
+      return [
+        {name: 'fenced code', text: 'pre code', background: 'pre'},
+        {name: 'inline code', text: 'p > code', background: 'p > code'},
+        {name: 'quote', text: 'blockquote', background: null},
+      ].map(surface => ({
+        name: surface.name,
+        foreground: hex(getComputedStyle(pane.querySelector(surface.text)!).color),
+        background: hex(getComputedStyle(surface.background ? pane.querySelector(surface.background)! : pane).backgroundColor),
+      }))
+    })
+    for (const surface of surfaces) expect(contrastRatio(surface.foreground, surface.background), surface.name).toBeGreaterThanOrEqual(4.5)
+    return surfaces
+  }
   await test.step('Given real Markdown, punctuation and semantic content have actual colors in both light and dark Source views', async () => {
     await expect(page.locator('#markdown-preview')).toBeHidden()
     await assertReadable(true)
@@ -48,6 +64,8 @@ test('Source syntax stays colored and readable across themes and custom paper wi
     await assertReadable(true)
   })
   await test.step('When choosing custom paper, syntax contrast is corrected; resetting restores the theme palette', async () => {
+    await page.getByRole('button', {name: '分栏', exact: true}).click()
+    const darkDefault = await previewColors()
     const dark = await palette()
     await workspaceAction(page, 'settings')
     const dialog = Workbench.settingsDialog(page)
@@ -55,15 +73,32 @@ test('Source syntax stays colored and readable across themes and custom paper wi
     expect((await palette()).background).toBe('#8658bf')
     await expect(dialog.locator('[data-clear-colors]')).toBeEnabled()
     await assertReadable(false)
+    const darkPaper = await previewColors()
     await dialog.locator('[data-clear-colors]').click()
     expect(await palette()).toEqual(dark)
+    expect(await previewColors()).toEqual(darkDefault)
     await dialog.locator('[data-set-theme="light"]').click()
+    const lightDefault = await previewColors()
     await dialog.locator('[data-set-bg]').fill('#8658bf')
     expect((await palette()).background).toBe('#8658bf')
     await assertReadable(false)
+    const lightPaper = await previewColors()
+    expect(JSON.stringify({dark: darkPaper, light: lightPaper}, null, 2)).toMatchSnapshot('custom-paper-colors.json')
+    await dialog.locator('[data-set-text]').fill('#047857')
+    await assertReadable(false)
+    expect((await previewColors())[0]!.foreground).toBe('#047857')
+    await dialog.locator('[data-set-theme="dark"]').click()
+    await assertReadable(false)
+    await previewColors()
+    await dialog.locator('[data-set-theme="light"]').click()
+    await dialog.locator('[data-clear-colors]').click()
+    await dialog.locator('[data-set-text]').fill('#047857')
+    expect((await palette()).background).toBe(lightDefault[2]!.background)
+    await previewColors()
     await dialog.locator('[data-clear-colors]').click()
     await expect(dialog.locator('[data-clear-colors]')).toBeDisabled()
     await assertReadable(true)
+    expect(await previewColors()).toEqual(lightDefault)
     await dialog.getByRole('button', {name: '完成'}).click()
   })
   await test.step('Then selection across nested colored spans retains the original CRLF and emoji offsets through preview and reload', async () => {
@@ -85,7 +120,7 @@ test('Source syntax stays colored and readable across themes and custom paper wi
     await expect(page.locator('#sidebar')).toContainText('跨语法范围的意见')
     expect((await workspace(page)).docs[0].annotations).toEqual(saved.annotations)
     await assertReadable(true)
-    await dragText(page, page.locator('#editor .md-syntax-code'), 'backward')
+    await dragText(page, page.locator('#editor .md-syntax-code').filter({hasText: 'const value = 42'}), 'backward')
     expect(await page.evaluate(() => window.getSelection()!.anchorOffset > window.getSelection()!.focusOffset)).toBe(true)
     await submitPreviewAnnotation(page, '反向划选代码')
     await expect.poll(async () => (await workspace(page)).docs[0].annotations.length).toBe(2)
