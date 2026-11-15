@@ -75,7 +75,9 @@ export function planReleaseAssets(local: ReleaseAsset[], remote: {id: number; na
     if (!file || seen.has(asset.name)) throw new Error(`Unexpected or duplicate remote asset: ${asset.name}`)
     seen.add(asset.name)
     if (state === 'draft' && asset.state === 'starter' && asset.size === 0 && asset.digest === null) discard.push(asset.id)
-    else {
+    else if (state === 'draft' && asset.state === 'starter' && asset.digest === null) {
+      throw new Error(`Unfinished draft upload: ${asset.name} (asset ${asset.id}, declared size ${asset.size}). Stop its uploader, inspect and remove only this confirmed failed draft asset by ID, then retry.`)
+    } else {
       if (asset.state !== 'uploaded' || asset.digest !== `sha256:${file.sha256}`) throw new Error(`Remote asset checksum/state mismatch: ${asset.name}`)
       uploaded.add(asset.name)
     }
