@@ -1,6 +1,12 @@
 import XCTest
 
 final class WorkspaceUITests: XCTestCase {
+    @MainActor private func tapReady(_ element: XCUIElement) {
+        expectation(for: NSPredicate(format: "enabled == true AND hittable == true"), evaluatedWith: element)
+        waitForExpectations(timeout: 10)
+        element.tap()
+    }
+
     @MainActor func testNativeFormAndOfflineMarkdownSurviveProcessRestart() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -20,13 +26,21 @@ final class WorkspaceUITests: XCTestCase {
         let reading = app.descendants(matching: .any)["reading-menu"].firstMatch
         XCTAssertTrue(reading.waitForExistence(timeout: 5), app.debugDescription)
         reading.tap()
-        app.descendants(matching: .any)["reading-preview"].firstMatch.tap()
+        tapReady(app.descendants(matching: .any)["reading-preview"].firstMatch)
         XCTAssertTrue(app.webViews.staticTexts["Native iOS review"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.webViews.textViews.count, 0, "Editing forms must be native, outside the document WebView")
-        app.descendants(matching: .any)["workspace-menu"].firstMatch.tap()
-        app.descendants(matching: .any)["action-search"].firstMatch.tap()
+        let actions = app.descendants(matching: .any)["workspace-menu"].firstMatch
+        tapReady(actions)
+        let searchAction = app.descendants(matching: .any)["action-search"].firstMatch
+        expectation(for: NSPredicate(format: "enabled == true AND hittable == true"), evaluatedWith: searchAction)
+        waitForExpectations(timeout: 10)
+        // Cancel outside the sheet and immediately request another opening: closing must finish first.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.14)).tap()
+        tapReady(actions)
+        tapReady(app.descendants(matching: .any)["action-search"].firstMatch)
         let query = app.otherElements["search-query"].textFields.firstMatch
         XCTAssertTrue(query.waitForExistence(timeout: 5), app.debugDescription)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
         query.tap(); query.typeText("STABLE")
         XCTAssertTrue(app.keyboards.firstMatch.exists, "This interaction must run with the native keyboard open")
         XCTAssertTrue(app.staticTexts["命中 1 处"].waitForExistence(timeout: 5))

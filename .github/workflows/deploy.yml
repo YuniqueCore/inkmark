@@ -6,6 +6,11 @@ on:
   pull_request:
   workflow_dispatch:
     inputs:
+      native_target:
+        description: Native platforms to build and test
+        type: choice
+        options: [all, macos, linux, windows, android, ios]
+        default: all
       deploy_pages:
         description: Deploy static Pages after verification (main only)
         type: boolean
@@ -15,7 +20,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: delivery-${{ github.event_name }}-${{ github.ref }}
+  group: delivery-${{ github.event_name }}-${{ github.ref }}-${{ inputs.native_target || 'all' }}
   cancel-in-progress: true
 
 jobs:
@@ -50,6 +55,8 @@ jobs:
   native:
     needs: build
     uses: ./.github/workflows/native.yml
+    with:
+      target: ${{ inputs.native_target || 'all' }}
     permissions:
       contents: read
 

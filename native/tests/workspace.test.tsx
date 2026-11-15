@@ -39,11 +39,14 @@ test('native controls and real WebView: import, CRLF edit, preview review, close
   // NSH 0.5.1 Windows traversal reaches text inputs only; other desktop hosts enter tabs.
   if (app.shows('id:journey-platform-macos') || app.shows('id:journey-platform-linux')) {
     await app.press('id:reading-source')
+    console.log('Native tab navigation window focus:', app.window('main').state()?.focused)
     let attempts = 0
     while (app.spanStyle('text:分栏').fontWeight !== 600) {
       expect(++attempts).toBeLessThan(25)
       await app.keyboard.press('tab')
       await app.keyboard.press('right')
+      if (attempts === 1 || attempts === 24) console.log('Native tab navigation:', attempts, app.window('main').state()?.focused,
+        ['源码', '分栏', '预览'].map(label => app.spanStyle(`text:${label}`).fontWeight))
     }
     await app.keyboard.press('end')
     await app.waitUntil(() => app.spanStyle('text:预览').fontWeight === 600)

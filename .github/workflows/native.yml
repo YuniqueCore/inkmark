@@ -1,19 +1,21 @@
 name: Native applications
 on:
   workflow_call:
+    inputs:
+      target:
+        type: string
+        default: all
 permissions:
   contents: read
 jobs:
   desktop:
+    if: contains(fromJSON('["all", "macos", "linux", "windows"]'), inputs.target)
     name: Desktop / ${{ matrix.target }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - {runner: macos-26, target: macos, arch: arm64}
-          - {runner: ubuntu-24.04, target: linux, arch: x86_64}
-          - {runner: windows-2025, target: windows, arch: x86_64}
-    runs-on: ${{ matrix.runner }}
+        target: ${{ inputs.target == 'all' && fromJSON('["macos", "linux", "windows"]') || fromJSON(format('["{0}"]', inputs.target)) }}
+    runs-on: ${{ fromJSON('{"macos":"macos-26","linux":"ubuntu-24.04","windows":"windows-2025"}')[matrix.target] }}
     timeout-minutes: 45
     defaults:
       run:
@@ -40,7 +42,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang llvm libclang-dev libgtk-4-dev libwebkitgtk-6.0-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev xvfb xauth dbus-x11 at-spi2-core fonts-noto-cjk
+          sudo apt-get install -y clang llvm libclang-dev libgtk-4-dev libwebkitgtk-6.0-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libxtst6 x11-utils openbox wmctrl xvfb xauth dbus-x11 at-spi2-core fonts-noto-cjk
           # Give only this test host the namespaces WebKit needs for its sandbox.
           sed "s|/opt/InkMark/InkMark|$PWD/.local-build/nsh/sdk/cli/nsh/runtime/linux/nsh-linux-host|" native/linux/inkmark.apparmor | sudo tee /etc/apparmor.d/inkmark-ci > /dev/null
           sudo apparmor_parser -r /etc/apparmor.d/inkmark-ci
@@ -64,7 +66,7 @@ jobs:
           NATIVE_TARGET: ${{ matrix.target }}
         run: |
           if [ "$NATIVE_TARGET" = linux ]; then
-            xvfb-run -a dbus-run-session -- bun run nsh test native/tests --target linux --verbose --trace --junit .local-build/native-test.xml 2>&1 | tee .local-build/native-webview.log | awk 'length($0) < 1000'
+            GDK_BACKEND=x11 xvfb-run -a dbus-run-session -- bash scripts/native-linux-test.sh 2>&1 | tee .local-build/native-webview.log | awk 'length($0) < 1000'
           else
             bun run nsh test native/tests --target "$NATIVE_TARGET" --verbose --trace --junit .local-build/native-test.xml 2>&1 | tee .local-build/native-webview.log | awk 'length($0) < 1000'
           fi
@@ -76,7 +78,7 @@ jobs:
           node scripts/native-artifact.mjs "$NATIVE_TARGET"
       - uses: actions/upload-artifact@v7.0.2
         with:
-          name: InkMark-${{ matrix.target }}-${{ matrix.arch }}
+          name: InkMark-${{ matrix.target }}-${{ matrix.target == 'macos' && 'arm64' || 'x86_64' }}
           path: .local-build/artifacts/
           if-no-files-found: error
       - uses: actions/upload-artifact@v7.0.2
@@ -91,6 +93,7 @@ jobs:
             .local-build/clipboard-host-error.log
           if-no-files-found: ignore
   android:
+    if: inputs.target == 'all' || inputs.target == 'android'
     name: Android / APK, AAB and emulator
     runs-on: ubuntu-24.04
     timeout-minutes: 35
@@ -144,6 +147,7 @@ jobs:
             native/android/app/build/outputs/androidTest-results
           if-no-files-found: ignore
   ios:
+    if: inputs.target == 'all' || inputs.target == 'ios'
     name: iOS / simulator, unsigned device and tests
     runs-on: macos-26
     timeout-minutes: 35

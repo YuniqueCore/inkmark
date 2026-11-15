@@ -76,9 +76,11 @@ The parent [delivery workflow](../.github/workflows/deploy.yml) builds one offli
 
 ```sh
 gh workflow run deploy.yml --ref main -f deploy_pages=false
+# Targeted verification still builds and validates the shared offline document first.
+gh workflow run deploy.yml --ref main -f native_target=linux -f deploy_pages=false
 ```
 
-Set `deploy_pages=true` only when deliberately deploying `main`. Pull requests cannot deploy. Manual verification and push delivery have separate concurrency groups; actual Pages deployments are serialized. Only the deploy job receives Pages write and OIDC permissions. The native workflow stays reusable rather than exposing a second manual entry that would lack its required input artifact.
+`native_target` defaults to `all`; it can select macos, linux, windows, android or ios for a focused run. Set `deploy_pages=true` only when deliberately deploying `main`. Pull requests cannot deploy. Manual verification and push delivery have separate concurrency groups, including the requested target; actual Pages deployments are serialized. Only the deploy job receives Pages write and OIDC permissions. The native workflow stays reusable rather than exposing a second manual entry that would lack its required input artifact.
 
 CI caches mechanisms, not delivery outputs:
 
@@ -112,7 +114,7 @@ mbx test --workspace --all-features
 mbx clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
-On Linux run the native journey under `xvfb-run -a dbus-run-session --` when no display is available so portal services inherit the display. Android additionally needs JDK 17, platform `android-37.0` and build-tools `37.0.0`:
+Linux CI runs `scripts/native-linux-test.sh` inside Xvfb and a D-Bus session. It uses Openbox with explicit readiness, the X11 GTK backend and an XTEST preflight, so keyboard navigation exercises a managed desktop and real key events. NSH's reduced key-event fallback cannot validate Tab traversal. On a real Linux desktop, run the native journey directly in its existing display session. Android additionally needs JDK 17, platform `android-37.0` and build-tools `37.0.0`:
 
 ```sh
 node scripts/native-setup.mjs android

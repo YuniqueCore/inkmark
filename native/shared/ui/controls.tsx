@@ -1,6 +1,6 @@
 import {setComposing} from './input-state'
-import {cleanup, Text, View, windowSize, platform, type Accessor, type InputRef} from 'nsh'
-import {Button, Checkbox, Input, Select, Tab, Tabs} from 'nsh/base'
+import {cleanup, signal, Text, View, windowSize, platform, type Accessor, type InputRef} from 'nsh'
+import {Button, Checkbox, Input, Menu, MenuItem, MenuSeparator, Select, Tab, Tabs} from 'nsh/base'
 
 export interface Palette {canvas: string; chrome: string; inset: string; text: string; secondary: string; border: string; accent: string; accentHover: string; accentPressed: string; danger: string}
 export const light: Palette = {canvas: '#ffffff', chrome: '#f7f7f8', inset: '#ededf0', text: '#202124', secondary: '#60636b', border: '#dddfe3', accent: '#0866ce', accentHover: '#075bbb', accentPressed: '#0754aa', danger: '#ba2540'}
@@ -8,6 +8,37 @@ export const dark: Palette = {canvas: '#17181a', chrome: '#202124', inset: '#2b2
 export type Colors = Accessor<Palette>
 export const compact = () => windowSize().width < 900
 export const touch = () => !platform.desktop
+
+export interface MenuAction<T extends string> {value: T; label: string; testID?: string; disabled?: boolean; checked?: boolean; danger?: boolean}
+
+/** Mobile sheets become actionable at NSH's settled lifecycle boundary, never at moving coordinates. */
+export function ActionsMenu<T extends string>(props: {label: string; text?: string; testID?: string; groups: readonly (readonly MenuAction<T>[])[]; onSelect: (value: T) => void; colors: Colors}) {
+  const phase = signal<'closed' | 'opening' | 'open' | 'closing' | 'reopening'>('closed')
+  const actionable = () => phase() === 'open' || (!touch() && phase() === 'opening')
+  // Finish an exit before another entry so each opening has its own completion event.
+  return <Menu open={phase() === 'opening' || phase() === 'open'}
+    onOpenChange={({open}) => {
+      if (open && phase() === 'closed') phase.set('opening')
+      else if (open && phase() === 'closing') phase.set('reopening')
+      else if (!open && (phase() === 'opening' || phase() === 'open' || phase() === 'reopening')) phase.set('closing')
+    }}
+    onOpen={() => { if (phase() === 'opening') phase.set('open') }}
+    onClose={() => phase.set(phase() === 'reopening' ? 'opening' : 'closed')}
+    popupStyle={{backgroundColor: props.colors().chrome, borderRadius: 8, padding: 6}}
+    trigger={<Text accessibilityLabel={props.label} testID={props.testID} style={{minHeight: touch() ? 44 : 30, minWidth: touch() ? 44 : 30,
+      padding: 10, fontSize: touch() ? 15 : 13, color: props.colors().text}}>{props.text ?? props.label}</Text>}>
+    <Each of={props.groups} key="index">{(group, index) => <>
+      <If when={index() > 0}><MenuSeparator style={{height: 1, backgroundColor: props.colors().border, marginVertical: 4}} /></If>
+      <Each of={group()} key={item => item.value}>{item => <MenuItem testID={item().testID}
+        disabled={!actionable() || item().disabled}
+        checked={item().checked} role={item().checked === undefined ? undefined : 'menuitemradio'} onSelect={() => props.onSelect(item().value)}
+        style={{minHeight: touch() ? 44 : 32, padding: 10, borderRadius: 6, borderWidth: 1, borderColor: 'transparent'}}
+        hoverStyle={{backgroundColor: props.colors().inset}} focusVisibleStyle={{borderColor: props.colors().accent}} disabledStyle={{opacity: .4}}>
+        <Text style={{fontSize: touch() ? 15 : 14, color: item().danger ? props.colors().danger : props.colors().text}}>{item().label}</Text>
+      </MenuItem>}</Each>
+    </>}</Each>
+  </Menu>
+}
 
 export function Action(props: {label: string; onPress: () => void; colors: Colors; selected?: boolean; disabled?: boolean; primary?: boolean; danger?: boolean; testID?: string; align?: 'start'}) {
   return <Button testID={props.testID} accessibilityLabel={props.label} disabled={props.disabled} selected={props.selected} onPress={props.onPress}

@@ -122,7 +122,14 @@ public class WorkspaceTest {
             }
             scenario.recreate();
             await(scenario, "document.querySelector('#image-view img')?.naturalWidth === 240");
-            control(device, "reviews-toggle").click();
+            saved(device);
+            UiObject2 reviews = control(device, "reviews-toggle");
+            android.util.Log.i("InkMarkTest", "Review navigation after recreation enabled=" + reviews.isEnabled());
+            assertTrue("Wait for the native shell projection, not just the DOM image", reviews.wait(Until.enabled(true), 10000));
+            reviews.click();
+            boolean opened = reviews.wait(Until.selected(true), 10000);
+            if (!opened) capture(device, "review-navigation-after-recreation");
+            assertTrue("A single tap must open the native review list", opened);
             assertTrue(device.wait(Until.hasObject(By.text("Native image review")), 10000));
             device.pressBack();
             documentCount(device, 2);

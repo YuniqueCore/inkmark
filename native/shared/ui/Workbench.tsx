@@ -1,9 +1,9 @@
 import {signal, Text, View, type Accessor, type JSX} from 'nsh'
-import {Menu, MenuItem, MenuSeparator, Toolbar, ResizablePanel, ResizablePanelGroup, Sheet} from 'nsh/base'
+import {Toolbar, ResizablePanel, ResizablePanelGroup, Sheet} from 'nsh/base'
 import type {NativeView, ShellCommand} from '../../../src/workbench/shell-protocol'
 import type {WorkspaceAction} from '../../../src/workbench/shell-state'
 import {isDarkContent} from '../../../src/core/prefs'
-import {Action, Segmented, light, dark, compact} from './controls'
+import {Action, ActionsMenu, Segmented, light, dark, compact} from './controls'
 import {Documents, Reviews} from './lists'
 import {NativeForms} from './forms'
 
@@ -48,24 +48,19 @@ export function NativeWorkbench(props: {view: Accessor<NativeView | null>; send:
       <If when={chrome()?.active?.kind === 'text' && chrome()?.mode === 'annotate'}>
         <If when={!compact()}><Segmented label="阅读模式" value={chrome()?.readingMode ?? 'source'} items={readingModes} colors={colors}
           onChange={mode => props.send({type: 'reading', mode})} /></If>
-        <If when={compact()}><Menu popupStyle={{backgroundColor: colors().chrome, borderRadius: 8, padding: 6}}
-          trigger={<Text accessibilityLabel="阅读模式" testID="reading-menu" style={{padding: 12, color: colors().text, fontSize: 13}}>{{source: '源码', split: '分栏', preview: '预览'}[chrome()?.readingMode ?? 'source']} ▾</Text>}>
-          <Each of={['source', 'split', 'preview'] as const}>{mode => <MenuItem testID={`reading-${mode()}`} checked={chrome()?.readingMode === mode()} role="menuitemradio"
-            onSelect={() => props.send({type: 'reading', mode: mode()})} style={{padding: 12}}>
-            <Text style={{color: colors().text}}>{{source: '源码', split: '分栏', preview: '预览'}[mode()]}</Text>
-          </MenuItem>}</Each>
-        </Menu></If>
+        <If when={compact()}><ActionsMenu label="阅读模式" testID="reading-menu" colors={colors}
+          text={`${{source: '源码', split: '分栏', preview: '预览'}[chrome()?.readingMode ?? 'source']} ▾`}
+          groups={[readingModes.map(mode => ({value: mode.value, label: mode.title, testID: mode.testID, checked: chrome()?.readingMode === mode.value}))]}
+          onSelect={mode => props.send({type: 'reading', mode})} /></If>
       </If>
       <Action label={`批注 ${chrome()?.active?.openCount ?? 0}`} testID="reviews-toggle" colors={colors} selected={compact() ? pane() === 'reviews' : inspector()} disabled={!chrome()?.ready} onPress={() => toggle('reviews')} />
       <If when={!compact()}><Action label="导出" testID="export-review" colors={colors} disabled={!chrome()?.active?.annotationCount} onPress={() => execute('export')} /></If>
-      <Menu popupStyle={{backgroundColor: colors().chrome, borderRadius: 8, padding: 6}} trigger={<Text accessibilityLabel="工作区操作" testID="workspace-menu" style={{padding: 12, color: colors().text, fontSize: 17}}>···</Text>}>
-        <If when={compact()}><MenuItem testID="action-export" onSelect={() => execute('export')} disabled={!chrome()?.active?.annotationCount} style={{padding: 12}}><Text style={{color: colors().text}}>导出批注</Text></MenuItem></If>
-        <Each of={menuGroups}>{(group, index) => <>
-        <If when={index() > 0}><MenuSeparator style={{height: 1, backgroundColor: colors().border, marginVertical: 4}} /></If>
-        <Each of={group()}>{item => <MenuItem testID={`action-${item().action}`} disabled={!chrome()?.ready || (item().text && chrome()?.active?.kind !== 'text') || (item().document && !chrome()?.active)}
-          onSelect={() => execute(item().action)} style={{padding: 12}}><Text style={{fontSize: 14, color: item().danger ? colors().danger : colors().text}}>{item().label}</Text></MenuItem>}</Each>
-        </>}</Each>
-      </Menu>
+      <ActionsMenu label="工作区操作" text="···" testID="workspace-menu" colors={colors} onSelect={execute}
+        groups={[
+          ...(compact() ? [[{value: 'export' as const, label: '导出批注', testID: 'action-export', disabled: !chrome()?.active?.annotationCount}]] : []),
+          ...menuGroups.map(group => group.map(item => ({value: item.action, label: item.label, testID: `action-${item.action}`, danger: item.danger,
+            disabled: !chrome()?.ready || Boolean(item.text && chrome()?.active?.kind !== 'text') || Boolean(item.document && !chrome()?.active)}))),
+        ]} />
       </View>
     </Toolbar>
     <ResizablePanelGroup axis="horizontal" style={{flex: 1, minHeight: 0}} handleStyle={{backgroundColor: colors().border}} handleAccessibilityLabel="调整工作区面板宽度">
@@ -79,13 +74,11 @@ export function NativeWorkbench(props: {view: Accessor<NativeView | null>; send:
               <Action colors={colors} testID="image-coordinates" label="坐标批注" disabled={!props.view()?.image?.usable}
                 onPress={() => props.send({type: 'image', action: 'coordinates'})} />
               <View style={{flex: 1}} />
-              <Menu popupStyle={{backgroundColor: colors().chrome, padding: 6, borderRadius: 8}} trigger={<Text accessibilityLabel="图片缩放与编辑" style={{padding: 12, fontSize: 13, color: colors().secondary}}>{Math.round((props.view()?.image?.scale ?? 1) * 100)}% ▾</Text>}>
-                <Each of={['out', 'in', 'fit', 'original', 'edit'] as const}>{action => <MenuItem testID={`image-${action()}`}
-                  disabled={!props.view()?.image?.usable || (action() === 'edit' && !props.view()?.image?.selected)}
-                  onSelect={() => props.send({type: 'image', action: action()})} style={{padding: 12}}>
-                  <Text style={{color: colors().text}}>{{out: '缩小', in: '放大', fit: '适应窗口', original: '原始尺寸', edit: '编辑选中批注'}[action()]}</Text>
-                </MenuItem>}</Each>
-              </Menu>
+              <ActionsMenu label="图片缩放与编辑" text={`${Math.round((props.view()?.image?.scale ?? 1) * 100)}% ▾`} colors={colors}
+                groups={[(['out', 'in', 'fit', 'original', 'edit'] as const).map(action => ({value: action, testID: `image-${action}`,
+                  label: {out: '缩小', in: '放大', fit: '适应窗口', original: '原始尺寸', edit: '编辑选中批注'}[action],
+                  disabled: !props.view()?.image?.usable || (action === 'edit' && !props.view()?.image?.selected)}))]}
+                onSelect={action => props.send({type: 'image', action})} />
             </Toolbar>
           </If>
           <If when={Boolean(props.view()?.image)}>

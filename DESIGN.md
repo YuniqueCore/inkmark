@@ -12,6 +12,8 @@ The agreed direction is restrained Apple/Linear-inspired productivity UI: clear 
 
 Native reading modes and annotation kinds use NSH tabs with a shared segmented presentation, selected semantics and native keyboard navigation. Primary actions retain readable accent contrast on hover; focus changes the color of a reserved border without moving layout. Form scroll containers let handled taps reach controls while the keyboard is open. Document multi-selection intent belongs to the stable workbench view so moving between desktop panels and compact sheets retains both checkboxes and the shared selected identities. Bulk actions show their selected count; filtered empty states offer a direct reset.
 
+Native action menus share one presentation for grouping, state styling and interaction readiness. Moving mobile menu sheets expose disabled actions until NSH's `onOpen` completion event, preventing a coordinate captured during entry from choosing a different row after the sheet moves. A new opening requested during exit waits for `onClose` before entering again; it cannot reverse a closing animation and lose its completion event. No timer or duplicated business action state is involved.
+
 Image review uses direct canvas interaction: empty-space drag creates a region, existing objects select and move, handles resize, and Space/middle mouse temporarily pans. Two fingers pan/pinch without a tool switch. Coordinate fields remain the precise alternative. Selection is cleared consistently when hidden or removed. The browser and native shell share this geometry engine, while native sheets retain their platform form semantics. See [image-review.md](docs/image-review.md) for cancellation, keyboard and persistence contracts.
 
 ## Tokens

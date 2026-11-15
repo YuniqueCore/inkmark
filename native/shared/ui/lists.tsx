@@ -1,8 +1,8 @@
 import {List, Text, View, type Accessor} from 'nsh'
-import {Button, Menu, MenuItem, Popover} from 'nsh/base'
+import {Button, Popover} from 'nsh/base'
 import type {NativeView, ShellCommand} from '../../../src/workbench/shell-protocol'
 import {ALL_KINDS, KIND_LABEL} from '../../../src/core/types'
-import {Action, Check, Choice, touch, type Colors} from './controls'
+import {Action, ActionsMenu, Check, Choice, touch, type Colors} from './controls'
 
 export interface ListProps {view: Accessor<NativeView | null>; send: (command: ShellCommand) => void; colors: Colors; onOpen?: () => void}
 
@@ -39,10 +39,9 @@ export function Documents(props: ListProps & {selecting: Accessor<boolean>; onSe
             align="start" testID={`document-${row().key}`} onPress={() => { props.send({type: 'document', action: row().directory ? 'directory' : 'open', id: row().key}); if (!row().directory) props.onOpen?.() }} />
         </View>
         <If when={!row().directory}>
-          <Menu popupStyle={{backgroundColor: props.colors().chrome, padding: 6, borderRadius: 8}} trigger={<Text accessibilityLabel={`文档操作：${row().title}`} style={{padding: 12, minWidth: 44, minHeight: 44, color: props.colors().secondary}}>···</Text>}>
-            <MenuItem onSelect={() => props.send({type: 'document', action: 'export', id: row().key})} style={{padding: 12}}><Text style={{color: props.colors().text}}>导出批注</Text></MenuItem>
-            <MenuItem onSelect={() => props.send({type: 'document', action: 'remove', id: row().key})} style={{padding: 12}}><Text style={{color: props.colors().danger}}>移入回收站</Text></MenuItem>
-          </Menu>
+          <ActionsMenu label={`文档操作：${row().title}`} text="···" colors={props.colors}
+            groups={[[{value: 'export' as const, label: '导出批注'}, {value: 'remove' as const, label: '移入回收站', danger: true}]]}
+            onSelect={action => props.send({type: 'document', action, id: row().key})} />
         </If>
       </View>}
     </List>
@@ -130,11 +129,13 @@ export function Reviews(props: ListProps) {
           <If when={ann().rowType === 'group'}><Action label={ann().expanded ? '收起' : '展开位置'} colors={props.colors} onPress={() => props.send({type: 'review-group', action: 'expand', id: ann().id})} /></If>
           <Action label={ann().status === 'open' ? '解决' : '重开'} colors={props.colors} onPress={() => props.send({type: ann().rowType === 'group' ? 'review-group' : 'review', action: 'resolve', id: ann().id})} />
           <View style={{flex: 1}} />
-          <Menu popupStyle={{backgroundColor: props.colors().chrome, padding: 6, borderRadius: 8}} trigger={<Text accessibilityLabel="批注操作" style={{padding: 10, color: props.colors().secondary}}>···</Text>}>
-            <If when={ann().rowType === 'annotation'}><MenuItem onSelect={() => props.send({type: 'review', action: 'edit', id: ann().id})} style={{padding: 12}}><Text style={{color: props.colors().text}}>编辑批注</Text></MenuItem></If>
-            <MenuItem onSelect={() => props.send({type: ann().rowType === 'group' ? 'review-group' : 'review', action: 'export', id: ann().id})} style={{padding: 12}}><Text style={{color: props.colors().text}}>导出</Text></MenuItem>
-            <MenuItem onSelect={() => props.send({type: ann().rowType === 'group' ? 'review-group' : 'review', action: 'delete', id: ann().id})} style={{padding: 12}}><Text style={{color: props.colors().danger}}>删除</Text></MenuItem>
-          </Menu>
+          <ActionsMenu label="批注操作" text="···" colors={props.colors}
+            groups={[[...(ann().rowType === 'annotation' ? [{value: 'edit' as const, label: '编辑批注'}] : []),
+              {value: 'export' as const, label: '导出'}, {value: 'delete' as const, label: '删除', danger: true}]]}
+            onSelect={action => {
+              if (action === 'edit') props.send({type: 'review', action, id: ann().id})
+              else props.send({type: ann().rowType === 'group' ? 'review-group' : 'review', action, id: ann().id})
+            }} />
         </View>
       </View>}
     </List>
