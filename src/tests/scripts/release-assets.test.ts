@@ -41,6 +41,7 @@ test('five platform deliveries form one verifiable release; repair preserves exa
     const placeholder = {...partial[0]!, state: 'starter', size: 0, digest: null}
     expect(planReleaseAssets(assets, [placeholder, ...partial.slice(1)], 'draft')).toEqual({upload: [assets[0], ...assets.slice(4)], discard: [placeholder.id]})
     expect(() => planReleaseAssets(assets, [placeholder], 'published')).toThrow('state')
+    expect(() => planReleaseAssets(assets, [{...placeholder, size: 100}], 'draft')).toThrow('Unfinished draft upload')
 
     const windows = join(input, platforms.windows.artifact, source.version, 'windows')
     const metadata = join(windows, 'BUILD.json')

@@ -2,8 +2,25 @@ import XCTest
 
 final class WorkspaceUITests: XCTestCase {
     @MainActor private func tapReady(_ element: XCUIElement, app: XCUIApplication) {
-        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true AND hittable == true"), object: element)
-        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed, app.debugDescription)
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard element.exists, element.isEnabled else { return false }
+            let frame = element.frame
+            guard !frame.isNull, !frame.isEmpty,
+                  frame.origin.x.isFinite, frame.origin.y.isFinite,
+                  frame.width.isFinite, frame.height.isFinite else { return false }
+            // XCTest can throw while determining hittability for an invalid AX rectangle.
+            return element.isHittable
+        }, object: nil)
+        guard XCTWaiter.wait(for: [ready], timeout: 10) == .completed else {
+            let hierarchy = XCTAttachment(string: app.debugDescription)
+            hierarchy.name = "native-control-not-ready-hierarchy"; hierarchy.lifetime = .keepAlways
+            add(hierarchy)
+            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            screenshot.name = "native-control-not-ready-screen"; screenshot.lifetime = .keepAlways
+            add(screenshot)
+            XCTFail("Native control did not become enabled with valid screen geometry and hittability")
+            return
+        }
         element.tap()
     }
 

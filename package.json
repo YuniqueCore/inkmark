@@ -1,7 +1,7 @@
 {
   "name": "inkmark",
   "private": true,
-  "version": "0.13.1",
+  "version": "0.13.2",
   "engines": {
     "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
   },
