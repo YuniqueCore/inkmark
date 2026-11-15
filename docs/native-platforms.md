@@ -91,6 +91,8 @@ CI caches mechanisms, not delivery outputs:
 
 Compare consecutive runs' restore/save logs, Rust object reuse and package timings before reporting a speed improvement. A cold run or an action-level cache hit alone is not performance evidence. Cache semantics follow [GitHub's reference](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching) and [mbx's object-cache contract](https://github.com/jdx/mr-boxington/blob/v1.30.0/docs/github-action.md).
 
+Desktop packaging enables NSH's official verbose output so successful Cargo builds retain their mbx hit/miss diagnostics. Failed browser journeys upload screenshots, comparison images and Playwright traces as `web-tests`; a failed shared build prevents dependent native packaging and Pages deployment.
+
 Use Bun 1.3.14+, Node 24, mise 2026.8.16+ and the checked-in lockfile. Desktop Rust is pinned to 1.100.0; `mise.toml` installs `mr-boxington` 1.30.0 (`mbx`) and its official Cargo wrapper so Cargo builds use the repository's build-cache workflow. Version 1.30.0 includes the [upstream Windows build-script trampoline fix](https://github.com/jdx/mr-boxington/pull/787). The NSH launcher uses `mise exec`; do not set `CARGO=mbx`, which makes Cargo metadata calls recurse.
 
 ```sh

@@ -7,7 +7,13 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import * as floatingUI from '@floating-ui/dom'
 import { SelectionPin, type SelectionInfo } from '../src/ui/selection-pin'
+
+vi.mock('@floating-ui/dom', async importOriginal => {
+  const actual = await importOriginal<typeof import('@floating-ui/dom')>()
+  return {...actual, computePosition: vi.fn(actual.computePosition)}
+})
 
 const info = (over: Partial<SelectionInfo> = {}): SelectionInfo => ({
   start: 10,
@@ -45,6 +51,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.restoreAllMocks()
   vi.useRealTimers()
 })
 
@@ -112,14 +119,35 @@ describe('SelectionPin 草稿保护', () => {
     expect(card.classList.contains('hidden')).toBe(true)
   })
 
-  it('输入法组合中的 Esc 是取消候选：卡片保留；真 Esc 才关闭', async () => {
+  it('离开后开始输入会保留同一表单，再次点击标注点不重建输入框', async () => {
+    vi.useFakeTimers()
     await showPin()
     const input = await openCard()
-    type(input, '拼音输入中')
+    card.dispatchEvent(new MouseEvent('mouseleave'))
+    type(input, '离开后立即开始写作')
+    vi.advanceTimersByTime(500)
+    expect(input.isConnected).toBe(true)
+    expect(card.querySelector('[data-role="composer-comment"]')).toBe(input)
+    pinEl.click()
+    expect(card.querySelector('[data-role="composer-comment"]')).toBe(input)
+    expect(input.value).toBe('离开后立即开始写作')
+  })
+
+  it('输入法组合中的 Esc 是取消候选：卡片保留；真 Esc 才关闭', async () => {
+    vi.useFakeTimers()
+    await showPin()
+    const input = await openCard()
+    card.dispatchEvent(new MouseEvent('mouseleave'))
+    input.dispatchEvent(new CompositionEvent('compositionstart', {bubbles: true}))
+    vi.advanceTimersByTime(500)
+    expect(card.querySelector('[data-role="composer-comment"]')).toBe(input)
+    document.body.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}))
+    expect(input.isConnected).toBe(true)
     input.dispatchEvent(
       new KeyboardEvent('keydown', {key: 'Escape', bubbles: true, isComposing: true}),
     )
     expect(card.classList.contains('hidden')).toBe(false)
+    input.dispatchEvent(new CompositionEvent('compositionend', {bubbles: true}))
     input.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}))
     expect(card.classList.contains('hidden')).toBe(true)
   })
@@ -229,6 +257,14 @@ describe('SelectionPin 草稿保护', () => {
     type(input, '统一措辞')
     replacementInput().value = '更准确的词'
     replacementInput().dispatchEvent(new Event('input', {bubbles: true}))
+    await vi.waitFor(() => expect(document.activeElement).toBe(input))
+    const replacement = replacementInput()
+    replacement.focus()
+    const pointer = new PointerEvent('pointerdown', {bubbles: true, cancelable: true})
+    pinEl.dispatchEvent(pointer)
+    expect(pointer.defaultPrevented).toBe(true)
+    pinEl.click()
+    expect(document.activeElement).toBe(replacement)
     card.querySelector('[data-op="submit"]')!.dispatchEvent(new MouseEvent('click', {bubbles: true}))
     expect(created).not.toBeNull()
     expect(created!.comment).toBe('统一措辞')
@@ -285,6 +321,26 @@ describe('卡片在操作内部控件时稳定存在', () => {
   /** 展开卡的 focus 落在 placeCard 的异步链上，等一个宏任务确保已聚焦 */
   const settle = (): Promise<void> => new Promise((r) => setTimeout(r, 0))
 
+  it('迟到的锚点定位不能覆盖缩小视口后的写作面板或夺回焦点', async () => {
+    let finish!: (result: Awaited<ReturnType<typeof floatingUI.computePosition>>) => void
+    const pending = new Promise<Awaited<ReturnType<typeof floatingUI.computePosition>>>(resolve => { finish = resolve })
+    vi.mocked(floatingUI.computePosition).mockReturnValueOnce(pending)
+    await showPin()
+    pinEl.click()
+    const input = card.querySelector('[data-role="composer-comment"]')!
+    window.dispatchEvent(new Event('resize'))
+    expect(input.isConnected).toBe(true)
+    expect(card.style.visibility).not.toBe('hidden')
+    const position = {left: card.style.left, top: card.style.top}
+    const outside = document.createElement('button')
+    document.body.append(outside)
+    outside.focus()
+    finish({x: 9999, y: 9999, placement: 'right-start', strategy: 'fixed', middlewareData: {}})
+    await pending
+    expect({left: card.style.left, top: card.style.top}).toEqual(position)
+    expect(document.activeElement).toBe(outside)
+  })
+
   it('横向滚动快捷语行：卡片保留（滚动源自卡片内部，不触发重锚定）', async () => {
     await showPin()
     await openCard()
@@ -315,6 +371,7 @@ describe('卡片在操作内部控件时稳定存在', () => {
     await showPin()
     await openCard()
     await settle()
+    pinEl.click()
     ;(document.activeElement as HTMLElement).blur()
     document.dispatchEvent(new Event('scroll'))
     expect(card.classList.contains('hidden')).toBe(true)

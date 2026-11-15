@@ -11,6 +11,7 @@ export default defineConfig({
     baseURL: 'http://localhost:5188',
     channel: 'chrome',
     screenshot: 'only-on-failure',
+    trace: 'retain-on-failure',
   },
   webServer: {
     command: 'bun run dev --port 5188 --strictPort',

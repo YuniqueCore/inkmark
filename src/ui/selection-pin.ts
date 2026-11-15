@@ -53,8 +53,8 @@ export class SelectionPin {
   private pinSide: PinSide = 'right'
   private pinVertical: 'up' | 'down' = 'down'
   private closeTimer: ReturnType<typeof setTimeout> | undefined
-  /** card 已展开（hover 进入过） */
-  private expanded = false
+  private mode: 'closed' | 'hover' | 'editing' | 'composing' = 'closed'
+  private placementRevision = 0
   /** 不同文本版本的相同偏移不能复用草稿。 */
   private drafts = new SelectionDrafts()
   /** 展开期间挂载的共用撰写表单（类型 chips + 快捷语 + 批注语 + 替换词） */
@@ -74,12 +74,24 @@ export class SelectionPin {
     document.body.append(this.pin, this.card)
 
     this.pin.addEventListener('mouseenter', () => this.expand())
+    this.pin.addEventListener('pointerdown', event => {
+      if (this.mode !== 'closed') { event.preventDefault(); this.engage() }
+    })
     this.pin.addEventListener('click', () => this.expand(true))
     this.card.addEventListener('mouseenter', () => this.cancelCollapse())
     this.card.addEventListener('mouseleave', () => this.scheduleCollapse())
+    this.card.addEventListener('pointerdown', () => this.engage())
+    this.card.addEventListener('compositionstart', () => {
+      this.engage()
+      if (this.mode !== 'closed') this.mode = 'composing'
+    })
+    this.card.addEventListener('compositionend', () => {
+      if (this.mode === 'composing') this.mode = 'editing'
+    })
 
     // 撰写表单（ComposerForm）自理输入与 chips；卡片只留键盘快捷键与操作按钮
     this.card.addEventListener('keydown', (e) => {
+      this.engage()
       if (e.isComposing) return // 输入法组合中的 Enter/Escape 属于候选操作，不是提交或关闭
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) this.submit()
       if (e.key === 'Escape') {
@@ -101,7 +113,7 @@ export class SelectionPin {
       if (this.pin.contains(t) || this.card.contains(t)) return
       // 有草稿时点外部不销毁撰写状态：误触不该吞掉写了一半的批注，
       // 重选同一段落即可取回；空卡片维持「点外部关闭」的习惯。
-      if (this.hasDraftContent()) return
+      if (this.mode === 'composing' || this.hasDraftContent()) return
       this.dismiss()
     })
     document.addEventListener('keydown', (e) => {
@@ -135,22 +147,22 @@ export class SelectionPin {
       previous.start === info.start && previous.end === info.end && previous.side === info.side && previous.preview === info.preview
     this.info = info
     if (same) {
-      void this.placePin().then(() => { if (this.expanded) void this.placeCard() })
+      this.placePin()
+      this.pin.classList.remove('hidden')
+      if (this.mode !== 'closed') this.placeCard()
       return
     }
     ;({side: this.pinSide, vertical: this.pinVertical} = pickPinPlacement(info.rect, info.forward))
     this.collapse()
     // 先定位再显示，避免小点闪现在上一次的位置
     this.pin.classList.add('hidden')
-    void this.placePin().then(() => {
-      if (this.info !== info) return
-      this.pin.classList.remove('hidden')
-    })
+    this.placePin()
+    this.pin.classList.remove('hidden')
   }
 
   /** 小点锚定鼠标停点（虚拟点引用），placement 决定它在停点的哪个象限 */
-  private placePin(): Promise<void> {
-    if (!this.info) return Promise.resolve()
+  private placePin(): void {
+    if (!this.info) return
     // 横向：跟随鼠标停点（沿 side 方向外移 16px），并夹取在选区横向范围
     // 附近——否则最后一行很短时，小点会飞到最长行右缘外（「跑得好远」的根因）；
     // 纵向：整体放在选区块外缘 18px，永不压住正文（含选区上/下一行）。
@@ -164,15 +176,20 @@ export class SelectionPin {
     const size = window.matchMedia('(pointer: coarse)').matches ? 40 : 28
     this.pin.style.left = `${clamp(cx - size / 2, left + 8, left + (viewport?.width ?? window.innerWidth) - size - 8)}px`
     this.pin.style.top = `${clamp(cy - size / 2, top + 8, top + (viewport?.height ?? window.innerHeight) - size - 8)}px`
-    return Promise.resolve()
   }
 
   /** hover 小点 → 从小点原位展开撰写卡片，展开方向朝屏幕中心 */
   private expand(force = false): void {
     if (!this.info) return
-    if (this.expanded && !force) return
-    this.expanded = true
     this.cancelCollapse()
+    if (this.mode !== 'closed') {
+      if (force) {
+        this.engage()
+        if (!this.composer?.isFocused()) this.composer?.focusComment()
+      }
+      return
+    }
+    this.mode = force ? 'editing' : 'hover'
     const draft = this.drafts.read(this.info)
     // 历史草稿可能存着已下架的类型（issue/slop）：回退到默认，避免 chips 无选中态
     const dk = draft?.kind ?? 'suggestion'
@@ -212,15 +229,13 @@ export class SelectionPin {
     this.card.classList.remove('hidden')
     this.card.style.visibility = 'hidden'
     this.card.style.animation = 'none'
-    void this.placeCard().then(() => {
-      this.card.style.visibility = ''
-      this.card.style.animation = ''
-      this.composer?.focusComment()
-    })
+    this.placeCard()
   }
 
   private collapse(): void {
-    this.expanded = false
+    this.cancelCollapse()
+    this.placementRevision++
+    this.mode = 'closed'
     this.composer = null
     this.card.classList.add('hidden')
     this.card.innerHTML = ''
@@ -230,13 +245,20 @@ export class SelectionPin {
     // 已有草稿（含输入法组合中的文本）时不自动收起：hover 离开只应关掉「误触展开」
     // 的空卡片，不能在输入途中吞掉撰写内容（卡片消失的根因）。写了一半的卡片只通过
     // 提交 / 取消 / Esc / 点击卡片外部关闭。
-    if (this.hasDraftContent()) return
+    if (this.mode !== 'hover' || this.hasDraftContent()) return
     this.cancelCollapse()
-    this.closeTimer = setTimeout(() => this.collapse(), 320)
+    this.closeTimer = setTimeout(() => {
+      if (this.mode === 'hover' && !this.hasDraftContent()) this.collapse()
+    }, 320)
   }
 
   private cancelCollapse(): void {
     clearTimeout(this.closeTimer)
+  }
+
+  private engage(): void {
+    if (this.mode === 'hover') this.mode = 'editing'
+    this.cancelCollapse()
   }
 
   /** 草稿账本里当前范围是否留有撰写内容（批注语或替换词） */
@@ -258,6 +280,7 @@ export class SelectionPin {
 
   /** 撰写变化：记账草稿 + 提交按钮态（表单自身已保证只做定向更新） */
   private onComposerChange(s: ComposerState): void {
+    this.engage()
     if (this.info) this.drafts.write(this.info, s)
     this.refreshSubmit()
   }
@@ -298,15 +321,16 @@ export class SelectionPin {
       : null
     if (range && !sel!.isCollapsed && anchorEl) {
       this.info = {...this.info, rect: range.getBoundingClientRect()}
-      void this.placePin().then(() => {
-        if (this.info && this.expanded) void this.placeCard()
-      })
+      this.placePin()
+      if (this.mode !== 'closed') this.placeCard()
       return
     }
     // 「正被使用」的卡片不因选区丢失而关闭：有草稿，或输入框仍持有焦点
     //（展开即 focus，用户可能还没输入就开始滚快捷语/挪视口）
-    const engaged = this.hasDraftContent() || (this.composer?.isFocused() ?? false)
+    const opening = this.mode !== 'closed' && this.card.style.visibility === 'hidden'
+    const engaged = opening || this.mode === 'composing' || this.hasDraftContent() || (this.composer?.isFocused() ?? false)
     if (engaged) {
+      this.placementRevision++
       this.pin.classList.add('hidden')
       const viewport = window.visualViewport
       const top = viewport?.offsetTop ?? 0
@@ -317,6 +341,7 @@ export class SelectionPin {
       const rect = this.card.getBoundingClientRect()
       this.card.style.left = `${clamp(rect.left, left + 8, Math.max(left + 8, left + width - rect.width - 8))}px`
       this.card.style.top = `${clamp(rect.top, top + 8, Math.max(top + 8, top + height - rect.height - 8))}px`
+      this.revealCard()
       return
     }
     this.dismiss()
@@ -325,7 +350,6 @@ export class SelectionPin {
   /** 收起一切（选区清除、点外部、Esc） */
   dismiss(): void {
     this.info = null
-    this.expanded = false
     this.pin.classList.add('hidden')
     this.collapse()
     window.getSelection()?.removeAllRanges()
@@ -333,14 +357,18 @@ export class SelectionPin {
   }
 
   /** 卡片以小点为锚，朝屏幕中心展开 */
-  private placeCard(): Promise<void> {
+  private placeCard(): void {
+    const composer = this.composer
+    if (!composer || this.mode === 'closed') return
+    const revision = ++this.placementRevision
+    const current = () => revision === this.placementRevision && composer === this.composer && this.mode !== 'closed'
     const pr = this.pin.getBoundingClientRect()
     const cx = pr.left + pr.width / 2
     const cy = pr.top + pr.height / 2
     const side = cx < window.innerWidth / 2 ? 'right' : 'left'
     const align = cy < window.innerHeight / 2 ? 'start' : 'end'
     const placement = `${side}-${align}` as 'right-start' | 'right-end' | 'left-start' | 'left-end'
-    return computePosition(this.pin, this.card, {
+    void computePosition(this.pin, this.card, {
       placement,
       strategy: 'fixed',
       middleware: [
@@ -349,14 +377,23 @@ export class SelectionPin {
         // 近全宽的卡片会整块悬出左右视口缘（手机上必现）
         shift({padding: 8, crossAxis: true, limiter: limitShift()}),
         size({apply: ({availableHeight}) => {
-          this.card.style.maxHeight = `${Math.max(0, availableHeight)}px`
+          if (current()) this.card.style.maxHeight = `${Math.max(0, availableHeight)}px`
         }}),
       ],
     }).then(({x, y}) => {
+      if (!current()) return
       this.card.style.left = `${x}px`
       this.card.style.top = `${y}px`
       this.card.style.transformOrigin = CARD_ORIGIN[placement] ?? 'top left'
+      this.revealCard()
     })
+  }
+
+  private revealCard(): void {
+    if (this.mode === 'closed' || !this.composer || this.card.style.visibility !== 'hidden') return
+    this.card.style.visibility = ''
+    this.card.style.animation = ''
+    this.composer.focusComment()
   }
 }
 

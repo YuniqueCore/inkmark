@@ -10,7 +10,7 @@ The agreed direction is restrained Apple/Linear-inspired productivity UI: clear 
 - Lists use quiet separators and clear selected/focused states. Avoid nested cards, decorative gradients, glass, excessive badges, and hover-only essential actions.
 - Forms keep inputs stable during composition. Errors appear next to the action and retain entered text. Destructive actions name their scope and consequences.
 
-Native reading modes and annotation kinds use NSH tabs with a shared segmented presentation, selected semantics and native keyboard navigation. Primary actions retain readable accent contrast on hover; focus changes the color of a reserved border without moving layout. Form scroll containers let handled taps reach controls while the keyboard is open. Document multi-selection intent belongs to the stable workbench view so moving between desktop panels and compact sheets retains both checkboxes and the shared selected identities. Bulk actions show their selected count; filtered empty states offer a direct reset.
+Wide native reading modes and annotation kinds use NSH tabs with a shared segmented presentation, selected semantics and native keyboard navigation; compact reading modes use a checked native menu. Primary actions retain readable accent contrast on hover; focus changes the color of a reserved border without moving layout. Form scroll containers let handled taps reach controls while the keyboard is open. Document multi-selection intent belongs to the stable workbench view so moving between desktop panels and compact sheets retains both checkboxes and the shared selected identities. Bulk actions show their selected count; filtered empty states offer a direct reset.
 
 Native action menus share one presentation for grouping, state styling and interaction readiness. Moving mobile menu sheets expose disabled actions until NSH's `onOpen` completion event, preventing a coordinate captured during entry from choosing a different row after the sheet moves. A new opening requested during exit waits for `onClose` before entering again; it cannot reverse a closing animation and lose its completion event. No timer or duplicated business action state is involved.
 
@@ -33,6 +33,8 @@ The workspace owns documents, revisions, annotations, trash, persistence, and co
 The document surface owns DOM selection/source mapping, Markdown, image geometry, and scrolling. It does not own navigation or form widgets in native builds. Full source and image data stay with the workspace/surface; the native shell receives summaries, not a second durable workspace.
 
 Native editing sessions are registered before focus leaves the canvas. Each session has an identity and a captured document/annotation owner. Submitted values remain in the form until the owner accepts them; stale ownership produces an error, not a write to the newly active document. Close and workspace replacement consult these sessions and the existing save/file-operation guards.
+
+The browser selection composer distinguishes an untouched hover preview, editing and active IME composition. User interaction cancels pending hover collapse; preedit survives even before it produces text. Reopening preserves the existing input nodes and focused field. Floating UI's asynchronous height and coordinate writes belong to the current composer and latest placement request; viewport clamping retires older anchor placements. Empty, unfocused cards still close on viewport changes. Pin geometry is synchronous, so it needs no extra asynchronous lifecycle.
 
 ## Evidence and acceptance
 

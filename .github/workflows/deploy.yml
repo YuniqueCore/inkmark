@@ -36,6 +36,12 @@ jobs:
         run: bunx playwright install --with-deps chrome
       - name: Typecheck, unit tests and browser workflows
         run: bun run check
+      - uses: actions/upload-artifact@v7.0.2
+        if: failure()
+        with:
+          name: web-tests
+          path: test-results/
+          if-no-files-found: ignore
       - name: Build (typecheck + vite, /inkmark/ base)
         run: bun run build:pages
       - uses: actions/upload-artifact@v7.0.2
