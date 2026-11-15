@@ -13,17 +13,19 @@ export interface MenuAction<T extends string> {value: T; label: string; testID?:
 
 /** Mobile sheets become actionable at NSH's settled lifecycle boundary, never at moving coordinates. */
 export function ActionsMenu<T extends string>(props: {label: string; text?: string; testID?: string; groups: readonly (readonly MenuAction<T>[])[]; onSelect: (value: T) => void; colors: Colors}) {
-  const phase = signal<'closed' | 'opening' | 'open' | 'closing' | 'reopening'>('closed')
-  const actionable = () => phase() === 'open' || (!touch() && phase() === 'opening')
+  const phase = signal<'closed' | 'opening' | 'open' | 'closing'>('closed')
+  const wantsOpen = signal(false)
+  const actionable = () => wantsOpen() && (phase() === 'open' || (!touch() && phase() === 'opening'))
+  const itemStyle = () => ({minHeight: touch() ? 44 : 32, padding: 10, borderRadius: 6, borderWidth: 1, borderColor: 'transparent'})
   // Finish an exit before another entry so each opening has its own completion event.
   return <Menu open={phase() === 'opening' || phase() === 'open'}
     onOpenChange={({open}) => {
+      wantsOpen.set(open)
       if (open && phase() === 'closed') phase.set('opening')
-      else if (open && phase() === 'closing') phase.set('reopening')
-      else if (!open && (phase() === 'opening' || phase() === 'open' || phase() === 'reopening')) phase.set('closing')
+      else if (!open && phase() === 'open') phase.set('closing')
     }}
-    onOpen={() => { if (phase() === 'opening') phase.set('open') }}
-    onClose={() => phase.set(phase() === 'reopening' ? 'opening' : 'closed')}
+    onOpen={() => { if (phase() === 'opening') phase.set(wantsOpen() ? 'open' : 'closing') }}
+    onClose={() => { if (phase() === 'closing') phase.set(wantsOpen() ? 'opening' : 'closed') }}
     popupStyle={{backgroundColor: props.colors().chrome, borderRadius: 8, padding: 6}}
     trigger={<Text accessibilityLabel={props.label} testID={props.testID} style={{minHeight: touch() ? 44 : 30, minWidth: touch() ? 44 : 30,
       padding: 10, fontSize: touch() ? 15 : 13, color: props.colors().text}}>{props.text ?? props.label}</Text>}>
@@ -32,11 +34,16 @@ export function ActionsMenu<T extends string>(props: {label: string; text?: stri
       <Each of={group()} key={item => item.value}>{item => <MenuItem testID={item().testID}
         disabled={!actionable() || item().disabled}
         checked={item().checked} role={item().checked === undefined ? undefined : 'menuitemradio'} onSelect={() => props.onSelect(item().value)}
-        style={{minHeight: touch() ? 44 : 32, padding: 10, borderRadius: 6, borderWidth: 1, borderColor: 'transparent'}}
+        style={itemStyle()}
         hoverStyle={{backgroundColor: props.colors().inset}} focusVisibleStyle={{borderColor: props.colors().accent}} disabledStyle={{opacity: .4}}>
         <Text style={{fontSize: touch() ? 15 : 14, color: item().danger ? props.colors().danger : props.colors().text}}>{item().label}</Text>
       </MenuItem>}</Each>
     </>}</Each>
+    <If when={touch()}>
+      <MenuSeparator style={{height: 1, backgroundColor: props.colors().border, marginVertical: 4}} />
+      <MenuItem testID={props.testID ? `${props.testID}-cancel` : undefined} disabled={!actionable()} style={itemStyle()}
+        disabledStyle={{opacity: .4}}><Text style={{fontSize: 15, color: props.colors().secondary}}>取消</Text></MenuItem>
+    </If>
   </Menu>
 }
 

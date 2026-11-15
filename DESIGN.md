@@ -14,6 +14,8 @@ Native reading modes and annotation kinds use NSH tabs with a shared segmented p
 
 Native action menus share one presentation for grouping, state styling and interaction readiness. Moving mobile menu sheets expose disabled actions until NSH's `onOpen` completion event, preventing a coordinate captured during entry from choosing a different row after the sheet moves. A new opening requested during exit waits for `onClose` before entering again; it cannot reverse a closing animation and lose its completion event. No timer or duplicated business action state is involved.
 
+Mobile menus provide an explicit Cancel action, including when a long action list fills the available screen and leaves no tappable backdrop. Visibility intent is separate from the current entry/exit phase, so cancelling during entry remains safe.
+
 Image review uses direct canvas interaction: empty-space drag creates a region, existing objects select and move, handles resize, and Space/middle mouse temporarily pans. Two fingers pan/pinch without a tool switch. Coordinate fields remain the precise alternative. Selection is cleared consistently when hidden or removed. The browser and native shell share this geometry engine, while native sheets retain their platform form semantics. See [image-review.md](docs/image-review.md) for cancellation, keyboard and persistence contracts.
 
 ## Tokens

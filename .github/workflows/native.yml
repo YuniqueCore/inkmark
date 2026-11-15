@@ -42,7 +42,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang llvm libclang-dev libgtk-4-dev libwebkitgtk-6.0-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libxtst6 x11-utils openbox wmctrl xvfb xauth dbus-x11 at-spi2-core fonts-noto-cjk
+          sudo apt-get install -y clang llvm libclang-dev libgtk-4-dev libwebkitgtk-6.0-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libxtst6 x11-utils xvfb xauth dbus-x11 at-spi2-core fonts-noto-cjk
           # Give only this test host the namespaces WebKit needs for its sandbox.
           sed "s|/opt/InkMark/InkMark|$PWD/.local-build/nsh/sdk/cli/nsh/runtime/linux/nsh-linux-host|" native/linux/inkmark.apparmor | sudo tee /etc/apparmor.d/inkmark-ci > /dev/null
           sudo apparmor_parser -r /etc/apparmor.d/inkmark-ci
@@ -66,7 +66,11 @@ jobs:
           NATIVE_TARGET: ${{ matrix.target }}
         run: |
           if [ "$NATIVE_TARGET" = linux ]; then
-            GDK_BACKEND=x11 xvfb-run -a dbus-run-session -- bash scripts/native-linux-test.sh 2>&1 | tee .local-build/native-webview.log | awk 'length($0) < 1000'
+            GDK_BACKEND=x11 xvfb-run -a dbus-run-session -- bash -euc '
+              python3 -c "import ctypes; ctypes.CDLL(\"libXtst.so.6\"); print(\"XTest library available\")"
+              xdpyinfo -queryExtensions | grep -F XTEST
+              bun run nsh test native/tests --target linux --verbose --trace --junit .local-build/native-test.xml
+            ' 2>&1 | tee .local-build/native-webview.log | awk 'length($0) < 1000'
           else
             bun run nsh test native/tests --target "$NATIVE_TARGET" --verbose --trace --junit .local-build/native-test.xml 2>&1 | tee .local-build/native-webview.log | awk 'length($0) < 1000'
           fi

@@ -22,6 +22,12 @@ test('native controls and real WebView: import, CRLF edit, preview review, close
   await stage('selected')
   await app.press('id:selection-annotate')
   await app.type('id:annotation-comment', 'Native controls review')
+  // Real native cursor keys must edit at the insertion point, not append or navigate away.
+  await app.keyboard.press('left')
+  await app.keyboard.press('x')
+  expect(app.value('id:annotation-comment')).toBe('Native controls reviexw')
+  await app.keyboard.press('backspace')
+  await app.keyboard.press('right')
   await app.window('main').pressClose()
   await app.waitUntil(() => app.texts().some(text => text.includes('请先提交或取消')))
   expect(app.value('id:annotation-comment')).toBe('Native controls review')
@@ -39,6 +45,8 @@ test('native controls and real WebView: import, CRLF edit, preview review, close
   // NSH 0.5.1 Windows traversal reaches text inputs only; other desktop hosts enter tabs.
   if (app.shows('id:journey-platform-macos') || app.shows('id:journey-platform-linux')) {
     await app.press('id:reading-source')
+    // GTK uses Ctrl+Tab to leave the embedded content's own focus chain.
+    if (app.shows('id:journey-platform-linux')) await app.keyboard.press('ctrl+tab')
     console.log('Native tab navigation window focus:', app.window('main').state()?.focused)
     let attempts = 0
     while (app.spanStyle('text:分栏').fontWeight !== 600) {

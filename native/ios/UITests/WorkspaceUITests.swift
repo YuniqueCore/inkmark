@@ -31,11 +31,12 @@ final class WorkspaceUITests: XCTestCase {
         XCTAssertEqual(app.webViews.textViews.count, 0, "Editing forms must be native, outside the document WebView")
         let actions = app.descendants(matching: .any)["workspace-menu"].firstMatch
         tapReady(actions)
-        let searchAction = app.descendants(matching: .any)["action-search"].firstMatch
-        expectation(for: NSPredicate(format: "enabled == true AND hittable == true"), evaluatedWith: searchAction)
+        let firstAction = app.descendants(matching: .any)["action-new"].firstMatch
+        expectation(for: NSPredicate(format: "enabled == true AND hittable == true"), evaluatedWith: firstAction)
         waitForExpectations(timeout: 10)
-        // Cancel outside the sheet and immediately request another opening: closing must finish first.
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.14)).tap()
+        // The complete action list can fill a phone: cancellation must remain explicitly reachable.
+        app.swipeUp()
+        tapReady(app.descendants(matching: .any)["workspace-menu-cancel"].firstMatch)
         tapReady(actions)
         tapReady(app.descendants(matching: .any)["action-search"].firstMatch)
         let query = app.otherElements["search-query"].textFields.firstMatch

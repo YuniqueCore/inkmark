@@ -114,7 +114,7 @@ mbx test --workspace --all-features
 mbx clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
-Linux CI runs `scripts/native-linux-test.sh` inside Xvfb and a D-Bus session. It uses Openbox with explicit readiness, the X11 GTK backend and an XTEST preflight, so keyboard navigation exercises a managed desktop and real key events. NSH's reduced key-event fallback cannot validate Tab traversal. On a real Linux desktop, run the native journey directly in its existing display session. Android additionally needs JDK 17, platform `android-37.0` and build-tools `37.0.0`:
+Linux CI uses Xvfb, a D-Bus session, the X11 GTK backend and an XTEST preflight. NSH's reduced key-event fallback cannot validate Tab traversal. Native keyboard tests verify cursor edits as well as leaving embedded content and entering the tab list. On a real Linux desktop, run the native journey directly in its existing display session. Android additionally needs JDK 17, platform `android-37.0` and build-tools `37.0.0`:
 
 ```sh
 node scripts/native-setup.mjs android
