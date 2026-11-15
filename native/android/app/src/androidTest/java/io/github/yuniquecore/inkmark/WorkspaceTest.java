@@ -82,7 +82,12 @@ public class WorkspaceTest {
             control(device, "annotation-comment").setText("Native image review");
             assertFalse("Out-of-bounds region must not be saved", control(device, "annotation-save").isEnabled());
             control(device, "region-width").setText("100");
-            control(device, "annotation-save").click(); saved(device);
+            assertTrue("Correcting the region must enable saving", control(device, "annotation-save").wait(Until.enabled(true), 10000));
+            control(device, "annotation-save").click();
+            boolean submitted = device.wait(Until.gone(By.res("annotation-save")), 10000);
+            capture(device, "submitted-image-review");
+            assertTrue("Saving a valid review must close its native form", submitted);
+            saved(device);
             assertEquals("0", evaluate(scenario, "document.querySelectorAll('input,textarea,select,header,aside').length"));
             var existingExports = exportedZips();
             action(device, "export"); control(device, "export-save").click();
@@ -153,18 +158,22 @@ public class WorkspaceTest {
 
     private static UiObject2 control(UiDevice device, String id) {
         UiObject2 control = device.wait(Until.findObject(By.res(id)), 10000);
-        if (control == null) {
-            File evidence = new File(InstrumentationRegistry.getInstrumentation().getTargetContext().getExternalFilesDir(null), "test-evidence");
-            if (evidence.isDirectory() || evidence.mkdirs()) {
-                device.takeScreenshot(new File(evidence, id + ".png"));
-                try { device.dumpWindowHierarchy(new File(evidence, id + ".xml")); }
-                catch (java.io.IOException error) { android.util.Log.w("InkMarkTest", "Could not capture accessibility hierarchy", error); }
-            }
-        }
+        if (control == null) capture(device, id);
         assertNotNull("Missing native control: " + id, control); return control;
     }
+    private static void capture(UiDevice device, String name) {
+        File evidence = new File(InstrumentationRegistry.getInstrumentation().getTargetContext().getExternalFilesDir(null), "test-evidence");
+        if (evidence.isDirectory() || evidence.mkdirs()) {
+            device.takeScreenshot(new File(evidence, name + ".png"));
+            try { device.dumpWindowHierarchy(new File(evidence, name + ".xml")); }
+            catch (java.io.IOException error) { android.util.Log.w("InkMarkTest", "Could not capture accessibility hierarchy", error); }
+        }
+    }
     private static void action(UiDevice device, String action) {
-        control(device, "workspace-menu").click(); control(device, "action-" + action).click();
+        control(device, "workspace-menu").click();
+        UiObject2 item = control(device, "action-" + action);
+        assertTrue("Workspace action must be enabled: " + action, item.wait(Until.enabled(true), 10000));
+        item.click();
     }
     private static void saved(UiDevice device) {
         assertTrue("Native save status must confirm persistence", device.wait(Until.hasObject(By.text("已保存")), 10000));

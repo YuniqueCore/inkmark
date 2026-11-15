@@ -47,7 +47,7 @@ This replaces the old full-web-shell native path and removes the radial reading 
 | --- | --- | --- |
 | Web | GitHub Pages static site | Current browser; no native runtime |
 | macOS | Apple Silicon `.app` in ZIP | macOS 14+; ad-hoc signed, not notarized |
-| Linux | x86_64 `.tar.gz` | GTK 4.14+ and WebKitGTK 6; Ubuntu needs the included application-specific AppArmor profile |
+| Linux | x86_64 `.tar.gz` | GTK 4.14+, WebKitGTK 6 and CJK fonts; Ubuntu needs the included application-specific AppArmor profile |
 | Windows | x86_64 ZIP, installer when Inno Setup is available | Windows WebView2 Runtime; unsigned |
 | Android | debug-signed APK and unsigned release AAB | API 26+; release AAB needs the owner's signing key |
 | iOS | arm64 simulator ZIP and unsigned device ZIP | iOS 16.4+; device installation requires Apple signing/provisioning |

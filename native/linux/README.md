@@ -1,9 +1,9 @@
 # InkMark for Linux
 
-This x86_64 build requires GTK 4.14+ and WebKitGTK 6. On Ubuntu 24.04:
+This x86_64 build requires GTK 4.14+, WebKitGTK 6 and a CJK font for its Chinese interface. On Ubuntu 24.04:
 
 ```sh
-sudo apt-get install libgtk-4-1 libwebkitgtk-6.0-4
+sudo apt-get install libgtk-4-1 libwebkitgtk-6.0-4 fonts-noto-cjk
 ```
 
 On distributions without restricted user namespaces, launch `./InkMark` from
@@ -35,3 +35,5 @@ Workspace data stays in the application's WebKit profile; export a workspace
 backup from InkMark before uninstalling or moving between computers.
 
 Reference: [Ubuntu's application-specific user namespace policies](https://ubuntu.com/blog/ubuntu-23-10-restricted-unprivileged-user-namespaces).
+
+The [Ubuntu Noto CJK package](https://packages.ubuntu.com/noble/fonts-noto-cjk) supplies regular and bold Chinese glyphs for both native controls and the WebView. Without a CJK font, a minimal Linux installation can show missing-glyph boxes even when interaction tests pass.

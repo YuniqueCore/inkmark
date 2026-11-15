@@ -31,7 +31,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang llvm libclang-dev libgtk-4-dev libwebkitgtk-6.0-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev xvfb xauth dbus-x11 at-spi2-core
+          sudo apt-get install -y clang llvm libclang-dev libgtk-4-dev libwebkitgtk-6.0-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev xvfb xauth dbus-x11 at-spi2-core fonts-noto-cjk
           # Give only this test host the namespaces WebKit needs for its sandbox.
           sed "s|/opt/InkMark/InkMark|$PWD/.local-build/nsh/sdk/cli/nsh/runtime/linux/nsh-linux-host|" native/linux/inkmark.apparmor | sudo tee /etc/apparmor.d/inkmark-ci > /dev/null
           sudo apparmor_parser -r /etc/apparmor.d/inkmark-ci
@@ -55,9 +55,9 @@ jobs:
           NATIVE_TARGET: ${{ matrix.target }}
         run: |
           if [ "$NATIVE_TARGET" = linux ]; then
-            xvfb-run -a dbus-run-session -- bun run nsh test native/tests --target linux --verbose --trace --fps --junit .local-build/native-test.xml 2>&1 | tee .local-build/native-webview.log | awk 'length($0) < 1000'
+            xvfb-run -a dbus-run-session -- bun run nsh test native/tests --target linux --verbose --trace --junit .local-build/native-test.xml 2>&1 | tee .local-build/native-webview.log | awk 'length($0) < 1000'
           else
-            bun run nsh test native/tests --target "$NATIVE_TARGET" --verbose --trace --fps --junit .local-build/native-test.xml 2>&1 | tee .local-build/native-webview.log | awk 'length($0) < 1000'
+            bun run nsh test native/tests --target "$NATIVE_TARGET" --verbose --trace --junit .local-build/native-test.xml 2>&1 | tee .local-build/native-webview.log | awk 'length($0) < 1000'
           fi
       - name: Package desktop application
         env:
@@ -117,13 +117,7 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-animations: true
-          script: |
-            inkmark_test_status=0
-            native/android/gradlew -p native/android connectedDebugAndroidTest || inkmark_test_status=$?
-            if adb shell test -d /sdcard/Android/data/io.github.yuniquecore.inkmark/files/test-evidence; then
-              adb pull /sdcard/Android/data/io.github.yuniquecore.inkmark/files/test-evidence .local-build/android-evidence
-            fi
-            exit "$inkmark_test_status"
+          script: bash scripts/android-test.sh
       - run: node scripts/native-artifact.mjs android
       - uses: actions/upload-artifact@v7.0.2
         with:
