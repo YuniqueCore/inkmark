@@ -6,7 +6,7 @@ import type {NativeInteraction, InteractionOf, ShellCommand} from '../../../src/
 import {MANUAL_KINDS, KIND_LABEL, QUICK_PHRASES, toggleQuickPhrase} from '../../../src/core/types'
 import {THEME_META, TEXTURE_META, FONT_META, FONT_WEIGHT_META, type ReadingPrefs} from '../../../src/core/prefs'
 import {canSubmitComposition, type ComposerState} from '../../../src/workbench/composition'
-import {Action, Field, Choice, touch, type Colors} from './controls'
+import {Action, Field, Choice, Segmented, touch, type Colors} from './controls'
 
 type Send = (command: ShellCommand) => void
 interface FormProps<T extends NativeInteraction['type']> {value: Accessor<InteractionOf<T>>; colors: Colors; send: Send}
@@ -25,7 +25,7 @@ function Frame(props: {value: Accessor<NativeInteraction>; colors: Colors; cance
       <Text style={{flex: 1, fontSize: 18, fontWeight: '600', color: props.colors().text}}>{props.value().title}</Text>
       <Action label="关闭" testID="form-close" colors={props.colors} onPress={dismiss} />
     </View>
-    <Scroll testID="form-fields" style={{minHeight: 0, flexShrink: 1, maxHeight: windowSize().height * .72}} contentStyle={{gap: 14}}>
+    <Scroll testID="form-fields" keyboardShouldPersistTaps="handled" style={{minHeight: 0, flexShrink: 1, maxHeight: windowSize().height * .72}} contentStyle={{gap: 14}}>
       {props.children}
       <If when={Boolean(props.value().error)}><Text style={{color: props.colors().danger, fontSize: 14}}>{props.value().error}</Text></If>
     </Scroll>
@@ -45,9 +45,8 @@ function Frame(props: {value: Accessor<NativeInteraction>; colors: Colors; cance
 
 function Composer(props: {value: Accessor<ComposerState>; change: (value: ComposerState) => void; colors: Colors; image?: boolean; input?: (ref: InputRef) => void}) {
   return <View style={{gap: 12}}>
-    <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 4}}>
-      <Each of={MANUAL_KINDS}>{kind => <Action label={KIND_LABEL[kind()]} selected={props.value().kind === kind()} colors={props.colors} onPress={() => props.change({...props.value(), kind: kind()})} />}</Each>
-    </View>
+    <Segmented label="批注类型" value={props.value().kind} items={MANUAL_KINDS.map(kind => ({value: kind, title: KIND_LABEL[kind], testID: `annotation-kind-${kind}`}))}
+      colors={props.colors} onChange={kind => props.change({...props.value(), kind})} />
     <If when={!props.image}>
       <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 4}}>
         <Each of={QUICK_PHRASES[props.value().kind] ?? []}>{phrase => <Action label={phrase()} colors={props.colors} onPress={() => props.change({...props.value(), comment: toggleQuickPhrase(props.value().comment, phrase())})} />}</Each>

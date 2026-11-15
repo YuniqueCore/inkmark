@@ -1,9 +1,9 @@
 import {signal, Text, View, type Accessor, type JSX} from 'nsh'
-import {Menu, MenuItem, Toolbar, ResizablePanel, ResizablePanelGroup, Sheet} from 'nsh/base'
+import {Menu, MenuItem, MenuSeparator, Toolbar, ResizablePanel, ResizablePanelGroup, Sheet} from 'nsh/base'
 import type {NativeView, ShellCommand} from '../../../src/workbench/shell-protocol'
 import type {WorkspaceAction} from '../../../src/workbench/shell-state'
 import {isDarkContent} from '../../../src/core/prefs'
-import {Action, light, dark, compact} from './controls'
+import {Action, Segmented, light, dark, compact} from './controls'
 import {Documents, Reviews} from './lists'
 import {NativeForms} from './forms'
 
@@ -12,6 +12,8 @@ export function NativeWorkbench(props: {view: Accessor<NativeView | null>; send:
   const pane = signal<'documents' | 'reviews' | null>(null)
   const navigator = signal(true)
   const inspector = signal(true)
+  // Presentation intent survives sidebar/sheet remounts; selected identities stay in the workbench.
+  const selectingDocuments = signal(false)
   const chrome = () => props.view()?.chrome
   const execute = (action: WorkspaceAction) => props.send({type: 'workspace', action})
   const toggle = (target: 'documents' | 'reviews') => {
@@ -19,27 +21,33 @@ export function NativeWorkbench(props: {view: Accessor<NativeView | null>; send:
     else if (target === 'documents') navigator.set(!navigator())
     else inspector.set(!inspector())
   }
-  const menuItems: {action: WorkspaceAction; label: string; text?: boolean; document?: boolean; danger?: boolean}[] = [
+  const menuGroups: {action: WorkspaceAction; label: string; text?: boolean; document?: boolean; danger?: boolean}[][] = [[
     {action: 'new', label: '粘贴新建文档'}, {action: 'files', label: '打开文件'},
     ...(props.directories ? [{action: 'folder' as const, label: '导入文件夹'}] : []),
     {action: 'paste-image', label: '从剪贴板粘贴图片'}, {action: 'sample', label: '载入示例'},
+  ], [
     {action: 'search', label: '搜索与批量批注', text: true}, {action: 'scan', label: '检查 AI 冗余', text: true},
     {action: 'edit', label: '编辑原文', text: true}, {action: 'diff', label: 'AI 改稿对照', text: true},
     {action: 'clear-revised', label: '清除 AI 改稿', text: true},
+  ], [
     {action: 'settings', label: '阅读设置'}, {action: 'theme', label: '切换明暗'},
+  ], [
     {action: 'recovery', label: '下载完整工作区备份'}, {action: 'restore', label: '恢复完整工作区备份'},
     {action: 'backup', label: '下载文档与批注备份'}, {action: 'trash', label: '回收站'},
+  ], [
     {action: 'remove', label: '移除当前文档', document: true, danger: true},
-  ]
+  ]]
+  const readingModes = (['source', 'split', 'preview'] as const).map(mode => ({value: mode, title: {source: '源码', split: '分栏', preview: '预览'}[mode], testID: `reading-${mode}`}))
   return <View testID="native-workbench" style={{flex: 1, backgroundColor: colors().chrome}}>
     <Toolbar accessibilityLabel="工作区工具栏" style={{flexDirection: 'row', alignItems: 'center', minHeight: 52, paddingHorizontal: 12, gap: 6, borderBottomWidth: 1, borderColor: colors().border}}>
       <Action label="文档" testID="documents-toggle" colors={colors} selected={compact() ? pane() === 'documents' : navigator()} disabled={!chrome()?.ready} onPress={() => toggle('documents')} />
-      <Text style={{flex: 1, minWidth: 0, fontSize: 14, fontWeight: '600', color: colors().text, numberOfLines: 1}}>{chrome()?.active?.name ?? 'InkMark'}</Text>
+      <View style={{flex: 1, minWidth: 0, overflow: 'hidden'}}>
+        <Text accessibilityLabel={chrome()?.active?.name ?? 'InkMark'} style={{fontSize: 14, fontWeight: '600', color: colors().text, numberOfLines: 1}}>{chrome()?.active?.name ?? 'InkMark'}</Text>
+      </View>
+      <View style={{flexDirection: 'row', flexShrink: 0, alignItems: 'center', gap: 6}}>
       <If when={chrome()?.active?.kind === 'text' && chrome()?.mode === 'annotate'}>
-        <If when={!compact()}><View accessibilityLabel="阅读模式" style={{flexDirection: 'row', gap: 2}}>
-          <Each of={['source', 'split', 'preview'] as const}>{mode => <Action testID={`reading-${mode()}`} label={{source: '源码', split: '分栏', preview: '预览'}[mode()]} colors={colors}
-            selected={chrome()?.readingMode === mode()} onPress={() => props.send({type: 'reading', mode: mode()})} />}</Each>
-        </View></If>
+        <If when={!compact()}><Segmented label="阅读模式" value={chrome()?.readingMode ?? 'source'} items={readingModes} colors={colors}
+          onChange={mode => props.send({type: 'reading', mode})} /></If>
         <If when={compact()}><Menu popupStyle={{backgroundColor: colors().chrome, borderRadius: 8, padding: 6}}
           trigger={<Text accessibilityLabel="阅读模式" testID="reading-menu" style={{padding: 12, color: colors().text, fontSize: 13}}>{{source: '源码', split: '分栏', preview: '预览'}[chrome()?.readingMode ?? 'source']} ▾</Text>}>
           <Each of={['source', 'split', 'preview'] as const}>{mode => <MenuItem testID={`reading-${mode()}`} checked={chrome()?.readingMode === mode()} role="menuitemradio"
@@ -52,13 +60,17 @@ export function NativeWorkbench(props: {view: Accessor<NativeView | null>; send:
       <If when={!compact()}><Action label="导出" testID="export-review" colors={colors} disabled={!chrome()?.active?.annotationCount} onPress={() => execute('export')} /></If>
       <Menu popupStyle={{backgroundColor: colors().chrome, borderRadius: 8, padding: 6}} trigger={<Text accessibilityLabel="工作区操作" testID="workspace-menu" style={{padding: 12, color: colors().text, fontSize: 17}}>···</Text>}>
         <If when={compact()}><MenuItem testID="action-export" onSelect={() => execute('export')} disabled={!chrome()?.active?.annotationCount} style={{padding: 12}}><Text style={{color: colors().text}}>导出批注</Text></MenuItem></If>
-        <Each of={menuItems}>{item => <MenuItem testID={`action-${item().action}`} disabled={!chrome()?.ready || (item().text && chrome()?.active?.kind !== 'text') || (item().document && !chrome()?.active)}
+        <Each of={menuGroups}>{(group, index) => <>
+        <If when={index() > 0}><MenuSeparator style={{height: 1, backgroundColor: colors().border, marginVertical: 4}} /></If>
+        <Each of={group()}>{item => <MenuItem testID={`action-${item().action}`} disabled={!chrome()?.ready || (item().text && chrome()?.active?.kind !== 'text') || (item().document && !chrome()?.active)}
           onSelect={() => execute(item().action)} style={{padding: 12}}><Text style={{fontSize: 14, color: item().danger ? colors().danger : colors().text}}>{item().label}</Text></MenuItem>}</Each>
+        </>}</Each>
       </Menu>
+      </View>
     </Toolbar>
     <ResizablePanelGroup axis="horizontal" style={{flex: 1, minHeight: 0}} handleStyle={{backgroundColor: colors().border}} handleAccessibilityLabel="调整工作区面板宽度">
       <ResizablePanel size={240} minSize={200} maxSize={340} visible={!compact() && navigator()}>
-        <Documents view={props.view} colors={colors} send={props.send} />
+        <Documents view={props.view} colors={colors} send={props.send} selecting={selectingDocuments} onSelectingChange={selectingDocuments.set} />
       </ResizablePanel>
       <ResizablePanel minSize={260}>
         <View style={{flex: 1, backgroundColor: colors().canvas}}>
@@ -115,7 +127,7 @@ export function NativeWorkbench(props: {view: Accessor<NativeView | null>; send:
     </View>
     <Sheet open={compact() && pane() !== null} side="bottom" popupStyle={{height: '85%', backgroundColor: colors().chrome}} backdropStyle={{backgroundColor: '#00000040'}} onOpenChange={({open}) => { if (!open) pane.set(null) }}>
       <View style={{alignItems: 'flex-end', padding: 8}}><Action label="返回阅读" colors={colors} onPress={() => pane.set(null)} /></View>
-      <If when={pane() === 'documents'}><Documents view={props.view} colors={colors} send={props.send} onOpen={() => pane.set(null)} /></If>
+      <If when={pane() === 'documents'}><Documents view={props.view} colors={colors} send={props.send} selecting={selectingDocuments} onSelectingChange={selectingDocuments.set} onOpen={() => pane.set(null)} /></If>
       <If when={pane() === 'reviews'}><Reviews view={props.view} colors={colors} send={props.send} onOpen={() => pane.set(null)} /></If>
     </Sheet>
     <NativeForms items={() => props.view()?.interactions ?? []} colors={colors} send={props.send} />

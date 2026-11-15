@@ -1,22 +1,35 @@
 import {setComposing} from './input-state'
 import {cleanup, Text, View, windowSize, platform, type Accessor, type InputRef} from 'nsh'
-import {Button, Checkbox, Input, Select} from 'nsh/base'
+import {Button, Checkbox, Input, Select, Tab, Tabs} from 'nsh/base'
 
-export interface Palette {canvas: string; chrome: string; inset: string; text: string; secondary: string; border: string; accent: string; danger: string}
-export const light: Palette = {canvas: '#ffffff', chrome: '#f7f7f8', inset: '#ededf0', text: '#202124', secondary: '#60636b', border: '#dddfe3', accent: '#0866ce', danger: '#ba2540'}
-export const dark: Palette = {canvas: '#17181a', chrome: '#202124', inset: '#2b2d31', text: '#f2f3f5', secondary: '#acafb8', border: '#373a40', accent: '#71b3ff', danger: '#ff8294'}
+export interface Palette {canvas: string; chrome: string; inset: string; text: string; secondary: string; border: string; accent: string; accentHover: string; accentPressed: string; danger: string}
+export const light: Palette = {canvas: '#ffffff', chrome: '#f7f7f8', inset: '#ededf0', text: '#202124', secondary: '#60636b', border: '#dddfe3', accent: '#0866ce', accentHover: '#075bbb', accentPressed: '#0754aa', danger: '#ba2540'}
+export const dark: Palette = {canvas: '#17181a', chrome: '#202124', inset: '#2b2d31', text: '#f2f3f5', secondary: '#acafb8', border: '#373a40', accent: '#71b3ff', accentHover: '#83bdff', accentPressed: '#9bcbff', danger: '#ff8294'}
 export type Colors = Accessor<Palette>
 export const compact = () => windowSize().width < 900
 export const touch = () => !platform.desktop
 
 export function Action(props: {label: string; onPress: () => void; colors: Colors; selected?: boolean; disabled?: boolean; primary?: boolean; danger?: boolean; testID?: string; align?: 'start'}) {
   return <Button testID={props.testID} accessibilityLabel={props.label} disabled={props.disabled} selected={props.selected} onPress={props.onPress}
-    style={{minHeight: touch() ? 44 : 30, maxWidth: '100%', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, justifyContent: 'center', alignItems: props.align === 'start' ? 'flex-start' : 'center',
+    style={{minHeight: touch() ? 44 : 30, maxWidth: '100%', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: 'transparent', justifyContent: 'center', alignItems: props.align === 'start' ? 'flex-start' : 'center',
       backgroundColor: props.primary ? props.colors().accent : props.selected ? props.colors().inset : 'transparent'}}
-    hoverStyle={{backgroundColor: props.colors().inset}} focusVisibleStyle={{borderWidth: 2, borderColor: props.colors().accent}}
+    hoverStyle={{backgroundColor: props.primary ? props.colors().accentHover : props.colors().inset}}
+    activeStyle={{backgroundColor: props.primary ? props.colors().accentPressed : props.colors().inset}} focusVisibleStyle={{borderColor: props.primary ? props.colors().text : props.colors().accent}}
     disabledStyle={{opacity: .4}}>
     <Text style={{fontSize: touch() ? 15 : 13, numberOfLines: 1, flexShrink: 1, fontWeight: props.primary ? '600' : '400', color: props.primary ? props.colors().canvas : props.danger ? props.colors().danger : props.colors().text}}>{props.label}</Text>
   </Button>
+}
+
+/** A single native choice; Tabs owns roving focus and arrow/Home/End navigation. */
+export function Segmented<T extends string>(props: {label: string; value: T; items: readonly {value: T; title: string; testID?: string}[]; onChange: (value: T) => void; colors: Colors}) {
+  return <View accessibilityLabel={props.label} style={{flexShrink: 0}}><Tabs style={{flexDirection: 'row', flexShrink: 0, padding: 2, gap: 2, borderRadius: 8, backgroundColor: props.colors().inset}}
+    indicatorStyle={{top: 2, bottom: 2, borderRadius: 6, backgroundColor: props.colors().canvas}}>
+    <Each of={props.items}>{item => <Tab testID={item().testID} accessibilityLabel={item().title} selected={props.value === item().value} onPress={() => props.onChange(item().value)}
+      style={{minHeight: touch() ? 44 : 26, paddingHorizontal: touch() ? 12 : 10, justifyContent: 'center', borderRadius: 6, borderWidth: 1, borderColor: 'transparent'}}
+      hoverStyle={{backgroundColor: props.colors().canvas}} activeStyle={{borderColor: props.colors().accent}} focusVisibleStyle={{borderColor: props.colors().accent}}>
+      <Text style={{fontSize: touch() ? 15 : 13, fontWeight: props.value === item().value ? '600' : '400', color: props.value === item().value ? props.colors().text : props.colors().secondary}}>{item().title}</Text>
+    </Tab>}</Each>
+  </Tabs></View>
 }
 
 export function Field(props: {label: string; value: string; onChange: (value: string) => void; colors: Colors; multiline?: boolean; readonly?: boolean; maxLength?: number; placeholder?: string; testID?: string; inputRef?: (ref: InputRef) => void}) {
@@ -45,7 +58,8 @@ export function Choice(props: {label: string; value: string; items: {value: stri
 
 export function Check(props: {label: string; checked: boolean; colors: Colors; onChange: () => void}) {
   return <Checkbox checked={props.checked} accessibilityLabel={props.label} onChange={props.onChange}
-    style={{minHeight: touch() ? 44 : 30, minWidth: touch() ? 44 : 30, alignItems: 'center', justifyContent: 'center'}}
+    style={{minHeight: touch() ? 44 : 30, minWidth: touch() ? 44 : 30, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'transparent', borderRadius: 6}}
+    focusVisibleStyle={{borderColor: props.colors().accent}} hoverStyle={{backgroundColor: props.colors().inset}}
     indicatorStyle={{width: 16, height: 16, borderRadius: 3, borderWidth: 1, borderColor: props.checked ? props.colors().accent : props.colors().secondary,
       backgroundColor: props.checked ? props.colors().accent : props.colors().canvas, alignItems: 'center', justifyContent: 'center'}}
     indicator={<Text style={{fontSize: 12, color: props.colors().canvas}}>{props.checked ? '✓' : ''}</Text>} />

@@ -68,7 +68,26 @@ The native HTML has a hash-based script CSP and embedded fonts/icons/styles. Raw
 
 Mobile hosts own safe-area and keyboard insets. Native forms use native text editors and keyboard-aware sheets with submission controls outside the scrollable content; browser forms use the visible viewport. Source/preview selection mapping and image geometry stay in the shared canvas. Window width controls pane layout independently of the platform control size.
 
+Reading modes and manual annotation types use NSH's `Tabs`/`Tab` primitives, including selected semantics. macOS and Linux support roving keyboard focus; NSH 0.5.1 on Windows currently traverses text inputs only, so non-input control keyboard navigation remains an upstream limitation. Native form scroll views use `keyboardShouldPersistTaps="handled"` so the first tap on a control performs its action with the keyboard open. Document selection mode survives sidebar/sheet remounts, while selected document IDs remain owned by the shared workbench. Exiting selection clears them explicitly. Counts describe the complete selection, including other pages; a filtered empty review list provides a direct reset.
+
 ## Build and test
+
+The parent [delivery workflow](../.github/workflows/deploy.yml) builds one offline document and passes it to every native job in the same run. Pushes to `main` also deploy static Pages; manual runs validate all five native platforms without deploying by default:
+
+```sh
+gh workflow run deploy.yml --ref main -f deploy_pages=false
+```
+
+Set `deploy_pages=true` only when deliberately deploying `main`. Pull requests cannot deploy. Manual verification and push delivery have separate concurrency groups; actual Pages deployments are serialized. Only the deploy job receives Pages write and OIDC permissions. The native workflow stays reusable rather than exposing a second manual entry that would lack its required input artifact.
+
+CI caches mechanisms, not delivery outputs:
+
+- The shared JavaScript action caches Bun's package store by OS, architecture, Bun version and lockfile. Every runner still performs a frozen install; `node_modules` is never shared.
+- NSH caches immutable release archives by platform, embedding SDK and toolchain manifest. Setup verifies SHA-256 on every run and extracts fresh SDK directories.
+- Desktop Rust uses the pinned official `mr-boxington-action` in isolated `objects` mode. Its job export includes all mbx calls, including NSH-generated crates with their own target directories. Compiler identity, platform and manifest/lock hashes scope the cache; pull requests restore without saving, and trusted manual runs on `main` can save.
+- Gradle retains its existing official action cache. Generated documents, packages, WebView profiles, test evidence and Xcode DerivedData are not dependency caches.
+
+Compare consecutive runs' restore/save logs, Rust object reuse and package timings before reporting a speed improvement. A cold run or an action-level cache hit alone is not performance evidence. Cache semantics follow [GitHub's reference](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching) and [mbx's object-cache contract](https://github.com/jdx/mr-boxington/blob/v1.30.0/docs/github-action.md).
 
 Use Bun 1.3.14+, Node 24, mise 2026.8.16+ and the checked-in lockfile. Desktop Rust is pinned to 1.100.0; `mise.toml` installs `mr-boxington` 1.30.0 (`mbx`) and its official Cargo wrapper so Cargo builds use the repository's build-cache workflow. Version 1.30.0 includes the [upstream Windows build-script trampoline fix](https://github.com/jdx/mr-boxington/pull/787). The NSH launcher uses `mise exec`; do not set `CARGO=mbx`, which makes Cargo metadata calls recurse.
 

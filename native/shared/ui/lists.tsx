@@ -1,4 +1,4 @@
-import {List, Text, View, signal, type Accessor} from 'nsh'
+import {List, Text, View, type Accessor} from 'nsh'
 import {Button, Menu, MenuItem, Popover} from 'nsh/base'
 import type {NativeView, ShellCommand} from '../../../src/workbench/shell-protocol'
 import {ALL_KINDS, KIND_LABEL} from '../../../src/core/types'
@@ -6,8 +6,7 @@ import {Action, Check, Choice, touch, type Colors} from './controls'
 
 export interface ListProps {view: Accessor<NativeView | null>; send: (command: ShellCommand) => void; colors: Colors; onOpen?: () => void}
 
-export function Documents(props: ListProps) {
-  const selecting = signal(false)
+export function Documents(props: ListProps & {selecting: Accessor<boolean>; onSelectingChange: (selecting: boolean) => void}) {
   const model = () => props.view()?.documents
   const bulk = (action: Extract<ShellCommand, {type: 'documents'}>['action']) => props.send({type: 'documents', action})
   return <View style={{flex: 1, backgroundColor: props.colors().chrome}}>
@@ -17,13 +16,14 @@ export function Documents(props: ListProps) {
       <Action label="导入" testID="import-files" colors={props.colors} onPress={() => props.send({type: 'workspace', action: 'files'})} />
     </View>
     <If when={(model()?.total ?? 0) > 0}><View style={{flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 8}}>
-      <Action label={selecting() ? '完成选择' : '选择文档'} colors={props.colors} onPress={() => { selecting.set(!selecting()); if (!selecting()) bulk('clear') }} />
-      <If when={selecting()}>
-      <Action label="全选" colors={props.colors} onPress={() => bulk('all')} />
+      <Action label={props.selecting() ? '完成选择' : '选择文档'} testID="documents-selecting" colors={props.colors} selected={props.selecting()} onPress={() => { props.onSelectingChange(!props.selecting()); if (!props.selecting()) bulk('clear') }} />
+      <If when={props.selecting()}>
+      <Action label={model()?.selected.length === model()?.total ? '取消全选' : '全选'} testID="documents-select-all" colors={props.colors} onPress={() => bulk('all')} />
       <Action label="反选" colors={props.colors} onPress={() => bulk('invert')} />
       <If when={(model()?.selected.length ?? 0) > 0}>
-        <Action label="导出所选" colors={props.colors} onPress={() => bulk('export')} />
-        <Action label="删除所选" colors={props.colors} danger onPress={() => bulk('delete')} />
+        <Text testID="documents-selection-count" style={{width: '100%', padding: 8, fontSize: 12, color: props.colors().secondary}}>已选 {model()?.selected.length} 篇文档</Text>
+        <Action label="导出所选" testID="documents-export" colors={props.colors} onPress={() => bulk('export')} />
+        <Action label="删除所选" testID="documents-delete" colors={props.colors} danger onPress={() => bulk('delete')} />
       </If>
       </If>
     </View></If>
@@ -31,11 +31,11 @@ export function Documents(props: ListProps) {
       empty={<Text style={{padding: 20, color: props.colors().secondary, fontSize: 14}}>导入文本、Markdown 或图片，也可以粘贴新建。</Text>}>
       {row => <View style={{flexDirection: 'row', alignItems: 'center', paddingLeft: 8 + row().depth * 12, paddingRight: 6, minHeight: touch() ? 52 : 36,
         backgroundColor: row().doc?.id === model()?.activeId ? props.colors().inset : 'transparent'}}>
-        <If when={!row().directory && selecting()}>
+        <If when={!row().directory && props.selecting()}>
           <Check label={`选择 ${row().title}`} checked={model()?.selected.includes(row().key) ?? false} colors={props.colors} onChange={() => props.send({type: 'document', action: 'select', id: row().key})} />
         </If>
         <View style={{flex: 1}}>
-          <Action label={`${row().directory ? row().collapsed ? '› ' : '⌄ ' : ''}${row().title}`} colors={props.colors}
+          <Action label={`${row().directory ? row().collapsed ? '› ' : '⌄ ' : ''}${row().title}`} colors={props.colors} selected={row().doc?.id === model()?.activeId}
             align="start" testID={`document-${row().key}`} onPress={() => { props.send({type: 'document', action: row().directory ? 'directory' : 'open', id: row().key}); if (!row().directory) props.onOpen?.() }} />
         </View>
         <If when={!row().directory}>
@@ -61,6 +61,7 @@ export function Documents(props: ListProps) {
 
 export function Reviews(props: ListProps) {
   const model = () => props.view()?.reviews
+  const filtered = () => model()?.filter !== 'all' || Boolean(model()?.kinds.length)
   const bulk = (action: Extract<ShellCommand, {type: 'reviews'}>['action']) => props.send({type: 'reviews', action})
   const filter = (patch: Partial<Extract<ShellCommand, {type: 'filter'}>>) => {
     const current = model()
@@ -93,9 +94,10 @@ export function Reviews(props: ListProps) {
         <If when={(model()?.report?.history.length ?? 0) > 1}><Text style={{fontSize: 12, color: props.colors().secondary}}>历次评分：{model()?.report?.history.join(' → ')}；较上次 {model()?.report?.delta}</Text></If>
       </View></If>
       <If when={(props.view()?.chrome?.active?.annotationCount ?? 0) > 0}><View style={{flexDirection: 'row', flexWrap: 'wrap'}}>
-        <Action label="全选" colors={props.colors} onPress={() => bulk('all')} />
+        <Action label={model()?.selected.length === model()?.total && Boolean(model()?.total) ? '取消全选' : '全选'} colors={props.colors} onPress={() => bulk('all')} />
         <Action label="反选" colors={props.colors} onPress={() => bulk('invert')} />
         <If when={(model()?.selected.length ?? 0) > 0}>
+          <Text testID="reviews-selection-count" style={{width: '100%', padding: 8, fontSize: 12, color: props.colors().secondary}}>已选 {model()?.selected.length} 条批注</Text>
           <Action label="导出" colors={props.colors} onPress={() => bulk('export')} />
           <Action label="解决／重开" colors={props.colors} onPress={() => bulk('resolve')} />
           <Action label="删除" colors={props.colors} danger onPress={() => bulk('delete')} />
@@ -104,13 +106,19 @@ export function Reviews(props: ListProps) {
       </View></If>
     </View>
     <List each={model()?.rows ?? []} keyExtractor={ann => ann.key} estimatedItemSize={160} style={{flex: 1}}
-      empty={<Text style={{padding: 20, color: props.colors().secondary}}>划选正文或框选图片，写下你的意见。</Text>}>
+      empty={<View style={{padding: 20, gap: 12}}>
+        <Text style={{fontSize: 14, color: props.colors().secondary}}>{filtered() ? '没有符合筛选条件的批注。' : '划选正文或框选图片，写下你的意见。'}</Text>
+        <If when={filtered()}><Action label="清除筛选" testID="reviews-clear-filter" colors={props.colors} onPress={() => filter({status: 'all', kinds: []})} /></If>
+      </View>}>
       {ann => <View style={{padding: 14, gap: 7, borderTopWidth: 1, borderColor: props.colors().border, backgroundColor: model()?.activeId === ann().id ? props.colors().inset : 'transparent'}}>
         <View style={{flexDirection: 'row', alignItems: 'center', gap: 6}}>
           <Check label={`选择批注 ${ann().excerpt}`} checked={ann().selected} colors={props.colors} onChange={() => props.send({type: ann().rowType === 'group' ? 'review-group' : 'review', action: 'select', id: ann().id})} />
           <Text style={{flex: 1, fontSize: 12, color: props.colors().secondary}}>{KIND_LABEL[ann().kind]}{ann().rowType === 'group' ? ` · ${ann().count} 处` : ''}{ann().status === 'resolved' ? ' · 已解决' : ''}{ann().anchorLost ? ' · 失锚' : ''}{ann().revised ? ' · 改稿' : ''}{ann().category ? ` · ${ann().category}` : ''}</Text>
         </View>
-        <Button accessibilityLabel={ann().rowType === 'group' ? '展开批注位置' : '定位批注'} style={{alignItems: 'stretch', gap: 7}} onPress={() => {
+        <Button testID={`review-focus-${ann().id}`} selected={model()?.activeId === ann().id}
+          accessibilityLabel={`${ann().rowType === 'group' ? '展开批注位置' : '定位批注'}：${ann().excerpt}`}
+          style={{alignItems: 'stretch', gap: 7, padding: 2, borderWidth: 1, borderColor: 'transparent', borderRadius: 6}}
+          hoverStyle={{backgroundColor: props.colors().inset}} focusVisibleStyle={{borderColor: props.colors().accent}} onPress={() => {
           if (ann().rowType === 'group') props.send({type: 'review-group', action: 'expand', id: ann().id})
           else { props.send({type: 'review', action: 'focus', id: ann().id}); props.onOpen?.() }
         }}>

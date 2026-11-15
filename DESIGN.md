@@ -10,6 +10,8 @@ The agreed direction is restrained Apple/Linear-inspired productivity UI: clear 
 - Lists use quiet separators and clear selected/focused states. Avoid nested cards, decorative gradients, glass, excessive badges, and hover-only essential actions.
 - Forms keep inputs stable during composition. Errors appear next to the action and retain entered text. Destructive actions name their scope and consequences.
 
+Native reading modes and annotation kinds use NSH tabs with a shared segmented presentation, selected semantics and native keyboard navigation. Primary actions retain readable accent contrast on hover; focus changes the color of a reserved border without moving layout. Form scroll containers let handled taps reach controls while the keyboard is open. Document multi-selection intent belongs to the stable workbench view so moving between desktop panels and compact sheets retains both checkboxes and the shared selected identities. Bulk actions show their selected count; filtered empty states offer a direct reset.
+
 Image review uses direct canvas interaction: empty-space drag creates a region, existing objects select and move, handles resize, and Space/middle mouse temporarily pans. Two fingers pan/pinch without a tool switch. Coordinate fields remain the precise alternative. Selection is cleared consistently when hidden or removed. The browser and native shell share this geometry engine, while native sheets retain their platform form semantics. See [image-review.md](docs/image-review.md) for cancellation, keyboard and persistence contracts.
 
 ## Tokens
@@ -29,6 +31,8 @@ Native editing sessions are registered before focus leaves the canvas. Each sess
 ## Evidence and acceptance
 
 The direction incorporates two text-only Gemini 3.8 Flash high critiques; those consultations did not inspect screenshots. Its suggestions to silently save drafts and add replies/apply-suggestion actions were rejected as changes to product semantics.
+
+A subsequent text-only native refinement critique supported segmented choices, clearer selection scope and filter recovery. Hover-only selection controls, new shortcuts and a macOS-specific proxy menu were not adopted: they would add platform-specific behavior or reduce touch discoverability without solving the confirmed defects.
 
 Validate empty/populated workspaces, light/dark, narrow/wide layouts, source/preview/split selection, image regions, form composition and cancellation, multi-select export/delete, stale async operations, recovery, and reload persistence. Native tests must demonstrate native controls and canvas-only web content rather than testing a hidden full web shell.
 

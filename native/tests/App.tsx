@@ -1,4 +1,4 @@
-import {mount, signal, Text, View} from 'nsh'
+import {mount, platform, signal, Text, View} from 'nsh'
 import {Workspace, type FileBindings} from '../shared/App'
 import document from '../generated/e2e-web'
 import {encodeBytes, decodeBytes} from '../../src/platform/protocol'
@@ -19,7 +19,7 @@ const files: FileBindings = {
     return 'saved'
   },
 }
-mount(() => <View style={{flex: 1}}>
+mount(() => <View testID={`journey-platform-${platform.os}`} style={{flex: 1}}>
   <Text testID="journey-result">{result}</Text>
   <Workspace document={document} files={files} />
 </View>)

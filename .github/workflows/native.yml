@@ -27,6 +27,15 @@ jobs:
         with:
           toolchain: '1.100.0'
           components: rustfmt, clippy
+      - name: Cache Rust compilation objects
+        uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
+        with:
+          github-cache-mode: objects
+          isolate-objects-cache: true
+          working-directory: native/desktop
+          toolchain: '1.100.0'
+          cache-generation: mbx-1.30.0-${{ hashFiles('native/toolchain.json', 'native/desktop/Cargo.lock') }}
+          save-on-workflow-dispatch: ${{ github.ref == 'refs/heads/main' }}
       - name: Linux WebView and display dependencies
         if: runner.os == 'Linux'
         run: |

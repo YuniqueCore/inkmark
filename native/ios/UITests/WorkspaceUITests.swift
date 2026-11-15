@@ -23,6 +23,21 @@ final class WorkspaceUITests: XCTestCase {
         app.descendants(matching: .any)["reading-preview"].firstMatch.tap()
         XCTAssertTrue(app.webViews.staticTexts["Native iOS review"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.webViews.textViews.count, 0, "Editing forms must be native, outside the document WebView")
+        app.descendants(matching: .any)["workspace-menu"].firstMatch.tap()
+        app.descendants(matching: .any)["action-search"].firstMatch.tap()
+        let query = app.otherElements["search-query"].textFields.firstMatch
+        XCTAssertTrue(query.waitForExistence(timeout: 5), app.debugDescription)
+        query.tap(); query.typeText("STABLE")
+        XCTAssertTrue(app.keyboards.firstMatch.exists, "This interaction must run with the native keyboard open")
+        XCTAssertTrue(app.staticTexts["命中 1 处"].waitForExistence(timeout: 5))
+        // The first tap must perform the action, rather than only dismiss the keyboard.
+        let caseSensitive = app.buttons["区分大小写"]
+        caseSensitive.tap()
+        expectation(for: NSPredicate(format: "selected == true"), evaluatedWith: caseSensitive)
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(app.staticTexts["命中 0 处"].waitForExistence(timeout: 5))
+        XCTAssertEqual(query.value as? String, "STABLE", "Changing options must preserve native input")
+        app.buttons["form-close"].tap()
         let saved = app.staticTexts["native-save-status"]
         XCTAssertTrue(saved.waitForExistence(timeout: 5))
         expectation(for: NSPredicate(format: "label == %@", "已保存"), evaluatedWith: saved)

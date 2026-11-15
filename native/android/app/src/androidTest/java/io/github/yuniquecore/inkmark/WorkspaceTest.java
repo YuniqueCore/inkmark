@@ -86,13 +86,20 @@ public class WorkspaceTest {
             fillField(device, "region-x", "20"); fillField(device, "region-y", "20");
             fillField(device, "region-width", "9999"); fillField(device, "region-height", "80");
             fillField(device, "annotation-comment", "Native image review");
+            control(device, "annotation-comment").findObject(By.clazz(android.widget.EditText.class)).click();
+            if (Build.VERSION.SDK_INT >= 30) awaitKeyboard(scenario, true);
+            new UiScrollable(new UiSelector().resourceId("form-fields"))
+                .scrollIntoView(new UiSelector().resourceId("annotation-kind-question"));
+            control(device, "annotation-kind-question").click();
+            assertTrue("A single tap must change the kind while the keyboard is open",
+                control(device, "annotation-kind-question").wait(Until.selected(true), 10000));
             assertFalse("Out-of-bounds region must not be saved", control(device, "annotation-save").isEnabled());
             fillField(device, "region-width", "100");
             assertTrue("Correcting the region must enable saving", control(device, "annotation-save").wait(Until.enabled(true), 10000));
             control(device, "annotation-save").click();
             boolean submitted = device.wait(Until.gone(By.res("annotation-save")), 10000);
             assertTrue("Saving a valid review must close its native form", submitted);
-            if (Build.VERSION.SDK_INT >= 30) awaitKeyboardHidden(scenario);
+            if (Build.VERSION.SDK_INT >= 30) awaitKeyboard(scenario, false);
             capture(device, "submitted-image-review");
             saved(device);
             assertEquals("0", evaluate(scenario, "document.querySelectorAll('input,textarea,select,header,aside').length"));
@@ -110,6 +117,7 @@ public class WorkspaceTest {
                 try (var backup = zip.getInputStream(zip.getEntry("inkmark-documents.json"))) {
                     var document = new org.json.JSONObject(new String(backup.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)).getJSONArray("docs").getJSONObject(0);
                     assertEquals("Native image review", document.getJSONArray("annotations").getJSONObject(0).getString("comment"));
+                    assertEquals("question", document.getJSONArray("annotations").getJSONObject(0).getString("kind"));
                 }
             }
             scenario.recreate();
@@ -199,17 +207,18 @@ public class WorkspaceTest {
         assertTrue("Native save status must confirm persistence", device.wait(Until.hasObject(By.text("已保存")), 10000));
     }
     @androidx.annotation.RequiresApi(30)
-    private static void awaitKeyboardHidden(ActivityScenario<MainActivity> scenario) throws InterruptedException {
+    private static void awaitKeyboard(ActivityScenario<MainActivity> scenario, boolean expected) throws InterruptedException {
         long deadline = System.currentTimeMillis() + 10000;
-        boolean[] visible = {true};
+        boolean[] visible = {!expected};
         do {
             scenario.onActivity(activity -> visible[0] = activity.getWindow().getDecorView()
                 .getRootWindowInsets().isVisible(android.view.WindowInsets.Type.ime()));
-            if (!visible[0]) return;
+            if (visible[0] == expected) return;
             Thread.sleep(50);
         } while (System.currentTimeMillis() < deadline);
-        capture(UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()), "keyboard-after-submission");
-        fail("Submitting a native form must return the full canvas without the keyboard");
+        capture(UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()), "keyboard-visibility-failure");
+        fail(expected ? "Native input must open the keyboard before testing option taps"
+            : "Submitting a native form must return the full canvas without the keyboard");
     }
     private static void documentCount(UiDevice device, int count) {
         control(device, "documents-toggle").click();
