@@ -13,7 +13,11 @@ playwright-report/
 native/generated/
 native/desktop/nsh.json
 native/mobile/nsh.json
-native/**/.nsh/
+native/**/.nsh/*
+# The real NSH host workspace owns a source-controlled dependency lock.
+!native/desktop/.nsh/rust/
+native/desktop/.nsh/rust/*
+!native/desktop/.nsh/rust/Cargo.lock
 native/**/target/
 native/android/.gradle/
 native/android/**/build/
