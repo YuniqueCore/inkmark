@@ -374,7 +374,7 @@ function canLeaveEdit(): boolean {
   if (!ready) { toast('工作区正在载入，请稍候'); return false }
   if (textDialogDraft() !== null) { toast('请先提交或取消当前文本输入，再重试操作'); return false }
   if (imageView.hasDraft()) { toast('请先保存或取消当前区域批注'); return false }
-  imageView.flushGeometry()
+  imageView.cancelGesture()
   if (mode === 'edit') {
     toast('请先完成或取消原文编辑')
     return false

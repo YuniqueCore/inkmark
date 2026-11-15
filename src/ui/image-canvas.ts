@@ -9,6 +9,7 @@ interface CanvasCallbacks {
   select(id: string | null): void
   create(region: ImageRegion): void
   change(original: RegionAnnotation, region: ImageRegion): boolean
+  pan(x: number, y: number): void
   zoom(factor: number, anchor: Point): void
   edit(id: string): void
   invalid(): void
@@ -32,9 +33,8 @@ export class ImageCanvas {
   private pointers = new Map<number, Point>()
   private space = false
   private scope = new AbortController()
-  private observer: ResizeObserver
 
-  constructor(private viewport: HTMLElement, private scroller: HTMLElement, private image: HTMLImageElement, private callbacks: CanvasCallbacks) {
+  constructor(private viewport: HTMLElement, private image: HTMLImageElement, private callbacks: CanvasCallbacks) {
     const host = viewport.querySelector<HTMLDivElement>('.image-canvas')!
     this.stage = new Konva.Stage({container: host, width: 1, height: 1})
     this.stage.add(this.layer)
@@ -42,6 +42,9 @@ export class ImageCanvas {
     this.transformer.on('transformstart', () => this.beginEdit())
     this.transformer.on('transformend', () => this.commit())
     const options = {signal: this.scope.signal, capture: true}
+    window.addEventListener('pointerdown', event => {
+      if (this.pointers.size && event.target instanceof Node && !viewport.contains(event.target)) this.cancel(true)
+    }, options)
     viewport.addEventListener('pointerdown', event => this.down(event), options)
     window.addEventListener('pointermove', event => {
       if (this.pointers.has(event.pointerId) || (event.target instanceof Node && viewport.contains(event.target))) this.move(event)
@@ -76,14 +79,17 @@ export class ImageCanvas {
           if (validRegion(region, {width: image.naturalWidth, height: image.naturalHeight})) this.callbacks.change(annotation, region)
           else this.callbacks.invalid()
         } else {
-          scroller.scrollLeft += direction[0]! * 40; scroller.scrollTop += direction[1]! * 40
+          this.callbacks.pan(-direction[0]! * 40, -direction[1]! * 40)
         }
         this.layout()
       }
       if (['PageUp', 'PageDown', 'Home', 'End'].includes(event.key) && !this.pointers.size) {
         event.preventDefault()
-        if (event.key === 'Home' || event.key === 'End') scroller.scrollTo(event.key === 'Home' ? 0 : scroller.scrollWidth, event.key === 'Home' ? 0 : scroller.scrollHeight)
-        else scroller.scrollTop += scroller.clientHeight * (event.key === 'PageUp' ? -.8 : .8)
+        if (event.key === 'Home' || event.key === 'End') {
+          const frame = viewport.getBoundingClientRect(), box = image.getBoundingClientRect()
+          this.callbacks.pan(event.key === 'Home' ? frame.left + 24 - box.left : frame.right - 24 - box.right,
+            event.key === 'Home' ? frame.top + 24 - box.top : frame.bottom - 24 - box.bottom)
+        } else this.callbacks.pan(0, viewport.clientHeight * (event.key === 'PageUp' ? .8 : -.8))
         this.layout()
       }
     }, {signal: this.scope.signal})
@@ -92,7 +98,7 @@ export class ImageCanvas {
       const target = event.target
       if (target instanceof Element && target.closest('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="alertdialog"]')) return
       this.space = true
-      if (target === viewport || target === document.body || viewport.matches(':hover')) event.preventDefault()
+      if (target === viewport || target === document.body) event.preventDefault()
       this.cursor()
     }, {signal: this.scope.signal})
     window.addEventListener('keyup', event => {
@@ -104,12 +110,8 @@ export class ImageCanvas {
       event.preventDefault()
       if (this.pointers.size) return
       if (event.ctrlKey || event.metaKey) this.callbacks.zoom(Math.exp(-event.deltaY * .01), {x: event.clientX, y: event.clientY})
-      else { scroller.scrollLeft += event.shiftKey ? event.deltaY : event.deltaX; scroller.scrollTop += event.shiftKey ? event.deltaX : event.deltaY; this.layout() }
+      else this.callbacks.pan(-(event.shiftKey ? event.deltaY : event.deltaX), -(event.shiftKey ? event.deltaX : event.deltaY))
     }, {signal: this.scope.signal, passive: false})
-    scroller.addEventListener('scroll', () => this.layout(), {signal: this.scope.signal})
-    this.observer = new ResizeObserver(() => this.layout())
-    this.observer.observe(scroller)
-    this.observer.observe(image)
     this.layout()
   }
 
@@ -148,7 +150,7 @@ export class ImageCanvas {
     const frame = this.viewport.getBoundingClientRect()
     const image = this.image.getBoundingClientRect()
     const scale = image.width / this.image.naturalWidth
-    this.stage.size({width: Math.max(1, this.scroller.clientWidth), height: Math.max(1, this.scroller.clientHeight)})
+    this.stage.size({width: Math.max(1, this.viewport.clientWidth), height: Math.max(1, this.viewport.clientHeight)})
     this.layer.position({x: image.left - frame.left, y: image.top - frame.top})
     this.layer.scale({x: scale, y: scale})
     this.layer.batchDraw()
@@ -186,6 +188,8 @@ export class ImageCanvas {
     }
     if (this.gesture.type !== 'idle') { this.block(event); return }
     const box = this.viewport.getBoundingClientRect()
+    // Hit testing must see the current camera even before Konva's next paint frame.
+    this.layer.drawHit()
     const target = this.stage.getIntersection({x: point.x - box.left, y: point.y - box.top})
     if (target && this.transformer.isAncestorOf(target)) return
     const id = target?.id()
@@ -220,13 +224,13 @@ export class ImageCanvas {
       const region = normalizeRegion(gesture.start.x, gesture.start.y, current.x - gesture.start.x, current.y - gesture.start.y, {width: this.image.naturalWidth, height: this.image.naturalHeight})
       if (region) this.drawing.setAttrs(region)
     } else if (gesture.type === 'pan' && gesture.id === event.pointerId) {
-      this.scroller.scrollLeft += gesture.last.x - point.x; this.scroller.scrollTop += gesture.last.y - point.y
+      this.callbacks.pan(point.x - gesture.last.x, point.y - gesture.last.y)
       gesture.last = point
       this.layout()
     } else if (gesture.type === 'pinch' && this.pointers.size >= 2) {
       const next = this.pinch()
       this.callbacks.zoom(next.distance / gesture.distance, gesture.center)
-      this.scroller.scrollLeft += gesture.center.x - next.center.x; this.scroller.scrollTop += gesture.center.y - next.center.y
+      this.callbacks.pan(next.center.x - gesture.center.x, next.center.y - gesture.center.y)
       this.gesture = {type: 'pinch', ...next}
       this.layout()
     }
@@ -250,7 +254,7 @@ export class ImageCanvas {
   }
 
   private beginEdit(): void { if (!this.restoring && this.selected) this.original = this.annotations.get(this.selected) ?? null }
-  commit(): void {
+  private commit(): void {
     if (!this.original || this.restoring) return
     const original = this.original
     this.original = null
@@ -285,5 +289,6 @@ export class ImageCanvas {
     this.layer.batchDraw()
   }
   private cursor(): void { this.viewport.style.cursor = this.gesture.type === 'pan' || this.gesture.type === 'pinch' ? 'grabbing' : this.space ? 'grab' : 'crosshair' }
-  destroy(): void { this.cancel(); this.scope.abort(); this.observer.disconnect(); this.stage.destroy() }
+  cancelGesture(): void { this.cancel(true) }
+  destroy(): void { this.cancel(); this.scope.abort(); this.stage.destroy() }
 }

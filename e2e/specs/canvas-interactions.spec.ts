@@ -47,28 +47,43 @@ test('direct canvas journey: draw repeatedly, move and resize objects, pan tempo
   await expect.poll(async () => (await regions(page))[0]).toEqual({...keyboardBefore, x: keyboardBefore.x + 1, y: keyboardBefore.y + 10})
   const committed = await regions(page)
   await test.step('Space and middle-button drags pan without moving the selected object; releasing Space mid-drag stays a pan', async () => {
+    // Even a fitted image can be panned; the camera is not a bounded scroll container.
+    await page.locator('[data-image-action="fit"]').click()
+    const fitBox = (await page.locator('#image-view img').boundingBox())!
+    const panStart = await point(page, 300, 220)
+    await page.mouse.move(panStart.x, panStart.y); await page.keyboard.down('Space')
+    await drag(page, panStart, {x: panStart.x + 40, y: panStart.y + 30}); await page.keyboard.up('Space')
+    await expect.poll(async () => (await page.locator('#image-view img').boundingBox())!.x).toBeCloseTo(fitBox.x + 40, 0)
+    await expect.poll(async () => (await page.locator('#image-view img').boundingBox())!.y).toBeCloseTo(fitBox.y + 30, 0)
     await page.locator('[data-image-action="original"]').click()
     for (let i = 0; i < 4; i++) await page.locator('[data-image-action="in"]').click()
     const viewport = page.locator('.image-viewport')
     const box = (await viewport.boundingBox())!
     const x = box.x + box.width * .6; const y = box.y + box.height * .6
+    const cameraBefore = (await page.locator('#image-view img').boundingBox())!
     await page.mouse.move(x, y); await page.keyboard.down('Space')
     await page.mouse.down()
     await page.mouse.move(x - 80, y - 70, {steps: 4})
     await page.keyboard.up('Space')
     await page.mouse.move(x - 160, y - 140, {steps: 4}); await page.mouse.up()
-    await expect.poll(() => page.locator('.image-scroll').evaluate(el => el.scrollTop)).toBeGreaterThan(100)
-    const scrolled = await page.locator('.image-scroll').evaluate(el => el.scrollLeft)
+    await expect.poll(async () => (await page.locator('#image-view img').boundingBox())!.y).toBeCloseTo(cameraBefore.y - 140, 0)
+    const scrolled = (await page.locator('#image-view img').boundingBox())!.x
     await page.mouse.move(x, y); await page.mouse.down({button: 'middle'})
     await page.mouse.move(x - 40, y, {steps: 4}); await page.mouse.up({button: 'middle'})
-    await expect.poll(() => page.locator('.image-scroll').evaluate(el => el.scrollLeft)).toBeGreaterThan(scrolled)
+    await expect.poll(async () => (await page.locator('#image-view img').boundingBox())!.x).toBeCloseTo(scrolled - 40, 0)
     await expect(page.locator('[data-image-action="edit"]')).toBeEnabled()
     await page.keyboard.press('Home')
-    await expect.poll(() => page.locator('.image-scroll').evaluate(el => el.scrollTop)).toBe(0)
+    await expect.poll(async () => (await page.locator('#image-view img').boundingBox())!.y).toBeCloseTo(box.y + 24, 0)
     await page.keyboard.press('PageDown')
-    await expect.poll(() => page.locator('.image-scroll').evaluate(el => el.scrollTop)).toBeGreaterThan(100)
+    await expect.poll(async () => (await page.locator('#image-view img').boundingBox())!.y).toBeLessThan(box.y - 100)
     expect(await regions(page)).toEqual(committed)
     await expect(page.locator('.image-composer')).toBeHidden()
+    // Space still activates a focused native HTML button with the pointer over the canvas.
+    await page.locator('[data-image-action="fit"]').focus()
+    await page.mouse.move(x, y); await page.keyboard.press('Space')
+    const fitted = (await page.locator('#image-view img').boundingBox())!
+    expect(fitted.x + fitted.width / 2).toBeCloseTo(box.x + box.width / 2, 0)
+    expect(fitted.y + fitted.height / 2).toBeCloseTo(box.y + box.height / 2, 0)
   })
   await test.step('Escape and lost focus roll back incomplete gestures; drawing works again and survives reload', async () => {
     await page.locator('[data-image-action="fit"]').click()
@@ -96,8 +111,8 @@ test('direct canvas journey: draw repeatedly, move and resize objects, pan tempo
   })
   await test.step('Blank selection, filtering and deletion clear the canvas and sidebar selection together', async () => {
     await page.locator('#sidebar [data-op="focus"]').first().click()
-    const blank = await point(page, 850, 80)
-    await page.mouse.click(blank.x, blank.y)
+    const frame = (await page.locator('.image-viewport').boundingBox())!
+    await page.mouse.click(frame.x + 10, frame.y + 10)
     await expect(page.locator('[data-image-action="edit"]')).toBeDisabled()
     await expect(page.locator('#sidebar .ann-card.ring-2')).toHaveCount(0)
     await page.locator('#sidebar [data-op="focus"]').first().click()
@@ -126,13 +141,20 @@ test.describe('touch canvas gestures', () => {
     const x = box.x + 100; const y = box.y + 180
     const cdp = await context.newCDPSession(page)
     const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd' | 'touchCancel', touchPoints: {id: number; x: number; y: number}[]) => cdp.send('Input.dispatchTouchEvent', {type, touchPoints})
+    // An external zoom command cannot finish a draw using two different cameras.
+    await touch('touchStart', [{id: 9, x, y}])
+    await touch('touchMove', [{id: 9, x: x + 30, y: y + 30}])
+    await page.locator('[data-image-action="fit"]').evaluate(button => (button as HTMLButtonElement).click())
+    await touch('touchEnd', [])
+    await expect(page.locator('.image-composer')).toBeHidden()
+    await page.locator('[data-image-action="original"]').tap()
     for (const liftFirst of [true, false]) {
       await touch('touchStart', [{id: 1, x, y}])
       await touch('touchMove', [{id: 1, x: x + 20, y: y + 20}])
       await touch('touchStart', [{id: 1, x: x + 20, y: y + 20}, {id: 2, x: x + 140, y: y + 20}])
-      const before = await page.locator('.image-scroll').evaluate(el => el.scrollTop)
+      const before = (await page.locator('#image-view img').boundingBox())!.y
       await touch('touchMove', [{id: 1, x: x + 20, y: y - 50}, {id: 2, x: x + 140, y: y - 50}])
-      await expect.poll(() => page.locator('.image-scroll').evaluate(el => el.scrollTop)).toBeGreaterThan(before + 30)
+      await expect.poll(async () => (await page.locator('#image-view img').boundingBox())!.y).toBeLessThan(before - 30)
       const width = (await page.locator('#image-view img').boundingBox())!.width
       await touch('touchMove', [{id: 1, x: x - 10, y: y - 50}, {id: 2, x: x + 170, y: y - 50}])
       expect((await page.locator('#image-view img').boundingBox())!.width).toBeGreaterThan(width)

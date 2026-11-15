@@ -214,13 +214,7 @@
 .image-view { position: absolute; inset: 0; display: flex; flex-direction: column; min-width: 0; background: var(--background); }
 .image-view[hidden], .image-composer[hidden], .reading-panes[hidden] { display: none; }
 .image-viewport { position: relative; flex: 1; min-height: 0; overflow: hidden; background: var(--muted); touch-action: none; }
-.image-scroll { position: absolute; inset: 0; overflow: auto; display: flex; padding: 24px; overscroll-behavior: contain; }
-.image-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
-.image-scroll::-webkit-scrollbar-thumb { background: var(--border); border: 2px solid var(--muted); border-radius: 5px; }
-.image-stage { flex-shrink: 0; margin: auto; background: white; line-height: 0; }
+.image-stage { position: absolute; background: white; line-height: 0; }
 .image-stage img { display: block; max-width: none; user-select: none; }
 .image-canvas { position: absolute; left: 0; top: 0; touch-action: none; }
 .image-view :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
-@media (max-width: 639px) {
-  .image-scroll { padding: 12px; }
-}

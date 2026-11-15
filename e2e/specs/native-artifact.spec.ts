@@ -10,6 +10,17 @@ test('native canvas gestures open host forms and share persistent geometry witho
   await openNativeCanvas(page)
   await nativeFiles(page, [{name: 'canvas.png', type: 'image/png', base64: (await picture(page)).toString('base64')}])
   await expect(page.locator('.image-canvas canvas')).toBeVisible()
+  // A native toolbar command is outside DOM pointer dispatch. It must own the
+  // new form even when a previous canvas pointer is still held down.
+  const initial = (await page.locator('#image-view img').boundingBox())!
+  await page.mouse.move(initial.x + 50, initial.y + 100); await page.mouse.down()
+  await page.mouse.move(initial.x + 150, initial.y + 200)
+  await nativeCommand(page, {type: 'image', action: 'coordinates'})
+  const coordinates = (await nativeView(page)).interactions[0]!
+  await page.mouse.up()
+  expect((await nativeView(page)).interactions).toEqual([coordinates])
+  expect(coordinates.type === 'annotation' && coordinates.region).toEqual({type: 'rectangle', x: 0, y: 0, width: 100, height: 100})
+  await nativeCommand(page, {type: 'annotation', id: coordinates.id, action: 'cancel'})
   for (const offset of [50, 400]) {
     const box = (await page.locator('#image-view img').boundingBox())!
     const scale = box.width / 900

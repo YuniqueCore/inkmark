@@ -283,9 +283,12 @@ test('fractional zoom moves preserve size and out-of-bounds moves cannot silentl
   await expect(page.getByText('区域不能超出图片，已恢复之前的位置')).toBeVisible()
   expect((await workspace(page)).docs[0].annotations[0].selector).toEqual({type: 'rectangle', x, y: 80, width: 100, height: 100})
   await page.locator('[data-image-action="original"]').click()
-  await page.locator('.image-scroll').evaluate((el) => { el.scrollLeft = el.scrollWidth; el.scrollTop = el.scrollHeight })
+  await page.locator('.image-viewport').focus()
+  await page.keyboard.press('End')
   await page.locator('#sidebar button[data-op="focus"]').click()
-  await expect.poll(() => page.locator('.image-scroll').evaluate((el) => el.scrollLeft)).toBe(0)
+  const frame = (await page.locator('.image-viewport').boundingBox())!
+  const centered = (await page.locator('#image-view img').boundingBox())!
+  expect(centered.x + x + 50).toBeCloseTo(frame.x + frame.width / 2, 0)
   const wideImage = await page.evaluate(() => {
     const canvas = document.createElement('canvas'); canvas.width = 16384; canvas.height = 100
     return canvas.toDataURL().split(',')[1]!
