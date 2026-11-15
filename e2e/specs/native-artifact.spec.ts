@@ -132,8 +132,10 @@ test('canvas-only native contract: CRLF, deep paths, retained drafts, grouped re
     image.annotations = [{id: 'large-review', kind: 'suggestion', comment: 'x'.repeat(8 * 1024 * 1024 + 1), status: 'open', source: 'manual',
       selector: {type: 'rectangle', x: 0, y: 0, width: 1, height: 1}, createdAt: 1, updatedAt: 1}]
     await nativeFiles(page, [transfer('large-review.json', JSON.stringify(backup))], 'restore')
+    await expect.poll(async () => (await nativeView(page)).interactions.some(item => item.type === 'choice')).toBe(true)
     const confirm = (await nativeView(page)).interactions.find(item => item.type === 'choice')!
     await nativeCommand(page, {type: 'choice', id: confirm.id, choice: 'confirm'})
+    await expect.poll(async () => (await nativeView(page)).image?.name.length).toBe(4000)
     await expect.poll(async () => (await nativeView(page)).save.status).toBe('saved')
     await page.reload()
     await expect.poll(async () => (await nativeView(page))?.image?.name.length).toBe(4000)

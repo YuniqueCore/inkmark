@@ -295,8 +295,11 @@ test('fractional zoom moves preserve size and out-of-bounds moves cannot silentl
     return canvas.toDataURL().split(',')[1]!
   })
   await page.locator('#file-input').setInputFiles({name: 'wide.png', mimeType: 'image/png', buffer: Buffer.from(wideImage, 'base64')})
+  // The input change starts an asynchronous import; the previous image can still have enabled controls.
+  await expect(page.locator('#image-view img')).toHaveAttribute('alt', 'wide.png')
   await page.setViewportSize({width: 160, height: 844})
   await expect(page.locator('[data-image-action="coordinates"]')).toBeEnabled()
+  await expect(page.locator('#image-view img')).toBeVisible()
   const before = (await page.locator('#image-view img').boundingBox())!.width
   await page.locator('[data-image-action="out"]').click()
   expect((await page.locator('#image-view img').boundingBox())!.width).toBeLessThan(before)
